@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import AdminResetPasswordView, LoginView, LogoutAllDevicesView, LogoutAllExceptOwnView, ProfileView, CreateStaffView, LogoutView
+from .views import AdminResetPasswordView, BulkUserActionView, CustomTokenRefreshView, DeactivateUserView, DeleteUserView, LoginView, LogoutAllDevicesView, LogoutAllExceptOwnView, ProfileView, CreateStaffView, LogoutView, ReactivateUserView, UserListView
 
 urlpatterns = [
     path('login/', LoginView.as_view()),
@@ -9,4 +9,10 @@ urlpatterns = [
     path('profile/', ProfileView.as_view()),
     path('create-staff/', CreateStaffView.as_view()),
     path('admin-reset-password/', AdminResetPasswordView.as_view()),
+    path('token/refresh/', CustomTokenRefreshView.as_view()),
+    path('user/deactivate/<int:user_id>/', DeactivateUserView.as_view()),
+    path('user/reactivate/<int:user_id>/', ReactivateUserView.as_view()),
+    path('user/delete/<int:user_id>/', DeleteUserView.as_view()),
+    path('users/', UserListView.as_view()),
+    path('users/bulk-action/', BulkUserActionView.as_view()),
 ]

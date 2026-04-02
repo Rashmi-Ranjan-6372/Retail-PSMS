@@ -1,6 +1,7 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
 
 
 # ================= USER MODEL ================= #
@@ -9,13 +10,16 @@ class User(AbstractUser):
         ('admin', 'Admin'),
         ('staff', 'Staff'),
     )
+
     role = models.CharField(
         max_length=10,
         choices=ROLE_CHOICES,
         default='staff'
     )
+
     phone = models.CharField(max_length=15, blank=True, null=True)
     password_changed_at = models.DateTimeField(null=True, blank=True)
+    last_login_ip = models.GenericIPAddressField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
@@ -24,7 +28,7 @@ class User(AbstractUser):
         if self.pk:
             old_user = User.objects.filter(pk=self.pk).first()
             if old_user and old_user.password != self.password:
-                self.password_changed_at = self.updated_at
+                self.password_changed_at = timezone.now()
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -36,18 +40,25 @@ class User(AbstractUser):
             models.Index(fields=['role']),
         ]
 
-
 # ================= LOGIN LOG ================= #
 class LoginLog(models.Model):
     STATUS_CHOICES = (
         ('success', 'Success'),
         ('failed', 'Failed'),
     )
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True, 
+        blank=True
+    )
+
     login_time = models.DateTimeField(auto_now_add=True)
     logout_time = models.DateTimeField(null=True, blank=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(null=True, blank=True)
+
     status = models.CharField(
         max_length=10,
         choices=STATUS_CHOICES,
@@ -59,6 +70,11 @@ class LoginLog(models.Model):
 
     class Meta:
         ordering = ['-login_time']
+        indexes = [
+            models.Index(fields=['user']),
+            models.Index(fields=['status']),
+        ]
+
 
 # ================= USER SESSION ================= #
 class UserSession(models.Model):
@@ -70,14 +86,24 @@ class UserSession(models.Model):
 
     device_id = models.CharField(max_length=255)
     refresh_token = models.TextField()
-
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(null=True, blank=True)
-
     is_active = models.BooleanField(default=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     last_activity = models.DateTimeField(auto_now=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    def revoke(self):
+        self.is_active = False
+        self.revoked_at = timezone.now()
+        self.save()
 
     def __str__(self):
         return f"{self.user} - {self.device_id} - {self.is_active}"
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['user']),
+            models.Index(fields=['is_active']),
+        ]

@@ -45,7 +45,6 @@ class LoginSerializer(serializers.Serializer):
             raise serializers.ValidationError("Invalid credentials")
         return user
 
-
 # ================= ADMIN RESET PASSWORD ================= #
 class AdminResetPasswordSerializer(serializers.Serializer):
     username = serializers.CharField()
