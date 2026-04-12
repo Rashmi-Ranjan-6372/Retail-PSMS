@@ -1,17 +1,18 @@
+from branches.models import Branch
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.generics import ListAPIView
 
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
-from rest_framework.generics import ListAPIView
-from django.db.models import Q
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import update_last_login
+from django.db.models import Q
 from django.utils import timezone
 
 from .serializers import (
@@ -26,39 +27,72 @@ from .models import LoginLog, UserSession
 User = get_user_model()
 
 
-# ================= HELPER ================= #
+# ================= HELPER FUNCTIONS ================= #
+
 def get_client_ip(request):
+    """Retrieve client IP address."""
     x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
     if x_forwarded_for:
-        return x_forwarded_for.split(',')[0]
+        return x_forwarded_for.split(',')[0].strip()
     return request.META.get('REMOTE_ADDR')
 
 
+def get_user_agent(request):
+    """Retrieve user agent."""
+    return request.META.get('HTTP_USER_AGENT', '')
+
+
 def get_tokens_for_user(user):
+    """Generate JWT tokens for a user."""
     refresh = RefreshToken.for_user(user)
     return {
-        'refresh': str(refresh),
-        'access': str(refresh.access_token),
+        "refresh": str(refresh),
+        "access": str(refresh.access_token),
     }
 
 
+def can_manage_user(request_user, target_user):
+    if request_user.is_superuser or request_user.role == "superadmin":
+        return True
+    if (
+        request_user.role == "admin"
+        and target_user.branch == request_user.branch
+        and target_user.role != "superadmin"
+    ):
+        return True
+    return False
+
+
+def blacklist_user_sessions(user):
+    """Blacklist all active sessions for a user."""
+    sessions = UserSession.objects.filter(user=user, is_active=True)
+    for session in sessions:
+        try:
+            RefreshToken(session.refresh_token).blacklist()
+        except Exception:
+            pass
+    sessions.update(is_active=False)
+
+
 # ================= LOGIN ================= #
+
 class LoginView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         ip = get_client_ip(request)
-        user_agent = request.META.get('HTTP_USER_AGENT')
+        user_agent = get_user_agent(request)
 
         if serializer.is_valid():
             user = serializer.validated_data
             tokens = get_tokens_for_user(user)
-
             device_id = request.data.get("device_id", "unknown")
 
+            # Deactivate previous sessions
             UserSession.objects.filter(user=user, is_active=True).update(is_active=False)
 
+            # Create new session
             UserSession.objects.create(
                 user=user,
                 device_id=device_id,
@@ -68,6 +102,7 @@ class LoginView(APIView):
                 is_active=True
             )
 
+            # Log successful login
             LoginLog.objects.create(
                 user=user,
                 ip_address=ip,
@@ -83,6 +118,7 @@ class LoginView(APIView):
                 "tokens": tokens
             }, status=status.HTTP_200_OK)
 
+        # Log failed login
         LoginLog.objects.create(
             user=None,
             ip_address=ip,
@@ -96,7 +132,8 @@ class LoginView(APIView):
         }, status=status.HTTP_400_BAD_REQUEST)
 
 
-# ================= TOKEN REFRESH (ROTATION) ================= #
+# ================= TOKEN REFRESH ================= #
+
 class CustomTokenRefreshView(TokenRefreshView):
     serializer_class = TokenRefreshSerializer
     permission_classes = [AllowAny]
@@ -107,7 +144,10 @@ class CustomTokenRefreshView(TokenRefreshView):
         try:
             response = super().post(request, *args, **kwargs)
         except TokenError:
-            return Response({"error": "Invalid or expired token"}, status=400)
+            return Response(
+                {"error": "Invalid or expired token"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         new_refresh = response.data.get("refresh")
 
@@ -120,13 +160,12 @@ class CustomTokenRefreshView(TokenRefreshView):
             if session:
                 session.refresh_token = new_refresh
                 session.save()
-            else:
-                UserSession.objects.filter(is_active=True).update(is_active=False)
 
         return response
 
 
 # ================= PROFILE ================= #
+
 class ProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -138,14 +177,23 @@ class ProfileView(APIView):
 
 
 # ================= CREATE STAFF ================= #
+
 class CreateStaffView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def post(self, request):
-        serializer = CreateStaffSerializer(data=request.data)
+        serializer = CreateStaffSerializer(
+            data=request.data,
+            context={"request": request}
+        )
 
         if serializer.is_valid():
-            serializer.save()
+            # Admin can only create staff within their branch
+            if not (request.user.is_superuser or request.user.role == "superadmin"):
+                serializer.save(branch=request.user.branch)
+            else:
+                serializer.save()
+
             return Response({
                 "success": True,
                 "message": "Staff created successfully"
@@ -156,8 +204,8 @@ class CreateStaffView(APIView):
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
 
-
 # ================= LOGOUT ================= #
+
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -165,7 +213,10 @@ class LogoutView(APIView):
         refresh_token = request.data.get("refresh")
 
         if not refresh_token:
-            return Response({"error": "Refresh token required"}, status=400)
+            return Response(
+                {"error": "Refresh token required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         session = UserSession.objects.filter(
             user=request.user,
@@ -174,16 +225,23 @@ class LogoutView(APIView):
         ).first()
 
         if not session:
-            return Response({"error": "Invalid session"}, status=400)
+            return Response(
+                {"error": "Invalid session"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         try:
             RefreshToken(refresh_token).blacklist()
         except TokenError:
-            return Response({"error": "Token invalid or expired"}, status=400)
+            return Response(
+                {"error": "Token invalid or expired"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         session.is_active = False
         session.save()
 
+        # Update logout time
         log = LoginLog.objects.filter(
             user=request.user,
             logout_time__isnull=True
@@ -200,18 +258,36 @@ class LogoutView(APIView):
 
 
 # ================= LOGOUT ALL DEVICES ================= #
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.tokens import RefreshToken
+
+from .models import UserSession
+
+
 class LogoutAllDevicesView(APIView):
+    """
+    Logout users from all devices based on role hierarchy.
+
+    Super Admin/Superuser: Can logout all users across branches.
+    Admin: Can logout users within their own branch.
+    Other Users: Can logout only themselves.
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         user = request.user
 
-        if user.is_superuser:
+        # Determine accessible sessions
+        if user.is_superuser or getattr(user, "role", None) == "superadmin":
             sessions = UserSession.objects.filter(is_active=True)
 
-        elif user.role == 'admin':
+        elif getattr(user, "role", None) == "admin":
             sessions = UserSession.objects.filter(
-                user__role='staff',
+                user__branch=user.branch,
                 is_active=True
             )
 
@@ -221,64 +297,151 @@ class LogoutAllDevicesView(APIView):
                 is_active=True
             )
 
+        # Blacklist tokens
         for session in sessions:
             try:
                 RefreshToken(session.refresh_token).blacklist()
-            except Exception as e:
-                print("Blacklist error:", str(e))
+            except Exception:
+                pass
 
-        sessions.update(is_active=False)
+        # Deactivate sessions
+        count = sessions.update(is_active=False)
 
         return Response({
             "success": True,
-            "message": "Logged out from all devices"
-        })
+            "message": f"Logged out from {count} device(s)."
+        }, status=status.HTTP_200_OK)
 
 
-# ================= LOGOUT ALL EXCEPT OWN ================= #
+# ================= LOGOUT ALL EXCEPT CURRENT ================= #
+
 class LogoutAllExceptOwnView(APIView):
+    """
+    Logout from all devices except the current one.
+
+    Super Admin/Superuser: Can logout all users except the current session.
+    Admin: Can logout users within their own branch.
+    Other Users: Can logout their own other sessions.
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         current_refresh = request.data.get("refresh")
 
         if not current_refresh:
-            return Response({"error": "Refresh token required"}, status=400)
+            return Response(
+                {"error": "Refresh token required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         user = request.user
 
-        if user.is_superuser:
-            sessions = UserSession.objects.filter(
-                is_active=True
-            ).exclude(refresh_token=current_refresh)
+        # Determine accessible sessions
+        if user.is_superuser or getattr(user, "role", None) == "superadmin":
+            sessions = UserSession.objects.filter(is_active=True)
 
-        elif user.role == 'admin':
+        elif getattr(user, "role", None) == "admin":
             sessions = UserSession.objects.filter(
-                user__role='staff',
+                user__branch=user.branch,
                 is_active=True
-            ).exclude(refresh_token=current_refresh)
+            )
 
         else:
             sessions = UserSession.objects.filter(
                 user=user,
                 is_active=True
-            ).exclude(refresh_token=current_refresh)
+            )
 
+        # Exclude current session
+        sessions = sessions.exclude(refresh_token=current_refresh)
+
+        # Blacklist tokens
         for session in sessions:
             try:
                 RefreshToken(session.refresh_token).blacklist()
-            except Exception as e:
-                print("Blacklist error:", str(e))
+            except Exception:
+                pass
 
+        # Deactivate sessions
+        count = sessions.update(is_active=False)
+
+        return Response({
+            "success": True,
+            "message": f"Logged out from {count} other device(s)."
+        }, status=status.HTTP_200_OK)
+    
+# ================= LOGOUT BRANCH WISE ================= #
+class LogoutBranchView(APIView):
+    """
+    Logout all users from a particular branch.
+
+    Permissions:
+    - Super Admin/Superuser: Can logout any branch.
+    - Admin: Can logout only their own branch.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        branch_id = request.data.get("branch_id")
+
+        if not branch_id:
+            return Response(
+                {"error": "Branch ID is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validate branch
+        try:
+            branch = Branch.objects.get(id=branch_id)
+        except Branch.DoesNotExist:
+            return Response(
+                {"error": "Branch not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        user = request.user
+
+        # Permission checks
+        if user.is_superuser or getattr(user, "role", None) == "superadmin":
+            pass  # Full access
+        elif getattr(user, "role", None) == "admin":
+            if user.branch_id != branch.id:
+                return Response(
+                    {"error": "You can only logout users from your own branch"},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        else:
+            return Response(
+                {"error": "Permission denied"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Fetch active sessions for the branch
+        sessions = UserSession.objects.filter(
+            user__branch=branch,
+            is_active=True
+        )
+
+        # Blacklist tokens
+        logged_out_count = 0
+        for session in sessions:
+            try:
+                RefreshToken(session.refresh_token).blacklist()
+                logged_out_count += 1
+            except Exception:
+                pass
+
+        # Deactivate sessions
         sessions.update(is_active=False)
 
         return Response({
             "success": True,
-            "message": "Logged out from other devices"
-        })
-
-
+            "message": f"Logged out {logged_out_count} user(s) from {branch.name}.",
+            "branch": branch.name
+        }, status=status.HTTP_200_OK)
+    
 # ================= ADMIN RESET PASSWORD ================= #
+
 class AdminResetPasswordView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin]
 
@@ -299,18 +462,10 @@ class AdminResetPasswordView(APIView):
             "success": False,
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
-    
-# ================= HEALPER FUNCTION ================= #
-def get_target_users(request_user, target_user):
-    if request_user.is_superuser:
-        return True
 
-    if request_user.role == 'admin' and target_user.role == 'staff':
-        return True
-
-    return False
 
 # ================= DEACTIVATE USER ================= #
+
 class DeactivateUserView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -320,22 +475,16 @@ class DeactivateUserView(APIView):
         except User.DoesNotExist:
             return Response({"error": "User not found"}, status=404)
 
-        if not get_target_users(request.user, target_user):
+        if not can_manage_user(request.user, target_user):
             return Response({"error": "Permission denied"}, status=403)
 
         if request.user == target_user:
-            return Response({"error": "You cannot deactivate yourself"}, status=400)
+            return Response(
+                {"error": "You cannot deactivate yourself"},
+                status=400
+            )
 
-        sessions = UserSession.objects.filter(user=target_user, is_active=True)
-
-        for session in sessions:
-            try:
-                RefreshToken(session.refresh_token).blacklist()
-            except:
-                pass
-
-        sessions.update(is_active=False)
-
+        blacklist_user_sessions(target_user)
         target_user.is_active = False
         target_user.save()
 
@@ -343,8 +492,10 @@ class DeactivateUserView(APIView):
             "success": True,
             "message": "User deactivated successfully"
         })
-    
+
+
 # ================= REACTIVATE USER ================= #
+
 class ReactivateUserView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -354,7 +505,7 @@ class ReactivateUserView(APIView):
         except User.DoesNotExist:
             return Response({"error": "User not found"}, status=404)
 
-        if not get_target_users(request.user, target_user):
+        if not can_manage_user(request.user, target_user):
             return Response({"error": "Permission denied"}, status=403)
 
         target_user.is_active = True
@@ -365,13 +516,18 @@ class ReactivateUserView(APIView):
             "message": "User reactivated successfully"
         })
 
-# ================= HEARD DELETE WHICH IS ONLY DONE BY THE SUPERUSER ================= #
+
+# ================= DELETE USER ================= #
+
 class DeleteUserView(APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request, user_id):
         if not request.user.is_superuser:
-            return Response({"error": "Only superuser can delete users"}, status=403)
+            return Response(
+                {"error": "Only superuser can delete users"},
+                status=403
+            )
 
         try:
             target_user = User.objects.get(id=user_id)
@@ -379,18 +535,12 @@ class DeleteUserView(APIView):
             return Response({"error": "User not found"}, status=404)
 
         if request.user == target_user:
-            return Response({"error": "You cannot delete yourself"}, status=400)
+            return Response(
+                {"error": "You cannot delete yourself"},
+                status=400
+            )
 
-        sessions = UserSession.objects.filter(user=target_user, is_active=True)
-
-        for session in sessions:
-            try:
-                RefreshToken(session.refresh_token).blacklist()
-            except:
-                pass
-
-        sessions.delete()
-
+        blacklist_user_sessions(target_user)
         target_user.delete()
 
         return Response({
@@ -398,27 +548,31 @@ class DeleteUserView(APIView):
             "message": "User deleted permanently"
         })
 
+
 # ================= LIST + FILTER + SEARCH USERS ================= #
+
 class UserListView(ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdmin]
     serializer_class = UserSerializer
 
     def get_queryset(self):
         user = self.request.user
         queryset = User.objects.all()
 
-        if user.role == 'admin':
-            queryset = queryset.filter(role='staff')
+        if not (user.is_superuser or user.role == "superadmin"):
+            queryset = queryset.filter(branch=user.branch)
 
-        role = self.request.query_params.get('role')
-        is_active = self.request.query_params.get('is_active')
-        search = self.request.query_params.get('search')
+        role = self.request.query_params.get("role")
+        is_active = self.request.query_params.get("is_active")
+        search = self.request.query_params.get("search")
 
         if role:
             queryset = queryset.filter(role=role)
 
         if is_active is not None:
-            queryset = queryset.filter(is_active=is_active.lower() == 'true')
+            queryset = queryset.filter(
+                is_active=is_active.lower() == "true"
+            )
 
         if search:
             queryset = queryset.filter(
@@ -426,9 +580,11 @@ class UserListView(ListAPIView):
                 Q(email__icontains=search)
             )
 
-        return queryset.order_by('-id')
-    
-# ================= BULK ACTION FOR USERS ================= #
+        return queryset.order_by("-id")
+
+
+# ================= BULK USER ACTIONS ================= #
+
 class BulkUserActionView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -437,56 +593,43 @@ class BulkUserActionView(APIView):
         user_ids = request.data.get("user_ids", [])
 
         if not user_ids:
-            return Response({"error": "No users selected"}, status=400)
+            return Response(
+                {"error": "No users selected"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         users = User.objects.filter(id__in=user_ids)
 
-        if not request.user.is_superuser:
-            users = users.filter(role='staff')
+        if not (request.user.is_superuser or request.user.role == "superadmin"):
+            users = users.filter(branch=request.user.branch)
 
         users = users.exclude(id=request.user.id)
 
         if action == "deactivate":
-            self._deactivate(users)
+            for user in users:
+                blacklist_user_sessions(user)
+                user.is_active = False
+                user.save()
 
         elif action == "reactivate":
-            self._reactivate(users)
+            users.update(is_active=True)
 
         elif action == "delete":
             if not request.user.is_superuser:
-                return Response({"error": "Only superuser can delete"}, status=403)
-            self._delete(users)
-
+                return Response(
+                    {"error": "Only superuser can delete users"},
+                    status=403
+                )
+            for user in users:
+                blacklist_user_sessions(user)
+                user.delete()
         else:
-            return Response({"error": "Invalid action"}, status=400)
+            return Response(
+                {"error": "Invalid action"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         return Response({
             "success": True,
-            "message": f"{action} completed successfully"
+            "message": f"{action.capitalize()} completed successfully"
         })
-
-    def _deactivate(self, users):
-        for user in users:
-            sessions = UserSession.objects.filter(user=user, is_active=True)
-            for session in sessions:
-                try:
-                    RefreshToken(session.refresh_token).blacklist()
-                except:
-                    pass
-            sessions.update(is_active=False)
-            user.is_active = False
-            user.save()
-
-    def _reactivate(self, users):
-        users.update(is_active=True)
-
-    def _delete(self, users):
-        for user in users:
-            sessions = UserSession.objects.filter(user=user, is_active=True)
-            for session in sessions:
-                try:
-                    RefreshToken(session.refresh_token).blacklist()
-                except:
-                    pass
-            sessions.delete()
-            user.delete()
