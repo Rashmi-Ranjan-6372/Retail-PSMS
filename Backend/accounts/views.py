@@ -26,7 +26,6 @@ from .models import LoginLog, UserSession
 
 User = get_user_model()
 
-
 # ================= HELPER FUNCTIONS ================= #
 
 def get_client_ip(request):

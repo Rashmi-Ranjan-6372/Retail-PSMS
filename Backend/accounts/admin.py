@@ -4,12 +4,11 @@ from django.utils.html import format_html
 
 from .models import LoginLog, User, UserSession
 
-
 # ================= USER ADMIN ================= #
 @admin.register(User)
 class CustomUserAdmin(UserAdmin):
     list_display = (
-        'id', 'username', 'email', 'role',
+        'id', 'username', 'branch', 'email', 'role',
         'is_active', 'is_staff', 'is_superuser',
         'created_at', 'password_changed_at'
     )
