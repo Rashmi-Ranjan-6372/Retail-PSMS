@@ -258,16 +258,6 @@ class LogoutView(APIView):
 
 
 # ================= LOGOUT ALL DEVICES ================= #
-
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
-from rest_framework_simplejwt.tokens import RefreshToken
-
-from .models import UserSession
-
-
 class LogoutAllDevicesView(APIView):
     """
     Logout users from all devices based on role hierarchy.
@@ -632,4 +622,55 @@ class BulkUserActionView(APIView):
         return Response({
             "success": True,
             "message": f"{action.capitalize()} completed successfully"
+        })
+
+# ================= FILTER USERS STATUS (ACTIVE / INACTIVE) ================= #
+class UserFilterView(ListAPIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
+    serializer_class = UserSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+
+        # ================= BASE QUERY ================= #
+        if user.is_superuser or getattr(user, "role", None) == "superadmin":
+            queryset = User.objects.all()
+        else:
+            queryset = User.objects.filter(branch=user.branch)
+
+        # ================= FILTERS ================= #
+        role = self.request.query_params.get("role")
+        is_active = self.request.query_params.get("is_active")
+        branch_id = self.request.query_params.get("branch_id")
+        search = self.request.query_params.get("search")
+
+        if role:
+            queryset = queryset.filter(role=role)
+
+        if is_active is not None:
+            queryset = queryset.filter(
+                is_active=is_active.lower() == "true"
+            )
+
+        if branch_id:
+            if user.is_superuser or getattr(user, "role", None) == "superadmin":
+                queryset = queryset.filter(branch_id=branch_id)
+
+        if search:
+            queryset = queryset.filter(
+                Q(username__icontains=search) |
+                Q(email__icontains=search) |
+                Q(phone__icontains=search)
+            )
+
+        return queryset.order_by("-id")
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+
+        return Response({
+            "success": True,
+            "count": queryset.count(),
+            "data": serializer.data
         })

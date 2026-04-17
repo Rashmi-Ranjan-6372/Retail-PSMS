@@ -6,7 +6,6 @@ def is_super_admin(user):
         (getattr(user, "role", None) == "superadmin" or user.is_superuser)
     )
 
-
 class IsSuperAdmin(BasePermission):
     message = "Only the Super Admin can perform this action."
 
@@ -15,7 +14,6 @@ class IsSuperAdmin(BasePermission):
             request.user.is_authenticated
             and request.user.is_superuser
         )
-
 
 class IsBranchAdmin(BasePermission):
     message = "Only branch administrators have permission."
