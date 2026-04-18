@@ -1,16 +1,13 @@
 from django.urls import path
-from .views import (
-    BranchCreateView,
-    BranchListView,
-    BranchDetailView,
-    BranchUpdateView,
-    BranchDeleteView
-)
+from .views import *
 
 urlpatterns = [
-    path('', BranchListView.as_view(), name='branch-list'),
-    path('create/', BranchCreateView.as_view(), name='branch-create'),
-    path('<int:pk>/', BranchDetailView.as_view(), name='branch-detail'),
-    path('<int:pk>/update/', BranchUpdateView.as_view(), name='branch-update'),
-    path('<int:pk>/delete/', BranchDeleteView.as_view(), name='branch-delete'),
+    path('branches/create/', BranchCreateView.as_view()),
+    path('branches/', BranchListView.as_view()),
+    path('branches/<int:pk>/', BranchDetailView.as_view()),
+    path('branches/update/<int:pk>/', BranchUpdateView.as_view()),
+    path('branches/deactivate/<int:pk>/', BranchSoftDeleteView.as_view()),
+    path('branches/restore/<int:pk>/', BranchRestoreView.as_view()),
+    path('branches/delete/<int:pk>/', BranchHardDeleteView.as_view()),
+    path('branches/filter/', BranchStatusFilterView.as_view()),
 ]

@@ -1,12 +1,12 @@
 from django.urls import path
-from .views import AdminResetPasswordView, BulkUserActionView, CustomTokenRefreshView, DeactivateUserView, DeleteUserView, LoginView, LogoutAllDevicesView, LogoutAllExceptOwnView, LogoutBranchView, ProfileView, CreateStaffView, LogoutView, ReactivateUserView, UserListView
+from .views import *
 
 urlpatterns = [
     path('login/', LoginView.as_view()),
     path('logout/', LogoutView.as_view()),
     path('logout-all/', LogoutAllDevicesView.as_view()),
     path('logout-all-except-own/', LogoutAllExceptOwnView.as_view()),
-    path("logout-branch/", LogoutBranchView.as_view(), name="logout_branch"),
+    path("logout-branch/", LogoutBranchView.as_view()),
     path('profile/', ProfileView.as_view()),
     path('create-staff/', CreateStaffView.as_view()),
     path('admin-reset-password/', AdminResetPasswordView.as_view()),
@@ -16,4 +16,5 @@ urlpatterns = [
     path('user/delete/<int:user_id>/', DeleteUserView.as_view()),
     path('users/', UserListView.as_view()),
     path('users/bulk-action/', BulkUserActionView.as_view()),
+    path('users/filter/', UserFilterView.as_view()),
 ]
