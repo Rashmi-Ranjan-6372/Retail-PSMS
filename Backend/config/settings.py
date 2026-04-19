@@ -30,11 +30,8 @@ INSTALLED_APPS = [
 
     # Local apps
     'accounts',
-    'branches'
-    # 'medicine',
-    # 'inventory',
-    # 'billing',
-    # 'supplier',
+    'branches',
+    'masters',
 ]
 
 
