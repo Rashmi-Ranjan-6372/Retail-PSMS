@@ -2,6 +2,7 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.parsers import MultiPartParser, FormParser
 
 from .models import Branch
 from .serializers import BranchSerializer
@@ -13,6 +14,7 @@ class BranchCreateView(generics.CreateAPIView):
     queryset = Branch.objects.all()
     serializer_class = BranchSerializer
     permission_classes = [IsAuthenticated, IsSuperAdmin]
+    parser_classes = [MultiPartParser, FormParser]
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -45,6 +47,19 @@ class BranchListView(generics.ListAPIView):
 
         return Branch.objects.none()
 
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(
+            queryset,
+            many=True,
+            context={"request": request}
+        )
+
+        return Response({
+            "success": True,
+            "count": queryset.count(),
+            "data": serializer.data
+        })
 
 # ================= BRANCH DETAIL ================= #
 class BranchDetailView(generics.RetrieveAPIView):
@@ -61,12 +76,25 @@ class BranchDetailView(generics.RetrieveAPIView):
 
         raise PermissionDenied("You do not have permission to access this branch.")
 
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(
+            instance,
+            context={"request": request}   
+        )
+
+        return Response({
+            "success": True,
+            "data": serializer.data
+        })
+
 
 # ================= UPDATE BRANCH ================= #
 class BranchUpdateView(generics.UpdateAPIView):
     queryset = Branch.objects.all()
     serializer_class = BranchSerializer
     permission_classes = [IsAuthenticated, IsSuperAdmin]
+    parser_classes = [MultiPartParser, FormParser]
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -166,7 +194,7 @@ class BranchStatusFilterView(generics.ListAPIView):
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
-        serializer = self.get_serializer(queryset, many=True)
+        serializer = self.get_serializer(queryset, many=True, context={"request": request})
 
         return Response({
             "success": True,

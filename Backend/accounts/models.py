@@ -38,7 +38,7 @@ class User(AbstractUser):
     license_expiry = models.DateField(null=True, blank=True)
     branch = models.ForeignKey(
         Branch,
-        on_delete=models.SET_NULL,
+        on_delete=models.SET_NULL,  
         null=True,
         blank=True,
         related_name="users"
@@ -190,7 +190,6 @@ class AuditLog(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
-        """Automatically assign branch from user."""
         if self.user and not self.branch:
             self.branch = self.user.branch
         super().save(*args, **kwargs)

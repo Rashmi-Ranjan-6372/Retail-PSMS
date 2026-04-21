@@ -10,6 +10,8 @@ class Branch(models.Model):
     email = models.EmailField(blank=True, null=True)
     license_number = models.CharField(max_length=100, blank=True, null=True)
     gst_number = models.CharField(max_length=50, blank=True, null=True)
+    logo = models.ImageField(upload_to='branch_logos/', blank=True, null=True)
+
 
     is_active = models.BooleanField(default=True)
     deleted_at = models.DateTimeField(null=True, blank=True)

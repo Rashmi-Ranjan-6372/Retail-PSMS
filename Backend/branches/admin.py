@@ -1,13 +1,16 @@
 from django.contrib import admin
+from django.utils.html import format_html
 from .models import Branch
 
 
 @admin.register(Branch)
 class BranchAdmin(admin.ModelAdmin):
+    # ================= LIST DISPLAY ================= #
     list_display = (
         'id',
         'name',
         'code',
+        'logo_preview',   # ✅ logo in list
         'phone',
         'email',
         'is_active',
@@ -15,6 +18,7 @@ class BranchAdmin(admin.ModelAdmin):
         'deleted_at'
     )
 
+    # ================= SEARCH ================= #
     search_fields = (
         'name',
         'code',
@@ -23,20 +27,25 @@ class BranchAdmin(admin.ModelAdmin):
         'address'
     )
 
+    # ================= FILTER ================= #
     list_filter = (
         'is_active',
         'created_at',
     )
 
+    # ================= ORDER ================= #
     ordering = ('name',)
 
+    # ================= READONLY ================= #
     readonly_fields = (
+        'logo_preview',   # ✅ show preview
         'created_at',
         'updated_at',
         'deleted_at',
         'deleted_by'
     )
 
+    # ================= DATE ================= #
     date_hierarchy = 'created_at'
 
     # ================= FIELDSETS ================= #
@@ -45,6 +54,8 @@ class BranchAdmin(admin.ModelAdmin):
             'fields': (
                 'name',
                 'code',
+                'logo',           
+                'logo_preview',  
                 'address',
                 'phone',
                 'email',
@@ -70,6 +81,17 @@ class BranchAdmin(admin.ModelAdmin):
         }),
     )
 
+    # ================= LOGO PREVIEW ================= #
+    def logo_preview(self, obj):
+        if obj.logo:
+            return format_html(
+                '<img src="{}" style="width:50px;height:50px;object-fit:cover;border-radius:8px;border:1px solid #ddd;" />',
+                obj.logo.url
+            )
+        return "No Logo"
+
+    logo_preview.short_description = "Logo"
+
     # ================= ACTIONS ================= #
     actions = ['soft_delete_branches', 'restore_branches']
 
@@ -91,11 +113,11 @@ class BranchAdmin(admin.ModelAdmin):
 
     restore_branches.short_description = "Restore selected branches"
 
-    # ================= DISABLE HARD DELETE ================= #
+    # ================= PERMISSIONS ================= #
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
 
-    # Optional: prevent bulk delete action
+    # Remove default bulk delete
     def get_actions(self, request):
         actions = super().get_actions(request)
 
