@@ -1,7 +1,5 @@
-from unicodedata import category
-
 from django.contrib import admin
-from masters.models import Supplier, Manufacturer, ProductCategory
+from masters.models import Supplier, Manufacturer, Category
 
 @admin.register(Supplier)
 class SupplierAdmin(admin.ModelAdmin):
@@ -103,7 +101,7 @@ class ManufacturerAdmin(admin.ModelAdmin):
         }),
     )
 
-@admin.register(ProductCategory)
+@admin.register(Category)
 class ProductCategoryAdmin(admin.ModelAdmin):
     
     # ================= LIST VIEW ================= #
