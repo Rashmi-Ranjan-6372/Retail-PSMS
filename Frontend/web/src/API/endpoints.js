@@ -1,0 +1,17 @@
+export const ENDPOINTS = {
+    LOGIN: "/auth/login/",
+    LOGOUT: "/auth/logout/",
+    LOGOUT_ALL: "/auth/logout-all/",
+    LOGOUT_ALL_EXCEPT_OWN: "/auth/logout-all-except-own/",
+    LOGOUT_BRANCH: "/auth/logout-branch/",
+    PROFILE: "/auth/profile/",
+    CREATE_STAFF: "/auth/create-staff/",
+    ADMIN_RESET_PASSWORD: "/auth/admin-reset-password/",
+    REFRESH_TOKEN: "/auth/token/refresh/",
+    USERS_LIST: "/auth/users/",
+    USERS_FILTER: "/auth/users/filter/",
+    USERS_BULK_ACTION: "/auth/users/bulk-action/",
+    DEACTIVATE_USER: (id) => `/auth/user/deactivate/${id}/`,
+    REACTIVATE_USER: (id) => `/auth/user/reactivate/${id}/`,
+    DELETE_USER: (id) => `/auth/user/delete/${id}/`,
+};
