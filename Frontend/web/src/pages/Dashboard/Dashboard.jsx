@@ -30,7 +30,7 @@ const Dashboard = () => {
       {/* Header */}
       <Flex justify="space-between" mb={5}>
         <Heading size="lg">Dashboard</Heading>
-        <Text>Welcome 👋</Text>
+        <Text>Welcome back, John! 👋</Text>
       </Flex>
 
       {/* Cards */}
