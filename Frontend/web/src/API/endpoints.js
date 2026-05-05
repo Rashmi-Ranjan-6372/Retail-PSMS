@@ -13,5 +13,5 @@ export const ENDPOINTS = {
     USERS_BULK_ACTION: "/auth/users/bulk-action/",
     DEACTIVATE_USER: (id) => `/auth/user/deactivate/${id}/`,
     REACTIVATE_USER: (id) => `/auth/user/reactivate/${id}/`,
-    DELETE_USER: (id) => `/auth/user/delete/${id}/`,
+    DELETE_USER: (id) => `/auth/user/delete/${id}/`, 
 };
