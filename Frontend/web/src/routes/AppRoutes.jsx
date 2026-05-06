@@ -9,10 +9,9 @@ const AppRoutes = () => {
     <BrowserRouter>
       <Routes>
 
-        {/* Public Route */}
         <Route path="/" element={<Login />} />
+        <Route path="/login" element={<Login />} />  
 
-        {/* Protected Route */}
         <Route
           path="/dashboard"
           element={
@@ -23,6 +22,8 @@ const AppRoutes = () => {
             </ProtectedRoute>
           }
         />
+
+        <Route path="*" element={<Login />} />
 
       </Routes>
     </BrowserRouter>
