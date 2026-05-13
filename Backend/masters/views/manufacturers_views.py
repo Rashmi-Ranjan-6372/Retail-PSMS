@@ -21,8 +21,6 @@ class ManufacturerListView(generics.ListAPIView):
 
     def get_queryset(self):
         queryset = Manufacturer.objects.all()
-
-        # 🔍 Filters
         is_active = self.request.query_params.get("is_active")
         search = self.request.query_params.get("search")
 

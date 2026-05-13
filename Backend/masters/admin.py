@@ -1,6 +1,5 @@
 from django.contrib import admin
-from masters.models import Supplier, Manufacturer, Category
-
+from masters.models import Supplier, Manufacturer, Category, Product, SalesOffer
 @admin.register(Supplier)
 class SupplierAdmin(admin.ModelAdmin):
     list_display = (
@@ -140,3 +139,184 @@ class ProductCategoryAdmin(admin.ModelAdmin):
         if obj.code:
             obj.code = obj.code.upper()
         super().save_model(request, obj, form, change)
+
+
+@admin.register(Product)
+class ProductAdmin(admin.ModelAdmin):
+
+    list_display = (
+        "id",
+        "name",
+        "category",
+        "manufacturer",
+        "strength",
+        "units_per_strip",
+        "loose_sale_allowed",
+        "prescription_required",
+        "minimum_stock",
+        "is_active",
+        "created_at",
+    )
+
+    list_filter = (
+        "category",
+        "manufacturer",
+        "loose_sale_allowed",
+        "prescription_required",
+        "is_active",
+    )
+
+    search_fields = (
+        "name",
+        "strength",
+        "rack_no",
+    )
+
+    ordering = (
+        "name",
+    )
+
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+    )
+
+    fieldsets = (
+        ("Basic Information", {
+            "fields": (
+                "name",
+                "category",
+                "manufacturer",
+                "strength",
+            )
+        }),
+
+        ("Stock Settings", {
+            "fields": (
+                "units_per_strip",
+                "minimum_stock",
+                "rack_no",
+            )
+        }),
+
+        ("Sales Settings", {
+            "fields": (
+                "loose_sale_allowed",
+                "prescription_required",
+            )
+        }),
+
+        ("Status", {
+            "fields": (
+                "is_active",
+                "deleted_at",
+            )
+        }),
+
+        ("Timestamps", {
+            "fields": (
+                "created_at",
+                "updated_at",
+            )
+        }),
+    )
+
+@admin.register(SalesOffer)
+class SalesOfferAdmin(admin.ModelAdmin):
+
+    list_display = (
+        "id",
+        "name",
+        "offer_type",
+        "discount_type",
+        "discount_percentage",
+        "flat_discount_amount",
+        "start_date",
+        "end_date",
+        "is_active",
+        "created_at",
+    )
+
+    list_filter = (
+        "offer_type",
+        "discount_type",
+        "is_active",
+        "start_date",
+        "end_date",
+    )
+
+    search_fields = (
+        "name",
+        "member_type",
+    )
+
+    ordering = (
+        "-created_at",
+    )
+
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+    )
+
+    fieldsets = (
+        ("Basic Information", {
+            "fields": (
+                "name",
+                "offer_type",
+                "discount_type",
+            )
+        }),
+
+        ("Offer Target", {
+            "fields": (
+                "product",
+                "category",
+                "manufacturer",
+            )
+        }),
+
+        ("Discount Details", {
+            "fields": (
+                "discount_percentage",
+                "flat_discount_amount",
+            )
+        }),
+
+        ("Buy X Get Y", {
+            "fields": (
+                "buy_quantity",
+                "free_quantity",
+            )
+        }),
+
+        ("Quantity / Bill Conditions", {
+            "fields": (
+                "minimum_quantity",
+                "minimum_bill_amount",
+            )
+        }),
+
+        ("Special Offers", {
+            "fields": (
+                "expiry_before_days",
+                "member_type",
+            )
+        }),
+
+        ("Validity", {
+            "fields": (
+                "start_date",
+                "end_date",
+                "is_active",
+            )
+        }),
+
+        ("Extra", {
+            "fields": (
+                "deleted_at",
+                "created_at",
+                "updated_at",
+            )
+        }),
+    )
