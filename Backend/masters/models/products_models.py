@@ -14,6 +14,7 @@ class Product(models.Model):
     rack_no = models.CharField(max_length=50,blank=True,null=True)
     minimum_stock = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
+    
     deleted_at = models.DateTimeField(blank=True,null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

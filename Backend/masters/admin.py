@@ -1,5 +1,5 @@
 from django.contrib import admin
-from masters.models import Supplier, Manufacturer, Category, Product, SalesOffer
+from masters.models import Supplier, Manufacturer, Category, Product, SalesOffer, Customer
 @admin.register(Supplier)
 class SupplierAdmin(admin.ModelAdmin):
     list_display = (
@@ -103,7 +103,6 @@ class ManufacturerAdmin(admin.ModelAdmin):
 @admin.register(Category)
 class ProductCategoryAdmin(admin.ModelAdmin):
     
-    # ================= LIST VIEW ================= #
     list_display = (
         "id",
         "name",
@@ -320,3 +319,31 @@ class SalesOfferAdmin(admin.ModelAdmin):
             )
         }),
     )
+
+@admin.register(Customer)
+class CustomerAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "name",
+        "mobile",
+        "email",
+        "is_active",
+        "created_at",
+    )
+
+    list_filter = (
+        "is_active",
+        "created_at",
+    )
+
+    search_fields = (
+        "name",
+        "mobile",
+        "email",
+    )
+
+    ordering = ("-created_at",)
+
+    list_editable = ("is_active",)
+
+    readonly_fields = ("created_at", "updated_at")

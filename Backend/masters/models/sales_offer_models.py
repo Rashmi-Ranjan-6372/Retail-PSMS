@@ -35,6 +35,7 @@ class SalesOffer(models.Model):
     start_date = models.DateField()
     end_date = models.DateField()
     is_active = models.BooleanField(default=True)
+    
     deleted_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -49,3 +50,5 @@ class SalesOffer(models.Model):
                    models.Index(fields=["end_date"]), 
                    models.Index(fields=["is_active"])
                 ]
+        
+        
