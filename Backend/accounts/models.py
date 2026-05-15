@@ -4,7 +4,38 @@ from django.conf import settings
 from django.utils import timezone
 from branches.models import Branch
 
-# ================= USER MODEL ================= #
+
+class Retailer(models.Model):
+    name = models.CharField(max_length=255)
+    owner_name = models.CharField(max_length=255)
+    mobile = models.CharField(max_length=15)
+    email = models.EmailField(unique=True)
+    address = models.TextField(null=True, blank=True)
+    gst_number = models.CharField(max_length=50, null=True, blank=True)
+    license_number = models.CharField(max_length=100, null=True, blank=True)
+    logo = models.ImageField(upload_to="retailer_logos/", null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+
+class RetailerBranchAutoFillMixin(models.Model):
+    retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, null=True, blank=True, related_name="%(class)s_set")
+    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name="%(class)s_set")
+
+    class Meta:
+        abstract = True
+
+    def save(self, *args, **kwargs):
+        if not self.retailer and hasattr(self, "_current_user"):
+            self.retailer = self._current_user.retailer
+            self.branch = self._current_user.branch
+        super().save(*args, **kwargs)
+
+
 class User(AbstractUser):
     ROLE_CHOICES = (
         ("superadmin", "Super Admin"),
@@ -14,35 +45,17 @@ class User(AbstractUser):
         ("cashier", "Cashier"),
         ("staff", "Staff"),
     )
-    role = models.CharField(
-        max_length=20,
-        choices=ROLE_CHOICES,
-        default="staff"
-    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="staff")
     phone = models.CharField(max_length=15, blank=True, null=True)
     address = models.TextField(blank=True, null=True)
-    profile_picture = models.ImageField(
-        upload_to="profiles/",
-        blank=True,
-        null=True
-    )
-    employee_id = models.CharField(
-        max_length=50,
-        unique=True,
-        null=True,
-        blank=True
-    )
+    profile_picture = models.ImageField(upload_to="profiles/", blank=True, null=True)
+    employee_id = models.CharField(max_length=50, unique=True, null=True, blank=True)
     joining_date = models.DateField(null=True, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
     license_number = models.CharField(max_length=100, blank=True, null=True)
     license_expiry = models.DateField(null=True, blank=True)
-    branch = models.ForeignKey(
-        Branch,
-        on_delete=models.SET_NULL,  
-        null=True,
-        blank=True,
-        related_name="users"
-    )
+    retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, null=True, blank=True, related_name="users")
+    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name="users")
     password_changed_at = models.DateTimeField(null=True, blank=True)
     last_login_ip = models.GenericIPAddressField(null=True, blank=True)
     failed_login_attempts = models.PositiveIntegerField(default=0)
@@ -54,7 +67,6 @@ class User(AbstractUser):
     updated_at = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
-        """Track password changes."""
         if self.pk:
             old_user = User.objects.filter(pk=self.pk).first()
             if old_user and old_user.password != self.password:
@@ -62,11 +74,7 @@ class User(AbstractUser):
         super().save(*args, **kwargs)
 
     def is_account_locked(self):
-        """Check if the account is currently locked."""
-        return (
-            self.account_locked_until and
-            self.account_locked_until > timezone.now()
-        )
+        return self.account_locked_until and self.account_locked_until > timezone.now()
 
     def is_super_admin(self):
         return self.role == "superadmin" or self.is_superuser
@@ -78,8 +86,6 @@ class User(AbstractUser):
         return f"{self.username} ({self.role})"
 
     class Meta:
-        verbose_name = "User"
-        verbose_name_plural = "Users"
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["username"]),
@@ -94,27 +100,17 @@ class User(AbstractUser):
         ]
 
 
-# ================= LOGIN LOG ================= #
-class LoginLog(models.Model):
+class LoginLog(RetailerBranchAutoFillMixin):
     STATUS_CHOICES = (
         ("success", "Success"),
         ("failed", "Failed"),
     )
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True
-    )
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
     login_time = models.DateTimeField(auto_now_add=True)
     logout_time = models.DateTimeField(null=True, blank=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(null=True, blank=True)
-    status = models.CharField(
-        max_length=10,
-        choices=STATUS_CHOICES,
-        default="success"
-    )
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="success")
 
     def __str__(self):
         return f"{self.user} - {self.status} - {self.login_time}"
@@ -126,25 +122,19 @@ class LoginLog(models.Model):
             models.Index(fields=["status"]),
         ]
 
-# ================= USER SESSION ================= #
-class UserSession(models.Model):
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="sessions"
-    )
+
+class UserSession(RetailerBranchAutoFillMixin):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sessions")
     device_id = models.CharField(max_length=255)
     refresh_token = models.TextField()
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
-
     created_at = models.DateTimeField(auto_now_add=True)
     last_activity = models.DateTimeField(auto_now=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
 
     def revoke(self):
-        """Revoke the session."""
         self.is_active = False
         self.revoked_at = timezone.now()
         self.save(update_fields=["is_active", "revoked_at"])
@@ -159,8 +149,8 @@ class UserSession(models.Model):
             models.Index(fields=["is_active"]),
         ]
 
-# ================= AUDIT LOG ================= #
-class AuditLog(models.Model):
+
+class AuditLog(RetailerBranchAutoFillMixin):
     ACTION_CHOICES = (
         ("create", "Create"),
         ("update", "Update"),
@@ -169,19 +159,7 @@ class AuditLog(models.Model):
         ("logout", "Logout"),
         ("view", "View"),
     )
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True
-    )
-    branch = models.ForeignKey(
-        "branches.Branch",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="audit_logs"
-    )
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     action = models.CharField(max_length=20, choices=ACTION_CHOICES)
     model_name = models.CharField(max_length=255)
     object_id = models.CharField(max_length=50)

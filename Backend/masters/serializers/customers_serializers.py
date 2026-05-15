@@ -1,0 +1,22 @@
+from rest_framework import serializers
+from .models.customers_models import Customer
+
+class CustomerSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Customer
+        fields = [
+            "id",
+            "name",
+            "mobile",
+            "email",
+            "address",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "created_at",
+            "updated_at",
+        ]

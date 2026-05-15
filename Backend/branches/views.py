@@ -3,32 +3,34 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import MultiPartParser, FormParser
-
 from .models import Branch
 from .serializers import BranchSerializer
-from accounts.permissions import IsSuperAdmin
+from accounts.permissions import IsSuperAdmin, is_super_admin
 
 
-# ================= CREATE BRANCH ================= #
+# ==================== BRANCH CREATE VIEW ==================== #
+
 class BranchCreateView(generics.CreateAPIView):
-    queryset = Branch.objects.all()
+    queryset = Branch.objects.select_related("retailer")
     serializer_class = BranchSerializer
     permission_classes = [IsAuthenticated, IsSuperAdmin]
     parser_classes = [MultiPartParser, FormParser]
 
+    def perform_create(self, serializer):
+        serializer.save(retailer=self.request.user.retailer)
+
     def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
+        response = super().create(request, *args, **kwargs)
 
         return Response({
             "success": True,
             "message": "Branch created successfully",
-            "data": serializer.data
+            "data": response.data
         }, status=status.HTTP_201_CREATED)
 
 
-# ================= LIST BRANCHES ================= #
+# ==================== BRANCH LIST VIEW ==================== #
+
 class BranchListView(generics.ListAPIView):
     serializer_class = BranchSerializer
     permission_classes = [IsAuthenticated]
@@ -36,19 +38,25 @@ class BranchListView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
 
-        if user.is_superuser:
-            return Branch.objects.filter(is_active=True)
+        if is_super_admin(user):
+            return Branch.objects.filter(
+                is_active=True,
+                deleted_at__isnull=True
+            ).select_related("retailer")
 
         if getattr(user, "branch", None):
             return Branch.objects.filter(
                 id=user.branch.id,
-                is_active=True
-            )
+                retailer=user.retailer,
+                is_active=True,
+                deleted_at__isnull=True
+            ).select_related("retailer")
 
         return Branch.objects.none()
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
+
         serializer = self.get_serializer(
             queryset,
             many=True,
@@ -61,26 +69,40 @@ class BranchListView(generics.ListAPIView):
             "data": serializer.data
         })
 
-# ================= BRANCH DETAIL ================= #
+
+# ==================== BRANCH DETAIL VIEW ==================== #
+
 class BranchDetailView(generics.RetrieveAPIView):
     serializer_class = BranchSerializer
     permission_classes = [IsAuthenticated]
-    queryset = Branch.objects.all()
+
+    queryset = Branch.objects.filter(
+        deleted_at__isnull=True
+    ).select_related("retailer")
 
     def get_object(self):
         branch = super().get_object()
         user = self.request.user
 
-        if user.is_superuser or getattr(user, "branch", None) == branch:
+        if is_super_admin(user):
             return branch
 
-        raise PermissionDenied("You do not have permission to access this branch.")
+        if (
+            getattr(user, "branch", None) == branch and
+            getattr(user, "retailer", None) == branch.retailer
+        ):
+            return branch
+
+        raise PermissionDenied(
+            "You do not have permission to access this branch."
+        )
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
+
         serializer = self.get_serializer(
             instance,
-            context={"request": request}   
+            context={"request": request}
         )
 
         return Response({
@@ -89,35 +111,67 @@ class BranchDetailView(generics.RetrieveAPIView):
         })
 
 
-# ================= UPDATE BRANCH ================= #
+# ==================== BRANCH UPDATE VIEW ==================== #
+
 class BranchUpdateView(generics.UpdateAPIView):
-    queryset = Branch.objects.all()
+    queryset = Branch.objects.filter(
+        deleted_at__isnull=True
+    ).select_related("retailer")
+
     serializer_class = BranchSerializer
     permission_classes = [IsAuthenticated, IsSuperAdmin]
     parser_classes = [MultiPartParser, FormParser]
 
-    def update(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(
-            instance,
-            data=request.data,
-            partial=True
-        )
-        serializer.is_valid(raise_exception=True)
+    def get_object(self):
+        branch = super().get_object()
+        user = self.request.user
+
+        if is_super_admin(user):
+            return branch
+
+        if branch.retailer != user.retailer:
+            raise PermissionDenied(
+                "You cannot access another retailer branch."
+            )
+
+        return branch
+
+    def perform_update(self, serializer):
         serializer.save()
+
+    def update(self, request, *args, **kwargs):
+        response = super().update(request, *args, **kwargs)
 
         return Response({
             "success": True,
             "message": "Branch updated successfully",
-            "data": serializer.data
+            "data": response.data
         })
 
 
-# ================= SOFT DELETE ================= #
+# ==================== BRANCH SOFT DELETE VIEW ==================== #
+
 class BranchSoftDeleteView(generics.UpdateAPIView):
-    queryset = Branch.objects.all()
+    queryset = Branch.objects.filter(
+        deleted_at__isnull=True
+    ).select_related("retailer")
+
     serializer_class = BranchSerializer
     permission_classes = [IsAuthenticated, IsSuperAdmin]
+
+    def get_object(self):
+        branch = super().get_object()
+        user = self.request.user
+
+        if is_super_admin(user):
+            return branch
+
+        if branch.retailer != user.retailer:
+            raise PermissionDenied(
+                "You cannot access another retailer branch."
+            )
+
+        return branch
 
     def patch(self, request, *args, **kwargs):
         branch = self.get_object()
@@ -126,7 +180,7 @@ class BranchSoftDeleteView(generics.UpdateAPIView):
             return Response({
                 "success": False,
                 "message": "Branch already deactivated"
-            }, status=400)
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         branch.soft_delete(request.user)
 
@@ -136,11 +190,26 @@ class BranchSoftDeleteView(generics.UpdateAPIView):
         })
 
 
-# ================= RESTORE ================= #
+# ==================== BRANCH RESTORE VIEW ==================== #
+
 class BranchRestoreView(generics.UpdateAPIView):
-    queryset = Branch.objects.all()
+    queryset = Branch.objects.select_related("retailer")
     serializer_class = BranchSerializer
     permission_classes = [IsAuthenticated, IsSuperAdmin]
+
+    def get_object(self):
+        branch = super().get_object()
+        user = self.request.user
+
+        if is_super_admin(user):
+            return branch
+
+        if branch.retailer != user.retailer:
+            raise PermissionDenied(
+                "You cannot access another retailer branch."
+            )
+
+        return branch
 
     def patch(self, request, *args, **kwargs):
         branch = self.get_object()
@@ -149,7 +218,7 @@ class BranchRestoreView(generics.UpdateAPIView):
             return Response({
                 "success": False,
                 "message": "Branch already active"
-            }, status=400)
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         branch.restore()
 
@@ -158,14 +227,31 @@ class BranchRestoreView(generics.UpdateAPIView):
             "message": "Branch restored successfully"
         })
 
-# ================= HARD DELETE ================= #
+
+# ==================== BRANCH HARD DELETE VIEW ==================== #
+
 class BranchHardDeleteView(generics.DestroyAPIView):
-    queryset = Branch.objects.all()
+    queryset = Branch.objects.select_related("retailer")
     serializer_class = BranchSerializer
     permission_classes = [IsAuthenticated, IsSuperAdmin]
 
+    def get_object(self):
+        branch = super().get_object()
+        user = self.request.user
+
+        if is_super_admin(user):
+            return branch
+
+        if branch.retailer != user.retailer:
+            raise PermissionDenied(
+                "You cannot access another retailer branch."
+            )
+
+        return branch
+
     def destroy(self, request, *args, **kwargs):
         branch = self.get_object()
+
         branch.hard_delete()
 
         return Response({
@@ -173,28 +259,50 @@ class BranchHardDeleteView(generics.DestroyAPIView):
             "message": "Branch permanently deleted"
         }, status=status.HTTP_200_OK)
 
-# ================= FILTER BRANCH (ACTIVE / INACTIVE) ================= #
+
+# ==================== BRANCH STATUS FILTER VIEW ==================== #
+
 class BranchStatusFilterView(generics.ListAPIView):
     serializer_class = BranchSerializer
     permission_classes = [IsAuthenticated, IsSuperAdmin]
 
     def get_queryset(self):
-        status_param = self.request.query_params.get("status", "active").lower()
+        status_param = self.request.query_params.get(
+            "status",
+            "active"
+        ).lower()
+
+        queryset = Branch.objects.select_related(
+            "retailer"
+        )
 
         if status_param == "active":
-            return Branch.objects.filter(is_active=True)
+            return queryset.filter(
+                is_active=True,
+                deleted_at__isnull=True
+            )
 
         elif status_param == "inactive":
-            return Branch.objects.filter(is_active=False)
+            return queryset.filter(
+                is_active=False
+            )
 
         elif status_param == "all":
-            return Branch.objects.all()
+            return queryset.all()
 
-        return Branch.objects.filter(is_active=True)
+        return queryset.filter(
+            is_active=True,
+            deleted_at__isnull=True
+        )
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
-        serializer = self.get_serializer(queryset, many=True, context={"request": request})
+
+        serializer = self.get_serializer(
+            queryset,
+            many=True,
+            context={"request": request}
+        )
 
         return Response({
             "success": True,

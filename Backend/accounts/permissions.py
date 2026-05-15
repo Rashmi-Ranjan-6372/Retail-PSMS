@@ -1,63 +1,71 @@
 from rest_framework.permissions import BasePermission, SAFE_METHODS
 
+
 # ================= HELPER FUNCTIONS ================= #
 
-def is_admin(user):
-    """Check if the user is an Admin or Superuser."""
+def is_super_admin(user):
     return (
         user.is_authenticated and
-        (user.role == 'admin' or user.is_superuser)
+        user.is_active and
+        (
+            getattr(user, "role", None) == "superadmin" or
+            user.is_superuser
+        )
+    )
+
+
+def is_admin(user):
+    return (
+        user.is_authenticated and
+        user.is_active and
+        (
+            getattr(user, "role", None) == "admin" or
+            is_super_admin(user)
+        )
     )
 
 
 def is_staff(user):
-    """Check if the user is Staff."""
     return (
         user.is_authenticated and
-        user.role == 'staff'
+        user.is_active and
+        getattr(user, "role", None) == "staff"
     )
 
 
 def has_role(user, roles):
-    """Generic role checker."""
     return (
         user.is_authenticated and
-        (user.role in roles or user.is_superuser)
+        user.is_active and
+        (
+            getattr(user, "role", None) in roles or
+            is_super_admin(user)
+        )
     )
 
 
-# ================= ADMIN PERMISSION ================= #
+# ================= SUPER ADMIN ================= #
+
+class IsSuperAdmin(BasePermission):
+    message = "Only Super Admin can perform this action."
+
+    def has_permission(self, request, view):
+        return is_super_admin(request.user)
+
+
+# ================= ADMIN ================= #
 
 class IsAdmin(BasePermission):
-    """
-    Allows access only to Admins and Superusers.
-    """
-    message = "Only administrators have permission to perform this action."
+    message = "Only administrators have permission."
 
     def has_permission(self, request, view):
         return is_admin(request.user)
 
-# ================= SUPER ADMIN PERMISSION ================= #
 
-class IsSuperAdmin(BasePermission):
-    """
-    Allows access only to Super Admins.
-    """
-    message = "Only the Super Admin can perform this action."
-
-    def has_permission(self, request, view):
-        return (
-            request.user.is_authenticated and
-            request.user.is_superuser
-        )
-
-# ================= STAFF PERMISSION ================= #
+# ================= STAFF ================= #
 
 class IsStaff(BasePermission):
-    """
-    Allows access only to Staff members.
-    """
-    message = "Only staff members have permission to perform this action."
+    message = "Only staff members have permission."
 
     def has_permission(self, request, view):
         return is_staff(request.user)
@@ -66,10 +74,7 @@ class IsStaff(BasePermission):
 # ================= ADMIN OR STAFF ================= #
 
 class IsAdminOrStaff(BasePermission):
-    """
-    Allows access to Admins, Staff, and Superusers.
-    """
-    message = "Only admin or staff members can access this resource."
+    message = "Only admin or staff can access this resource."
 
     def has_permission(self, request, view):
         return has_role(request.user, ['admin', 'staff'])
@@ -78,45 +83,41 @@ class IsAdminOrStaff(BasePermission):
 # ================= OWNER OR ADMIN ================= #
 
 class IsOwnerOrAdmin(BasePermission):
-    """
-    Object-level permission:
-    - Owners can access their own data.
-    - Admins and Superusers can access any data.
-    """
     message = "You do not have permission to access this resource."
 
     def has_permission(self, request, view):
-        return request.user.is_authenticated
+        return (
+            request.user.is_authenticated and
+            request.user.is_active
+        )
 
     def has_object_permission(self, request, view, obj):
-        # Determine the owner field dynamically
-        owner = getattr(obj, 'user', None) or getattr(obj, 'owner', None)
+        owner = (
+            getattr(obj, 'user', None) or
+            getattr(obj, 'owner', None)
+        )
 
-        # If object itself is a User instance
         if owner is None:
             owner = obj
 
-        return is_admin(request.user) or owner == request.user
+        return (
+            is_admin(request.user) or
+            owner == request.user
+        )
 
 
-# ================= READ-ONLY PERMISSION ================= #
+# ================= READ ONLY ================= #
 
 class ReadOnly(BasePermission):
-    """
-    Allows read-only access.
-    """
     message = "This resource is read-only."
 
     def has_permission(self, request, view):
         return request.method in SAFE_METHODS
 
 
-# ================= ADMIN OR READ-ONLY ================= #
+# ================= ADMIN OR READ ONLY ================= #
 
 class IsAdminOrReadOnly(BasePermission):
-    """
-    Allows read-only access to everyone and write access only to Admins.
-    """
     message = "Only administrators can modify this resource."
 
     def has_permission(self, request, view):
@@ -126,53 +127,121 @@ class IsAdminOrReadOnly(BasePermission):
         )
 
 
-# ================= PHARMACY-SPECIFIC PERMISSIONS ================= #
+# ================= SAME RETAILER ================= #
+
+class IsSameRetailer(BasePermission):
+    message = "You can only access your retailer data."
+
+    def has_permission(self, request, view):
+        return (
+            request.user.is_authenticated and
+            request.user.is_active
+        )
+
+    def has_object_permission(self, request, view, obj):
+        user = request.user
+
+        if is_super_admin(user):
+            return True
+
+        if hasattr(obj, "retailer"):
+            return obj.retailer == user.retailer
+
+        return False
+
+
+# ================= SAME BRANCH ================= #
+
+class IsSameBranch(BasePermission):
+    message = "You can only access your branch data."
+
+    def has_permission(self, request, view):
+        return (
+            request.user.is_authenticated and
+            request.user.is_active
+        )
+
+    def has_object_permission(self, request, view, obj):
+        user = request.user
+
+        if is_super_admin(user):
+            return True
+
+        if hasattr(obj, "branch"):
+            return obj.branch == user.branch
+
+        return False
+
+
+# ================= SAME RETAILER AND BRANCH ================= #
+
+class IsSameRetailerAndBranch(BasePermission):
+    message = "You can only access records from your retailer and branch."
+
+    def has_permission(self, request, view):
+        return (
+            request.user.is_authenticated and
+            request.user.is_active
+        )
+
+    def has_object_permission(self, request, view, obj):
+        user = request.user
+
+        if is_super_admin(user):
+            return True
+
+        retailer_match = True
+        branch_match = True
+
+        if hasattr(obj, "retailer"):
+            retailer_match = obj.retailer == user.retailer
+
+        if hasattr(obj, "branch"):
+            branch_match = obj.branch == user.branch
+
+        return retailer_match and branch_match
+
+
+# ================= PHARMACIST ================= #
 
 class IsPharmacist(BasePermission):
-    """
-    Allows access only to Pharmacists.
-    """
-    message = "Only pharmacists are allowed to perform this action."
+    message = "Only pharmacists are allowed."
 
     def has_permission(self, request, view):
         return has_role(request.user, ['pharmacist'])
 
 
+# ================= CASHIER ================= #
+
 class IsCashier(BasePermission):
-    """
-    Allows access only to Cashiers.
-    """
-    message = "Only cashiers are allowed to perform this action."
+    message = "Only cashiers are allowed."
 
     def has_permission(self, request, view):
         return has_role(request.user, ['cashier'])
 
 
+# ================= STORE MANAGER ================= #
+
 class IsStoreManager(BasePermission):
-    """
-    Allows access only to Store Managers.
-    """
-    message = "Only store managers are allowed to perform this action."
+    message = "Only store managers are allowed."
 
     def has_permission(self, request, view):
         return has_role(request.user, ['store_manager'])
 
 
+# ================= PHARMACIST OR ADMIN ================= #
+
 class IsPharmacistOrAdmin(BasePermission):
-    """
-    Allows access to Pharmacists and Admins.
-    """
-    message = "Only pharmacists or administrators can perform this action."
+    message = "Only pharmacists or admins can perform this action."
 
     def has_permission(self, request, view):
         return has_role(request.user, ['admin', 'pharmacist'])
 
 
+# ================= MANAGER OR ADMIN ================= #
+
 class IsManagerOrAdmin(BasePermission):
-    """
-    Allows access to Store Managers and Admins.
-    """
-    message = "Only store managers or administrators can perform this action."
+    message = "Only store managers or admins can perform this action."
 
     def has_permission(self, request, view):
         return has_role(request.user, ['admin', 'store_manager'])

@@ -3,6 +3,7 @@ from django.utils import timezone
 from django.conf import settings
 
 class Branch(models.Model):
+    retailer = models.ForeignKey("accounts.Retailer",on_delete=models.CASCADE,related_name="branches", null=True, blank=True)
     name = models.CharField(max_length=255)
     code = models.CharField(max_length=20, unique=True)
     address = models.TextField()
@@ -11,8 +12,6 @@ class Branch(models.Model):
     license_number = models.CharField(max_length=100, blank=True, null=True)
     gst_number = models.CharField(max_length=50, blank=True, null=True)
     logo = models.ImageField(upload_to='branch_logos/', blank=True, null=True)
-
-
     is_active = models.BooleanField(default=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
     deleted_by = models.ForeignKey(
@@ -22,16 +21,12 @@ class Branch(models.Model):
         blank=True,
         related_name="deleted_branches"
     )
-
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
-    # ================= METHODS ================= #
 
     def soft_delete(self, user):
         if not self.is_active:
             return
-
         self.is_active = False
         self.deleted_at = timezone.now()
         self.deleted_by = user
@@ -46,7 +41,6 @@ class Branch(models.Model):
     def hard_delete(self):
         super().delete()
 
-    # ================= META ================= #
     class Meta:
         verbose_name = "Branch"
         verbose_name_plural = "Branches"
@@ -55,6 +49,7 @@ class Branch(models.Model):
             models.Index(fields=["name"]),
             models.Index(fields=["code"]),
             models.Index(fields=["is_active"]),
+            models.Index(fields=["retailer"]),
         ]
 
     def __str__(self):
