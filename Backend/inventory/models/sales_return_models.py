@@ -4,12 +4,14 @@ from datetime import datetime
 from django.db import transaction
 from .constants import STATUS
 from django.conf import settings
+from accounts.models import Retailer
+from branches.models import Branch
 
 class SalesReturn(models.Model):
+    retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="sales_returns")
+    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name="sales_returns")
     return_no = models.CharField(max_length=50, unique=True, blank=True)
     sales = models.ForeignKey("Sales", on_delete=models.CASCADE)
-    branch = models.ForeignKey("branches.Branch", on_delete=models.CASCADE)
-
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     refund_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
@@ -21,17 +23,32 @@ class SalesReturn(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        ordering = ["-id"]
+
+        indexes = [
+            models.Index(fields=["return_no"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["created_at"]),
+        ]
+
     def save(self, *args, **kwargs):
 
         if not self.return_no:
+
             year = datetime.now().year
 
             with transaction.atomic():
-                last_id = SalesReturn.objects.filter(
-                    return_no__startswith=f"SR-{year}"
-                ).aggregate(Max("id"))["id__max"] or 0
 
-                self.return_no = f"SR-{year}-{last_id + 1:04d}"
+                last_id = (
+                    SalesReturn.objects.filter(
+                        return_no__startswith=f"SR-{year}"
+                    ).aggregate(Max("id"))["id__max"] or 0
+                )
+
+                self.return_no = (
+                    f"SR-{year}-{last_id + 1:04d}"
+                )
 
         super().save(*args, **kwargs)
 

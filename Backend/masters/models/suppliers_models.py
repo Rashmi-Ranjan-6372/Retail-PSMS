@@ -1,8 +1,10 @@
 from django.db import models
 from branches.models import Branch
-
+from accounts.models import Retailer
+from branches.models import Branch
 
 class Supplier(models.Model):
+    retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="suppliers")
     branches = models.ManyToManyField(Branch, related_name="suppliers")
     name = models.CharField(max_length=255)
     contact_person = models.CharField(max_length=255, blank=True, null=True)
@@ -26,7 +28,23 @@ class Supplier(models.Model):
         return self.name
 
     class Meta:
+        ordering = ["name"]
+
         indexes = [
-            models.Index(fields=['name']),
-            models.Index(fields=['phone']),
+            models.Index(fields=["name"]),
+            models.Index(fields=["phone"]),
+            models.Index(fields=["gst_no"]),
+            models.Index(fields=["is_active"]),
+        ]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["retailer", "phone"],
+                name="unique_supplier_phone_per_retailer"
+            ),
+
+            models.UniqueConstraint(
+                fields=["retailer", "gst_no"],
+                name="unique_supplier_gst_per_retailer"
+            ),
         ]

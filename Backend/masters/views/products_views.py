@@ -8,23 +8,95 @@ from masters.serializers import ProductSerializer
 from accounts.permissions import IsAdmin, IsSuperAdmin
 
 
-# ================= CREATE ================= #
+# =========================================================
+# BASE QUERYSET MIXIN
+# =========================================================
 
-class ProductCreateView(generics.CreateAPIView):
-    serializer_class = ProductSerializer
-    permission_classes = [IsAuthenticated,IsAdmin]
-
-class ProductListView(generics.ListAPIView):
-    serializer_class = ProductSerializer
-    permission_classes = [IsAuthenticated,IsAdmin]
+class RetailerProductMixin:
 
     def get_queryset(self):
-        queryset = Product.objects.select_related("category","manufacturer").all()
+
+        user = self.request.user
+
+        queryset = Product.objects.select_related(
+            "category",
+            "manufacturer",
+            "retailer",
+            "branch"
+        )
+
+        # ================= PLATFORM OWNER =================
+        if user.is_superuser:
+
+            retailer_id = self.request.query_params.get("retailer")
+
+            if retailer_id:
+                queryset = queryset.filter(retailer_id=retailer_id)
+
+            return queryset
+
+        # ================= RETAILER USERS =================
+        return queryset.filter(
+            retailer=user.retailer
+        )
+
+
+# =========================================================
+# CREATE
+# =========================================================
+
+class ProductCreateView(
+    RetailerProductMixin,
+    generics.CreateAPIView
+):
+    serializer_class = ProductSerializer
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def perform_create(self, serializer):
+
+        user = self.request.user
+
+        serializer.save(
+            retailer=user.retailer,
+            branch=user.branch
+        )
+
+    def create(self, request, *args, **kwargs):
+
+        response = super().create(request, *args, **kwargs)
+
+        return Response({
+            "success": True,
+            "message": "Product created successfully",
+            "data": response.data
+        }, status=status.HTTP_201_CREATED)
+
+
+# =========================================================
+# LIST
+# =========================================================
+
+class ProductListView(
+    RetailerProductMixin,
+    generics.ListAPIView
+):
+    serializer_class = ProductSerializer
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def get_queryset(self):
+
+        queryset = super().get_queryset()
+
         is_active = self.request.query_params.get("is_active")
         category = self.request.query_params.get("category")
         manufacturer = self.request.query_params.get("manufacturer")
         search = self.request.query_params.get("search")
-        prescription_required = self.request.query_params.get("prescription_required")
+        prescription_required = self.request.query_params.get(
+            "prescription_required"
+        )
+        branch = self.request.query_params.get("branch")
+
+        # ================= FILTERS =================
 
         if is_active is not None:
             queryset = queryset.filter(
@@ -47,6 +119,11 @@ class ProductListView(generics.ListAPIView):
                 prescription_required.lower() == "true"
             )
 
+        if branch:
+            queryset = queryset.filter(
+                branch_id=branch
+            )
+
         if search:
             queryset = queryset.filter(
                 name__icontains=search
@@ -54,23 +131,53 @@ class ProductListView(generics.ListAPIView):
 
         return queryset.order_by("name")
 
+    def list(self, request, *args, **kwargs):
 
-# ================= DETAIL ================= #
+        queryset = self.get_queryset()
 
-class ProductDetailView(generics.RetrieveAPIView):
+        serializer = self.get_serializer(
+            queryset,
+            many=True
+        )
+
+        return Response({
+            "success": True,
+            "count": queryset.count(),
+            "data": serializer.data
+        })
+
+
+# =========================================================
+# DETAIL
+# =========================================================
+
+class ProductDetailView(
+    RetailerProductMixin,
+    generics.RetrieveAPIView
+):
     serializer_class = ProductSerializer
-    permission_classes = [IsAuthenticated,IsAdmin]
-    queryset = Product.objects.select_related("category","manufacturer").all()
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def get_queryset(self):
+        return super().get_queryset()
 
 
-# ================= UPDATE ================= #
+# =========================================================
+# UPDATE
+# =========================================================
 
-class ProductUpdateView(generics.UpdateAPIView):
+class ProductUpdateView(
+    RetailerProductMixin,
+    generics.UpdateAPIView
+):
     serializer_class = ProductSerializer
-    permission_classes = [IsAuthenticated,IsAdmin]
-    queryset = Product.objects.all()
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def get_queryset(self):
+        return super().get_queryset()
 
     def update(self, request, *args, **kwargs):
+
         instance = self.get_object()
 
         serializer = self.get_serializer(
@@ -90,9 +197,14 @@ class ProductUpdateView(generics.UpdateAPIView):
         })
 
 
-# ================= SOFT DELETE ================= #
+# =========================================================
+# SOFT DELETE
+# =========================================================
 
-class ProductSoftDeleteView(generics.UpdateAPIView):
+class ProductSoftDeleteView(
+    RetailerProductMixin,
+    generics.UpdateAPIView
+):
 
     serializer_class = ProductSerializer
 
@@ -101,7 +213,8 @@ class ProductSoftDeleteView(generics.UpdateAPIView):
         IsAdmin
     ]
 
-    queryset = Product.objects.all()
+    def get_queryset(self):
+        return super().get_queryset()
 
     def patch(self, request, *args, **kwargs):
 
@@ -111,11 +224,11 @@ class ProductSoftDeleteView(generics.UpdateAPIView):
             return Response({
                 "success": False,
                 "message": "Product already inactive"
-            }, status=400)
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         product.is_active = False
 
-        product.save()
+        product.save(update_fields=["is_active"])
 
         return Response({
             "success": True,
@@ -123,9 +236,53 @@ class ProductSoftDeleteView(generics.UpdateAPIView):
         })
 
 
-# ================= HARD DELETE ================= #
+# =========================================================
+# ACTIVATE PRODUCT
+# =========================================================
 
-class ProductDeleteView(generics.DestroyAPIView):
+class ProductActivateView(
+    RetailerProductMixin,
+    generics.UpdateAPIView
+):
+
+    serializer_class = ProductSerializer
+
+    permission_classes = [
+        IsAuthenticated,
+        IsAdmin
+    ]
+
+    def get_queryset(self):
+        return super().get_queryset()
+
+    def patch(self, request, *args, **kwargs):
+
+        product = self.get_object()
+
+        if product.is_active:
+            return Response({
+                "success": False,
+                "message": "Product already active"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        product.is_active = True
+
+        product.save(update_fields=["is_active"])
+
+        return Response({
+            "success": True,
+            "message": "Product activated successfully"
+        })
+
+
+# =========================================================
+# HARD DELETE
+# =========================================================
+
+class ProductDeleteView(
+    RetailerProductMixin,
+    generics.DestroyAPIView
+):
 
     serializer_class = ProductSerializer
 
@@ -134,7 +291,8 @@ class ProductDeleteView(generics.DestroyAPIView):
         IsSuperAdmin
     ]
 
-    queryset = Product.objects.all()
+    def get_queryset(self):
+        return super().get_queryset()
 
     def destroy(self, request, *args, **kwargs):
 

@@ -4,8 +4,12 @@ from datetime import datetime
 from django.db import transaction
 from .constants import STATUS
 from django.conf import settings
+from accounts.models import Retailer
+from branches.models import Branch
 
 class Sales(models.Model):
+    retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="sales")
+    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name="sales")
     invoice_no = models.CharField(max_length=50, unique=True, blank=True)
     customer = models.ForeignKey("masters.Customer", on_delete=models.SET_NULL, null=True)
     branch = models.ForeignKey("branches.Branch", on_delete=models.CASCADE)
@@ -27,25 +31,73 @@ class Sales(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+
+        ordering = ["-id"]
+
+        indexes = [
+            models.Index(fields=["invoice_no"]),
+            models.Index(fields=["retailer"]),
+            models.Index(fields=["branch"]),
+            models.Index(fields=["customer"]),
+            models.Index(fields=["payment_status"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+    # =========================
+    # AUTO GENERATE INVOICE NO
+    # =========================
+
     def save(self, *args, **kwargs):
 
         if not self.invoice_no:
+
             year = datetime.now().year
 
             with transaction.atomic():
-                last_id = Sales.objects.filter(
-                    invoice_no__startswith=f"INV-{year}"
-                ).aggregate(Max("id"))["id__max"] or 0
 
-                self.invoice_no = f"INV-{year}-{last_id + 1:04d}"
+                last_id = (
+                    Sales.objects.filter(
+                        invoice_no__startswith=f"INV-{year}"
+                    ).aggregate(
+                        Max("id")
+                    )["id__max"] or 0
+                )
 
-        self.net_amount = self.total_amount - self.discount
-        self.due_amount = self.net_amount - self.paid_amount
+                self.invoice_no = (
+                    f"INV-{year}-{last_id + 1:04d}"
+                )
 
-        if self.due_amount == 0:
+        # =========================
+        # CALCULATE NET AMOUNT
+        # =========================
+
+        self.net_amount = (
+            (self.total_amount or 0) -
+            (self.discount or 0)
+        )
+
+        self.due_amount = (
+            self.net_amount -
+            (self.paid_amount or 0)
+        )
+
+        # =========================
+        # PAYMENT STATUS
+        # =========================
+
+        if self.due_amount <= 0:
+
             self.payment_status = "PAID"
+
         elif self.paid_amount > 0:
+
             self.payment_status = "PARTIAL"
+
+        else:
+
+            self.payment_status = "UNPAID"
 
         super().save(*args, **kwargs)
 

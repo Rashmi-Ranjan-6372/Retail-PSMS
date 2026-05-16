@@ -19,45 +19,114 @@ from .models.receipt_models import Receipt
 from .models.expiry_damage_models import ExpiryDamage
 
 
-# ===================== STOCK =====================
+# =========================================================
+# BASE ADMIN
+# =========================================================
+
+class RetailerBranchAdmin(admin.ModelAdmin):
+
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+    )
+
+    def get_queryset(self, request):
+
+        qs = super().get_queryset(request)
+
+        if request.user.is_superuser:
+            return qs
+
+        return qs.filter(
+            retailer=request.user.retailer
+        )
+
+    def save_model(self, request, obj, form, change):
+
+        if not request.user.is_superuser:
+
+            obj.retailer = request.user.retailer
+
+            if hasattr(obj, "branch"):
+                obj.branch = request.user.branch
+
+        super().save_model(
+            request,
+            obj,
+            form,
+            change
+        )
+
+
+# =========================================================
+# STOCK
+# =========================================================
 
 @admin.register(StockBatch)
-class StockBatchAdmin(admin.ModelAdmin):
+class StockBatchAdmin(RetailerBranchAdmin):
+
     list_display = (
         "id",
-        "product",
+        "retailer",
         "branch",
+        "product",
         "batch_no",
         "quantity",
         "available_qty",
         "reserved_qty",
         "expiry_date",
+        "is_expired",
     )
-    search_fields = ("batch_no", "product__name")
-    list_filter = ("branch", "expiry_date", "is_expired")
+
+    search_fields = (
+        "batch_no",
+        "product__name",
+    )
+
+    list_filter = (
+        "retailer",
+        "branch",
+        "expiry_date",
+        "is_expired",
+    )
 
 
 @admin.register(StockTransaction)
-class StockTransactionAdmin(admin.ModelAdmin):
+class StockTransactionAdmin(RetailerBranchAdmin):
+
     list_display = (
         "id",
         "transaction_no",
-        "transaction_type",
+        "retailer",
         "branch",
+        "transaction_type",
         "supplier",
         "customer",
         "status",
         "total_amount",
         "created_at",
     )
-    search_fields = ("transaction_no",)
-    list_filter = ("transaction_type", "status", "branch")
+
+    search_fields = (
+        "transaction_no",
+        "reference_no",
+    )
+
+    list_filter = (
+        "retailer",
+        "branch",
+        "transaction_type",
+        "status",
+    )
 
 
 @admin.register(StockTransactionItem)
-class StockTransactionItemAdmin(admin.ModelAdmin):
+class StockTransactionItemAdmin(RetailerBranchAdmin):
+
     list_display = (
         "id",
+        "retailer",
+        "branch",
         "transaction",
         "product",
         "batch",
@@ -68,14 +137,27 @@ class StockTransactionItemAdmin(admin.ModelAdmin):
         "sale_price",
         "total_amount",
     )
-    list_filter = ("movement_type", "product")
+
+    search_fields = (
+        "product__name",
+        "transaction__transaction_no",
+    )
+
+    list_filter = (
+        "retailer",
+        "branch",
+        "movement_type",
+        "product",
+    )
 
 
 @admin.register(StockTransfer)
-class StockTransferAdmin(admin.ModelAdmin):
+class StockTransferAdmin(RetailerBranchAdmin):
+
     list_display = (
         "id",
         "transfer_no",
+        "retailer",
         "from_branch",
         "to_branch",
         "product",
@@ -86,44 +168,88 @@ class StockTransferAdmin(admin.ModelAdmin):
         "status",
         "created_at",
     )
-    list_filter = ("status", "from_branch", "to_branch")
+
+    search_fields = (
+        "transfer_no",
+        "product__name",
+    )
+
+    list_filter = (
+        "retailer",
+        "from_branch",
+        "to_branch",
+        "status",
+    )
 
 
 @admin.register(StockAdjustment)
-class StockAdjustmentAdmin(admin.ModelAdmin):
+class StockAdjustmentAdmin(RetailerBranchAdmin):
+
     list_display = (
         "id",
+        "retailer",
+        "branch",
         "product",
         "batch",
+        "adjustment_type",
         "adjustment_qty",
         "reason",
+        "total_value",
         "created_at",
     )
-    search_fields = ("reason",)
+
+    search_fields = (
+        "reason",
+        "reference_no",
+        "product__name",
+    )
+
+    list_filter = (
+        "retailer",
+        "branch",
+        "adjustment_type",
+    )
 
 
-# ===================== SALES =====================
+# =========================================================
+# SALES
+# =========================================================
 
 @admin.register(Sales)
-class SalesAdmin(admin.ModelAdmin):
+class SalesAdmin(RetailerBranchAdmin):
+
     list_display = (
         "id",
         "invoice_no",
+        "retailer",
+        "branch",
         "customer",
         "total_amount",
         "discount",
         "net_amount",
+        "payment_status",
         "created_at",
     )
-    search_fields = ("invoice_no",)
-    list_filter = ("created_at",)
+
+    search_fields = (
+        "invoice_no",
+    )
+
+    list_filter = (
+        "retailer",
+        "branch",
+        "payment_status",
+        "created_at",
+    )
 
 
 @admin.register(SalesItem)
-class SalesItemAdmin(admin.ModelAdmin):
+class SalesItemAdmin(RetailerBranchAdmin):
 
     list_display = (
         "id",
+        "retailer",
+        "branch",
         "sales",
         "product",
         "batch",
@@ -137,89 +263,184 @@ class SalesItemAdmin(admin.ModelAdmin):
         "sales__invoice_no",
     )
 
-    list_filter = ("created_at",)
-
-
-@admin.register(SalesReturn)
-class SalesReturnAdmin(admin.ModelAdmin):
-    list_display = (
-        "id",
-        "return_no",
-        "sales",
-        "total_amount",
+    list_filter = (
+        "retailer",
+        "branch",
         "created_at",
     )
 
 
-@admin.register(SalesReturnItem)
-class SalesReturnItemAdmin(admin.ModelAdmin):
+@admin.register(SalesReturn)
+class SalesReturnAdmin(RetailerBranchAdmin):
+
     list_display = (
         "id",
+        "return_no",
+        "retailer",
+        "branch",
+        "sales",
+        "total_amount",
+        "refund_amount",
+        "status",
+        "created_at",
+    )
+
+    search_fields = (
+        "return_no",
+    )
+
+    list_filter = (
+        "retailer",
+        "branch",
+        "status",
+    )
+
+
+@admin.register(SalesReturnItem)
+class SalesReturnItemAdmin(RetailerBranchAdmin):
+
+    list_display = (
+        "id",
+        "retailer",
+        "branch",
         "sales_return",
         "product",
         "qty",
         "amount",
     )
 
+    list_filter = (
+        "retailer",
+        "branch",
+    )
 
-# ===================== PURCHASE =====================
+
+# =========================================================
+# PURCHASE
+# =========================================================
 
 @admin.register(PurchaseReturn)
-class PurchaseReturnAdmin(admin.ModelAdmin):
+class PurchaseReturnAdmin(RetailerBranchAdmin):
+
     list_display = (
         "id",
         "return_no",
+        "retailer",
+        "branch",
         "supplier",
         "total_amount",
+        "adjusted_amount",
+        "status",
         "created_at",
+    )
+
+    search_fields = (
+        "return_no",
+    )
+
+    list_filter = (
+        "retailer",
+        "branch",
+        "status",
     )
 
 
 @admin.register(PurchaseReturnItem)
-class PurchaseReturnItemAdmin(admin.ModelAdmin):
+class PurchaseReturnItemAdmin(RetailerBranchAdmin):
+
     list_display = (
         "id",
+        "retailer",
+        "branch",
         "purchase_return",
         "product",
         "qty",
         "amount",
     )
 
+    list_filter = (
+        "retailer",
+        "branch",
+    )
 
-# ===================== PAYMENT / RECEIPT =====================
+
+# =========================================================
+# PAYMENT / RECEIPT
+# =========================================================
 
 @admin.register(Payment)
-class PaymentAdmin(admin.ModelAdmin):
+class PaymentAdmin(RetailerBranchAdmin):
+
     list_display = (
         "id",
+        "payment_no",
+        "retailer",
+        "branch",
         "supplier",
         "amount",
+        "paid_amount",
+        "due_amount",
         "payment_method",
+        "status",
         "created_at",
     )
-    search_fields = ("payment_method",)
+
+    search_fields = (
+        "payment_no",
+        "reference_no",
+    )
+
+    list_filter = (
+        "retailer",
+        "branch",
+        "status",
+        "payment_method",
+    )
 
 
 @admin.register(Receipt)
-class ReceiptAdmin(admin.ModelAdmin):
+class ReceiptAdmin(RetailerBranchAdmin):
+
     list_display = (
         "id",
+        "receipt_no",
+        "retailer",
+        "branch",
         "customer",
         "amount",
+        "paid_amount",
+        "due_amount",
         "payment_method",
+        "status",
         "created_at",
     )
 
+    search_fields = (
+        "receipt_no",
+        "reference_no",
+    )
 
-# ===================== EXPIRY / DAMAGE =====================
+    list_filter = (
+        "retailer",
+        "branch",
+        "status",
+        "payment_method",
+    )
+
+
+# =========================================================
+# EXPIRY / DAMAGE
+# =========================================================
 
 @admin.register(ExpiryDamage)
-class ExpiryDamageAdmin(admin.ModelAdmin):
+class ExpiryDamageAdmin(RetailerBranchAdmin):
+
     list_display = (
         "id",
+        "retailer",
+        "branch",
         "product",
         "batch",
-        "branch",
         "issue_type",
         "quantity",
         "unit_price",
@@ -227,4 +448,14 @@ class ExpiryDamageAdmin(admin.ModelAdmin):
         "expiry_date",
         "created_at",
     )
-    list_filter = ("issue_type", "branch")
+
+    search_fields = (
+        "product__name",
+        "batch__batch_no",
+    )
+
+    list_filter = (
+        "retailer",
+        "branch",
+        "issue_type",
+    )

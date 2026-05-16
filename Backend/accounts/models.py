@@ -4,7 +4,6 @@ from django.conf import settings
 from django.utils import timezone
 from branches.models import Branch
 
-
 class Retailer(models.Model):
     name = models.CharField(max_length=255)
     owner_name = models.CharField(max_length=255)
@@ -21,18 +20,43 @@ class Retailer(models.Model):
     def __str__(self):
         return self.name
 
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["name"]),
+            models.Index(fields=["mobile"]),
+        ]
 
 class RetailerBranchAutoFillMixin(models.Model):
-    retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, null=True, blank=True, related_name="%(class)s_set")
-    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name="%(class)s_set")
+    retailer = models.ForeignKey(
+        Retailer,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="%(class)s_set"
+    )
+
+    branch = models.ForeignKey(
+        Branch,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="%(class)s_set"
+    )
 
     class Meta:
         abstract = True
 
     def save(self, *args, **kwargs):
-        if not self.retailer and hasattr(self, "_current_user"):
-            self.retailer = self._current_user.retailer
-            self.branch = self._current_user.branch
+
+        if hasattr(self, "_current_user"):
+
+            if not self.retailer:
+                self.retailer = self._current_user.retailer
+
+            if not self.branch:
+                self.branch = self._current_user.branch
+
         super().save(*args, **kwargs)
 
 
@@ -52,10 +76,25 @@ class User(AbstractUser):
     employee_id = models.CharField(max_length=50, unique=True, null=True, blank=True)
     joining_date = models.DateField(null=True, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
+
     license_number = models.CharField(max_length=100, blank=True, null=True)
     license_expiry = models.DateField(null=True, blank=True)
-    retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, null=True, blank=True, related_name="users")
-    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name="users")
+
+    retailer = models.ForeignKey(
+        Retailer,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="users"
+    )
+
+    branch = models.ForeignKey(
+        Branch,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="users"
+    )
     password_changed_at = models.DateTimeField(null=True, blank=True)
     last_login_ip = models.GenericIPAddressField(null=True, blank=True)
     failed_login_attempts = models.PositiveIntegerField(default=0)
@@ -69,12 +108,17 @@ class User(AbstractUser):
     def save(self, *args, **kwargs):
         if self.pk:
             old_user = User.objects.filter(pk=self.pk).first()
+
             if old_user and old_user.password != self.password:
                 self.password_changed_at = timezone.now()
+
         super().save(*args, **kwargs)
 
     def is_account_locked(self):
-        return self.account_locked_until and self.account_locked_until > timezone.now()
+        return (
+            self.account_locked_until and
+            self.account_locked_until > timezone.now()
+        )
 
     def is_super_admin(self):
         return self.role == "superadmin" or self.is_superuser
@@ -87,11 +131,15 @@ class User(AbstractUser):
 
     class Meta:
         ordering = ["-created_at"]
+
         indexes = [
             models.Index(fields=["username"]),
             models.Index(fields=["email"]),
             models.Index(fields=["role"]),
+            models.Index(fields=["retailer"]),
+            models.Index(fields=["branch"]),
         ]
+
         permissions = [
             ("can_manage_inventory", "Can manage inventory"),
             ("can_manage_sales", "Can manage sales"),
@@ -99,32 +147,51 @@ class User(AbstractUser):
             ("can_view_reports", "Can view reports"),
         ]
 
-
 class LoginLog(RetailerBranchAutoFillMixin):
     STATUS_CHOICES = (
         ("success", "Success"),
         ("failed", "Failed"),
     )
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True
+    )
+
     login_time = models.DateTimeField(auto_now_add=True)
     logout_time = models.DateTimeField(null=True, blank=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(null=True, blank=True)
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="success")
+
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default="success"
+    )
 
     def __str__(self):
         return f"{self.user} - {self.status} - {self.login_time}"
 
     class Meta:
         ordering = ["-login_time"]
+
         indexes = [
             models.Index(fields=["user"]),
             models.Index(fields=["status"]),
+            models.Index(fields=["retailer"]),
+            models.Index(fields=["branch"]),
         ]
 
 
 class UserSession(RetailerBranchAutoFillMixin):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sessions")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="sessions"
+    )
+
     device_id = models.CharField(max_length=255)
     refresh_token = models.TextField()
     ip_address = models.GenericIPAddressField(null=True, blank=True)
@@ -144,11 +211,13 @@ class UserSession(RetailerBranchAutoFillMixin):
 
     class Meta:
         ordering = ["-created_at"]
+
         indexes = [
             models.Index(fields=["user"]),
             models.Index(fields=["is_active"]),
+            models.Index(fields=["retailer"]),
+            models.Index(fields=["branch"]),
         ]
-
 
 class AuditLog(RetailerBranchAutoFillMixin):
     ACTION_CHOICES = (
@@ -159,7 +228,14 @@ class AuditLog(RetailerBranchAutoFillMixin):
         ("logout", "Logout"),
         ("view", "View"),
     )
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
     action = models.CharField(max_length=20, choices=ACTION_CHOICES)
     model_name = models.CharField(max_length=255)
     object_id = models.CharField(max_length=50)
@@ -168,8 +244,15 @@ class AuditLog(RetailerBranchAutoFillMixin):
     timestamp = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
-        if self.user and not self.branch:
-            self.branch = self.user.branch
+
+        if self.user:
+
+            if not self.retailer:
+                self.retailer = self.user.retailer
+
+            if not self.branch:
+                self.branch = self.user.branch
+
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -177,8 +260,10 @@ class AuditLog(RetailerBranchAutoFillMixin):
 
     class Meta:
         ordering = ["-timestamp"]
+
         indexes = [
             models.Index(fields=["user"]),
             models.Index(fields=["action"]),
             models.Index(fields=["branch"]),
+            models.Index(fields=["retailer"]),
         ]

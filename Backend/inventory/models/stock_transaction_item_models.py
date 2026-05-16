@@ -1,8 +1,12 @@
 from django.db import models
 from .constants import ADJUSTMENT_TYPE
 from django.conf import settings
+from accounts.models import Retailer
+from branches.models import Branch
 
 class StockTransactionItem(models.Model):
+    retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="stock_transaction_items")
+    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name="stock_transaction_items")
     transaction = models.ForeignKey("StockTransaction", on_delete=models.CASCADE, related_name="items")
     product = models.ForeignKey("masters.Product", on_delete=models.CASCADE)
     batch = models.ForeignKey("inventory.StockBatch", on_delete=models.CASCADE)
@@ -21,10 +25,38 @@ class StockTransactionItem(models.Model):
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.SET_NULL,null=True,blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+
+        ordering = ["-id"]
+
+        indexes = [
+            models.Index(fields=["retailer"]),
+            models.Index(fields=["branch"]),
+            models.Index(fields=["transaction"]),
+            models.Index(fields=["product"]),
+            models.Index(fields=["batch"]),
+            models.Index(fields=["movement_type"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+    # =========================
+    # AUTO TOTAL AMOUNT
+    # =========================
 
     def save(self, *args, **kwargs):
-        self.total_amount = self.qty * self.purchase_price
+
+        self.total_amount = (
+            (self.qty or 0) *
+            (self.purchase_price or 0)
+        )
+
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.product} ({self.movement_type})"
+
+        return (
+            f"{self.product.name} "
+            f"({self.movement_type})"
+        )

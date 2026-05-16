@@ -2,6 +2,10 @@ from django.db import models
 from .products_models import Product
 from .products_category_models import Category
 from .manufacturers_models import Manufacturer
+from accounts.models import Retailer
+from branches.models import Branch
+from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 class SalesOffer(models.Model):
     OFFER_TYPE_CHOICES = [
@@ -17,7 +21,8 @@ class SalesOffer(models.Model):
         ("MEMBER_DISCOUNT", "Member Discount"),
     ]
     DISCOUNT_TYPE_CHOICES = [("PERCENTAGE", "Percentage"), ("FLAT", "Flat")]
-
+    retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="sales_offers")
+    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name="sales_offers")
     name = models.CharField(max_length=255)
     offer_type = models.CharField(max_length=30, choices=OFFER_TYPE_CHOICES)
     discount_type = models.CharField(max_length=20, choices=DISCOUNT_TYPE_CHOICES, default="PERCENTAGE")
@@ -40,15 +45,61 @@ class SalesOffer(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+
+        db_table = "sales_offers"
+
+        ordering = ["-created_at"]
+
+        indexes = [
+            models.Index(fields=["retailer"]),
+            models.Index(fields=["branch"]),
+            models.Index(fields=["offer_type"]),
+            models.Index(fields=["start_date"]),
+            models.Index(fields=["end_date"]),
+            models.Index(fields=["is_active"]),
+        ]
+
     def __str__(self):
         return self.name
 
-    class Meta:
-        ordering = ["-created_at"]
-        indexes = [models.Index(fields=["offer_type"]), 
-                   models.Index(fields=["start_date"]), 
-                   models.Index(fields=["end_date"]), 
-                   models.Index(fields=["is_active"])
-                ]
+    @property
+    def is_valid_offer(self):
+
+        today = timezone.now().date()
+
+        return (
+            self.is_active and
+            self.start_date <= today <= self.end_date
+        )
+
+    def clean(self):
+
+        if self.start_date > self.end_date:
+            raise ValidationError(
+                "Start date cannot be greater than end date"
+            )
+
+        if (
+            self.discount_type == "PERCENTAGE" and
+            self.discount_percentage is None
+        ):
+            raise ValidationError(
+                "Discount percentage is required"
+            )
+
+        if (
+            self.discount_type == "FLAT" and
+            self.flat_discount_amount is None
+        ):
+            raise ValidationError(
+                "Flat discount amount is required"
+            )
+
+    def save(self, *args, **kwargs):
+
+        self.full_clean()
+
+        super().save(*args, **kwargs)
         
         

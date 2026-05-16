@@ -1,10 +1,93 @@
 from django.contrib import admin
-from masters.models import Supplier, Manufacturer, Category, Product, SalesOffer, Customer
+from masters.models import (
+    Supplier,
+    Manufacturer,
+    Category,
+    Product,
+    SalesOffer,
+    Customer
+)
+
+
+# =========================================================
+# BASE ADMIN
+# =========================================================
+
+class BaseRetailerBranchAdmin(admin.ModelAdmin):
+
+    readonly_fields = ("created_at", "updated_at")
+
+    def save_model(self, request, obj, form, change):
+
+        if not request.user.is_superuser:
+
+            if hasattr(obj, "retailer"):
+                obj.retailer = request.user.retailer
+
+            if hasattr(obj, "branch") and not obj.branch:
+                obj.branch = request.user.branch
+
+        super().save_model(request, obj, form, change)
+
+    def get_queryset(self, request):
+
+        qs = super().get_queryset(request)
+
+        if request.user.is_superuser:
+            return qs
+
+        if hasattr(self.model, "retailer"):
+            qs = qs.filter(retailer=request.user.retailer)
+
+        return qs
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+
+        if not request.user.is_superuser:
+
+            if db_field.name == "retailer":
+                kwargs["queryset"] = db_field.related_model.objects.filter(
+                    id=request.user.retailer_id
+                )
+
+            if db_field.name == "branch":
+                kwargs["queryset"] = db_field.related_model.objects.filter(
+                    retailer=request.user.retailer
+                )
+
+        return super().formfield_for_foreignkey(
+            db_field,
+            request,
+            **kwargs
+        )
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+
+        if not request.user.is_superuser:
+
+            if db_field.name == "branches":
+                kwargs["queryset"] = db_field.related_model.objects.filter(
+                    retailer=request.user.retailer
+                )
+
+        return super().formfield_for_manytomany(
+            db_field,
+            request,
+            **kwargs
+        )
+
+
+# =========================================================
+# SUPPLIER ADMIN
+# =========================================================
+
 @admin.register(Supplier)
-class SupplierAdmin(admin.ModelAdmin):
+class SupplierAdmin(BaseRetailerBranchAdmin):
+
     list_display = (
         "id",
         "name",
+        "retailer",
         "get_branches",
         "phone",
         "gst_no",
@@ -15,6 +98,7 @@ class SupplierAdmin(admin.ModelAdmin):
     )
 
     list_filter = (
+        "retailer",
         "is_active",
         "state",
         "city",
@@ -22,97 +106,159 @@ class SupplierAdmin(admin.ModelAdmin):
         "branches",
     )
 
-    search_fields = ("name", "phone", "gst_no")
+    search_fields = (
+        "name",
+        "phone",
+        "gst_no",
+    )
 
     ordering = ("-id",)
 
-    readonly_fields = ("created_at", "updated_at")
-
     fieldsets = (
+        ("Retailer Info", {
+            "fields": (
+                "retailer",
+                "branches",
+            )
+        }),
+
         ("Basic Info", {
-            "fields": ("name", "contact_person", "branches")
+            "fields": (
+                "name",
+                "contact_person",
+            )
         }),
+
         ("Contact Info", {
-            "fields": ("phone", "alternate_phone", "email")
+            "fields": (
+                "phone",
+                "alternate_phone",
+                "email",
+            )
         }),
+
         ("Legal Info", {
-            "fields": ("gst_no", "drug_license_no")
+            "fields": (
+                "gst_no",
+                "drug_license_no",
+            )
         }),
+
         ("Address", {
-            "fields": ("address", "city", "state", "pincode")
+            "fields": (
+                "address",
+                "city",
+                "state",
+                "pincode",
+            )
         }),
+
         ("Finance", {
-            "fields": ("opening_balance",)
+            "fields": (
+                "opening_balance",
+            )
         }),
+
         ("Status", {
-            "fields": ("is_active",)
+            "fields": (
+                "is_active",
+            )
         }),
+
         ("Timestamps", {
-            "fields": ("created_at", "updated_at")
+            "fields": (
+                "created_at",
+                "updated_at",
+            )
         }),
     )
 
-    def get_fields(self, request, obj=None):
-        fields = super().get_fields(request, obj)
-        if not request.user.is_superuser:
-            fields = [f for f in fields if f != "branches"]
-        return fields
-
     def save_model(self, request, obj, form, change):
+
         super().save_model(request, obj, form, change)
 
         if not request.user.is_superuser:
             obj.branches.set([request.user.branch])
 
     def get_branches(self, obj):
-        return ", ".join([b.name for b in obj.branches.all()])
+        return ", ".join(
+            [branch.name for branch in obj.branches.all()]
+        )
 
     get_branches.short_description = "Branches"
 
 
+# =========================================================
+# MANUFACTURER ADMIN
+# =========================================================
 
 @admin.register(Manufacturer)
-class ManufacturerAdmin(admin.ModelAdmin):
+class ManufacturerAdmin(BaseRetailerBranchAdmin):
+
     list_display = (
         "id",
         "name",
+        "retailer",
         "is_active",
         "created_at",
     )
 
     search_fields = ("name",)
 
-    list_filter = ("is_active", "created_at")
+    list_filter = (
+        "retailer",
+        "is_active",
+        "created_at",
+    )
 
     ordering = ("name",)
 
-    readonly_fields = ("created_at", "updated_at")
-
     fieldsets = (
+        ("Retailer Info", {
+            "fields": (
+                "retailer",
+            )
+        }),
+
         ("Basic Info", {
-            "fields": ("name",)
+            "fields": (
+                "name",
+            )
         }),
+
         ("Status", {
-            "fields": ("is_active",)
+            "fields": (
+                "is_active",
+            )
         }),
+
         ("Timestamps", {
-            "fields": ("created_at", "updated_at")
+            "fields": (
+                "created_at",
+                "updated_at",
+            )
         }),
     )
 
+
+# =========================================================
+# CATEGORY ADMIN
+# =========================================================
+
 @admin.register(Category)
-class ProductCategoryAdmin(admin.ModelAdmin):
-    
+class ProductCategoryAdmin(BaseRetailerBranchAdmin):
+
     list_display = (
         "id",
         "name",
         "code",
+        "retailer",
         "is_active",
         "created_at",
-        "updated_at",
     )
 
     list_filter = (
+        "retailer",
         "is_active",
         "created_at",
     )
@@ -123,41 +269,49 @@ class ProductCategoryAdmin(admin.ModelAdmin):
     )
 
     ordering = ("name",)
+
     fields = (
+        "retailer",
         "name",
         "code",
         "description",
         "is_active",
-    )
-    readonly_fields = (
         "created_at",
         "updated_at",
     )
+
     list_per_page = 20
+
     def save_model(self, request, obj, form, change):
+
         if obj.code:
             obj.code = obj.code.upper()
+
         super().save_model(request, obj, form, change)
 
 
+# =========================================================
+# PRODUCT ADMIN
+# =========================================================
+
 @admin.register(Product)
-class ProductAdmin(admin.ModelAdmin):
+class ProductAdmin(BaseRetailerBranchAdmin):
 
     list_display = (
         "id",
         "name",
+        "retailer",
         "category",
         "manufacturer",
         "strength",
         "units_per_strip",
-        "loose_sale_allowed",
-        "prescription_required",
         "minimum_stock",
         "is_active",
         "created_at",
     )
 
     list_filter = (
+        "retailer",
         "category",
         "manufacturer",
         "loose_sale_allowed",
@@ -171,16 +325,16 @@ class ProductAdmin(admin.ModelAdmin):
         "rack_no",
     )
 
-    ordering = (
-        "name",
-    )
-
-    readonly_fields = (
-        "created_at",
-        "updated_at",
-    )
+    ordering = ("name",)
 
     fieldsets = (
+
+        ("Retailer Info", {
+            "fields": (
+                "retailer",
+            )
+        }),
+
         ("Basic Information", {
             "fields": (
                 "name",
@@ -220,28 +374,32 @@ class ProductAdmin(admin.ModelAdmin):
         }),
     )
 
+
+# =========================================================
+# SALES OFFER ADMIN
+# =========================================================
+
 @admin.register(SalesOffer)
-class SalesOfferAdmin(admin.ModelAdmin):
+class SalesOfferAdmin(BaseRetailerBranchAdmin):
 
     list_display = (
         "id",
         "name",
+        "retailer",
+        "branch",
         "offer_type",
         "discount_type",
-        "discount_percentage",
-        "flat_discount_amount",
         "start_date",
         "end_date",
         "is_active",
-        "created_at",
     )
 
     list_filter = (
+        "retailer",
+        "branch",
         "offer_type",
         "discount_type",
         "is_active",
-        "start_date",
-        "end_date",
     )
 
     search_fields = (
@@ -249,16 +407,17 @@ class SalesOfferAdmin(admin.ModelAdmin):
         "member_type",
     )
 
-    ordering = (
-        "-created_at",
-    )
-
-    readonly_fields = (
-        "created_at",
-        "updated_at",
-    )
+    ordering = ("-created_at",)
 
     fieldsets = (
+
+        ("Retailer Info", {
+            "fields": (
+                "retailer",
+                "branch",
+            )
+        }),
+
         ("Basic Information", {
             "fields": (
                 "name",
@@ -320,11 +479,19 @@ class SalesOfferAdmin(admin.ModelAdmin):
         }),
     )
 
+
+# =========================================================
+# CUSTOMER ADMIN
+# =========================================================
+
 @admin.register(Customer)
-class CustomerAdmin(admin.ModelAdmin):
+class CustomerAdmin(BaseRetailerBranchAdmin):
+
     list_display = (
         "id",
         "name",
+        "retailer",
+        "branch",
         "mobile",
         "email",
         "is_active",
@@ -332,6 +499,8 @@ class CustomerAdmin(admin.ModelAdmin):
     )
 
     list_filter = (
+        "retailer",
+        "branch",
         "is_active",
         "created_at",
     )
@@ -346,4 +515,14 @@ class CustomerAdmin(admin.ModelAdmin):
 
     list_editable = ("is_active",)
 
-    readonly_fields = ("created_at", "updated_at")
+    fields = (
+        "retailer",
+        "branch",
+        "name",
+        "mobile",
+        "email",
+        "address",
+        "is_active",
+        "created_at",
+        "updated_at",
+    )

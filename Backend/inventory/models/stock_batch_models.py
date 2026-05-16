@@ -1,7 +1,11 @@
 from django.db import models
 from django.conf import settings
-
+from accounts.models import Retailer
+from branches.models import Branch
+from django.utils.timezone import now
 class StockBatch(models.Model):
+    retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="stock_batches")
+    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name="stock_batches")
     product = models.ForeignKey("masters.Product", on_delete=models.CASCADE)
     branch = models.ForeignKey("branches.Branch", on_delete=models.CASCADE)
 
@@ -26,13 +30,43 @@ class StockBatch(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+
+        ordering = ["expiry_date"]
+
+        indexes = [
+            models.Index(fields=["retailer"]),
+            models.Index(fields=["branch"]),
+            models.Index(fields=["product"]),
+            models.Index(fields=["supplier"]),
+            models.Index(fields=["batch_no"]),
+            models.Index(fields=["expiry_date"]),
+            models.Index(fields=["is_expired"]),
+        ]
+
+        unique_together = [
+            ("product", "batch_no", "branch")
+        ]
+
+    # =========================
+    # AUTO AVAILABLE QTY
+    # =========================
+
     def save(self, *args, **kwargs):
 
-        # Keep available stock safe
         if self.available_qty is None:
             self.available_qty = self.quantity
+
+        if self.expiry_date:
+            self.is_expired = (
+                self.expiry_date < now().date()
+            )
 
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.product} - {self.batch_no}"
+
+        return (
+            f"{self.product.name} - "
+            f"{self.batch_no}"
+        )

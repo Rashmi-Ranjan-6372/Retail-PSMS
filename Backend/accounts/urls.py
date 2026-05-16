@@ -2,6 +2,7 @@ from django.urls import path
 from .views import *
 
 urlpatterns = [
+    path("create-retailer/", CreateRetailerView.as_view(), name="create-retailer"),
     path('login/', LoginView.as_view()),
     path('logout/', LogoutView.as_view()),
     path('logout-all/', LogoutAllDevicesView.as_view()),
@@ -14,7 +15,6 @@ urlpatterns = [
     path('user/deactivate/<int:user_id>/', DeactivateUserView.as_view()),
     path('user/reactivate/<int:user_id>/', ReactivateUserView.as_view()),
     path('user/delete/<int:user_id>/', DeleteUserView.as_view()),
-    path('users/', UserListView.as_view()),
     path('users/bulk-action/', BulkUserActionView.as_view()),
     path('users/filter/', UserFilterView.as_view()),
 ]

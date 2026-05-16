@@ -51,6 +51,7 @@ class Branch(models.Model):
             models.Index(fields=["is_active"]),
             models.Index(fields=["retailer"]),
         ]
+        unique_together = ("retailer", "name")
 
     def __str__(self):
         return f"{self.name} ({self.code})"

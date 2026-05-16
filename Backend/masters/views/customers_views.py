@@ -6,23 +6,69 @@ from rest_framework import status
 from .models.customers_models import Customer
 from .serializers import CustomerSerializer
 
-from accounts.permissions import (IsAdmin,IsAdminOrStaff,)
+from accounts.permissions import (
+    IsAdmin,
+    IsAdminOrStaff,
+)
+
+
+# =========================================================
+# HELPER FUNCTION
+# =========================================================
+
+def get_customer_queryset(user):
+
+    # PLATFORM OWNER
+    if user.is_superuser:
+        return Customer.objects.all()
+
+    # SUPERADMIN -> ALL RETAILER CUSTOMERS
+    if user.role == "superadmin":
+        return Customer.objects.filter(
+            retailer=user.retailer
+        )
+
+    # ADMIN / STAFF -> ONLY BRANCH CUSTOMERS
+    return Customer.objects.filter(
+        retailer=user.retailer,
+        branch=user.branch
+    )
+
+
+# =========================================================
+# CUSTOMER LIST + CREATE
+# =========================================================
 
 class CustomerListCreateAPIView(APIView):
+
     permission_classes = [IsAuthenticated, IsAdminOrStaff]
+
     def get(self, request):
-        customers = Customer.objects.filter(is_active=True).order_by("-id")
-        serializer = CustomerSerializer(customers, many=True)
+
+        customers = get_customer_queryset(
+            request.user
+        ).filter(
+            is_active=True
+        ).order_by("-id")
+
+        serializer = CustomerSerializer(
+            customers,
+            many=True
+        )
+
         return Response(
             {
                 "status": True,
+                "count": customers.count(),
                 "data": serializer.data
             },
             status=status.HTTP_200_OK
         )
+
     def post(self, request):
+
         if not (
-            request.user.role == "admin"
+            request.user.role in ["admin", "superadmin"]
             or request.user.is_superuser
         ):
             return Response(
@@ -33,10 +79,16 @@ class CustomerListCreateAPIView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        serializer = CustomerSerializer(data=request.data)
+        serializer = CustomerSerializer(
+            data=request.data
+        )
 
         if serializer.is_valid():
-            serializer.save()
+
+            serializer.save(
+                retailer=request.user.retailer,
+                branch=request.user.branch
+            )
 
             return Response(
                 {
@@ -55,21 +107,28 @@ class CustomerListCreateAPIView(APIView):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+
+# =========================================================
+# CUSTOMER DETAIL
+# =========================================================
+
 class CustomerDetailAPIView(APIView):
 
     permission_classes = [IsAuthenticated, IsAdminOrStaff]
 
-    def get_object(self, pk):
+    def get_object(self, request, pk):
 
         try:
-            return Customer.objects.get(pk=pk)
+            return get_customer_queryset(
+                request.user
+            ).get(pk=pk)
 
         except Customer.DoesNotExist:
             return None
 
     def get(self, request, pk):
 
-        customer = self.get_object(pk)
+        customer = self.get_object(request, pk)
 
         if not customer:
             return Response(
@@ -93,7 +152,7 @@ class CustomerDetailAPIView(APIView):
     def put(self, request, pk):
 
         if not (
-            request.user.role == "admin"
+            request.user.role in ["admin", "superadmin"]
             or request.user.is_superuser
         ):
             return Response(
@@ -104,7 +163,7 @@ class CustomerDetailAPIView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        customer = self.get_object(pk)
+        customer = self.get_object(request, pk)
 
         if not customer:
             return Response(
@@ -115,9 +174,13 @@ class CustomerDetailAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        serializer = CustomerSerializer(customer, data=request.data)
+        serializer = CustomerSerializer(
+            customer,
+            data=request.data
+        )
 
         if serializer.is_valid():
+
             serializer.save()
 
             return Response(
@@ -140,7 +203,7 @@ class CustomerDetailAPIView(APIView):
     def patch(self, request, pk):
 
         if not (
-            request.user.role == "admin"
+            request.user.role in ["admin", "superadmin"]
             or request.user.is_superuser
         ):
             return Response(
@@ -151,7 +214,7 @@ class CustomerDetailAPIView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        customer = self.get_object(pk)
+        customer = self.get_object(request, pk)
 
         if not customer:
             return Response(
@@ -169,6 +232,7 @@ class CustomerDetailAPIView(APIView):
         )
 
         if serializer.is_valid():
+
             serializer.save()
 
             return Response(
@@ -188,12 +252,14 @@ class CustomerDetailAPIView(APIView):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # ================= SOFT DELETE ================= #
+    # =========================================================
+    # SOFT DELETE
+    # =========================================================
 
     def delete(self, request, pk):
 
         if not (
-            request.user.role == "admin"
+            request.user.role in ["admin", "superadmin"]
             or request.user.is_superuser
         ):
             return Response(
@@ -204,7 +270,7 @@ class CustomerDetailAPIView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        customer = self.get_object(pk)
+        customer = self.get_object(request, pk)
 
         if not customer:
             return Response(
@@ -237,10 +303,11 @@ class CustomerActivateAPIView(APIView):
 
     def patch(self, request, pk):
 
-        try:
-            customer = Customer.objects.get(pk=pk)
+        customer = get_customer_queryset(
+            request.user
+        ).filter(pk=pk).first()
 
-        except Customer.DoesNotExist:
+        if not customer:
             return Response(
                 {
                     "status": False,
@@ -271,10 +338,11 @@ class CustomerDeactivateAPIView(APIView):
 
     def patch(self, request, pk):
 
-        try:
-            customer = Customer.objects.get(pk=pk)
+        customer = get_customer_queryset(
+            request.user
+        ).filter(pk=pk).first()
 
-        except Customer.DoesNotExist:
+        if not customer:
             return Response(
                 {
                     "status": False,
@@ -305,10 +373,11 @@ class CustomerHardDeleteAPIView(APIView):
 
     def delete(self, request, pk):
 
-        try:
-            customer = Customer.objects.get(pk=pk)
+        customer = get_customer_queryset(
+            request.user
+        ).filter(pk=pk).first()
 
-        except Customer.DoesNotExist:
+        if not customer:
             return Response(
                 {
                     "status": False,
@@ -338,13 +407,21 @@ class InactiveCustomerListAPIView(APIView):
 
     def get(self, request):
 
-        customers = Customer.objects.filter(is_active=False)
+        customers = get_customer_queryset(
+            request.user
+        ).filter(
+            is_active=False
+        )
 
-        serializer = CustomerSerializer(customers, many=True)
+        serializer = CustomerSerializer(
+            customers,
+            many=True
+        )
 
         return Response(
             {
                 "status": True,
+                "count": customers.count(),
                 "data": serializer.data
             },
             status=status.HTTP_200_OK

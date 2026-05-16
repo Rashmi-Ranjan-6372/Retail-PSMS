@@ -1,9 +1,12 @@
 from django.db import models
 from .products_category_models import Category
 from .manufacturers_models import Manufacturer
-
+from accounts.models import Retailer
+from branches.models import Branch
 
 class Product(models.Model):
+    retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="products")
+    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name="products")
     name = models.CharField(max_length=255)
     category = models.ForeignKey(Category,on_delete=models.PROTECT,related_name="products")
     manufacturer = models.ForeignKey(Manufacturer,on_delete=models.PROTECT,related_name="products")
@@ -19,16 +22,26 @@ class Product(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
-        return self.name
-
     class Meta:
+        db_table = "products"
         ordering = ["name"]
+        unique_together = [
+            (
+                "retailer",
+                "name",
+                "manufacturer",
+                "strength"
+            )
+        ]
 
         indexes = [
+            models.Index(fields=["retailer"]),
             models.Index(fields=["name"]),
+            models.Index(fields=["is_active"]),
         ]
 
-        unique_together = [
-            ("name", "manufacturer", "strength")
-        ]
+    def __str__(self):
+        if self.strength:
+            return f"{self.name} {self.strength}"
+
+        return self.name

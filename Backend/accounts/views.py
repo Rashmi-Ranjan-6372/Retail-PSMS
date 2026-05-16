@@ -12,18 +12,59 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import update_last_login
 from django.db.models import Q
 from django.utils import timezone
+from django.db import transaction
 
 from .serializers import (
     AdminResetPasswordSerializer,
     LoginSerializer,
     UserSerializer,
-    CreateStaffSerializer
+    CreateStaffSerializer,
+    RetailerCreateSerializer
 )
 from .permissions import IsAdmin
-from .models import LoginLog, UserSession
-
+from .models import AuditLog, LoginLog, UserSession, Retailer
 User = get_user_model()
 
+class CreateRetailerView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+
+        if not request.user.is_superuser:
+            return Response({
+                "success": False,
+                "message": "Only platform owner can create retailer"
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = RetailerCreateSerializer(data=request.data)
+
+        if serializer.is_valid():
+
+            data = serializer.save()
+
+            return Response({
+                "success": True,
+                "message": "Retailer created successfully",
+                "retailer": {
+                    "id": data["retailer"].id,
+                    "name": data["retailer"].name,
+                    "email": data["retailer"].email,
+                },
+                "branch": {
+                    "id": data["branch"].id,
+                    "name": data["branch"].name,
+                },
+                "superadmin": {
+                    "id": data["user"].id,
+                    "username": data["user"].username,
+                    "role": data["user"].role,
+                }
+            }, status=status.HTTP_201_CREATED)
+
+        return Response({
+            "success": False,
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
 
 # ================= HELPER FUNCTIONS ================= #
 
@@ -47,10 +88,10 @@ def get_tokens_for_user(user):
     refresh["username"] = user.username
     refresh["role"] = user.role
 
-    if getattr(user, "retailer_id", None):
+    if user.retailer_id:
         refresh["retailer_id"] = user.retailer_id
 
-    if getattr(user, "branch_id", None):
+    if user.branch_id:
         refresh["branch_id"] = user.branch_id
 
     return {
@@ -61,12 +102,9 @@ def get_tokens_for_user(user):
 
 def can_manage_user(request_user, target_user):
 
-    # Django Superuser
     if request_user.is_superuser:
         return True
 
-    # One Retailer -> One SuperAdmin
-    # SuperAdmin can manage users only inside own retailer
     if (
         request_user.role == "superadmin" and
         request_user.retailer == target_user.retailer and
@@ -74,7 +112,6 @@ def can_manage_user(request_user, target_user):
     ):
         return True
 
-    # Admin can manage only same retailer + same branch
     if (
         request_user.role == "admin" and
         request_user.retailer == target_user.retailer and
@@ -87,6 +124,7 @@ def can_manage_user(request_user, target_user):
 
 
 def blacklist_user_sessions(user):
+
     sessions = UserSession.objects.filter(
         user=user,
         is_active=True
@@ -100,6 +138,20 @@ def blacklist_user_sessions(user):
 
     sessions.update(is_active=False)
 
+def create_audit_log(user, action, model_name, object_id="", description="", request=None):
+    try:
+        AuditLog.objects.create(
+            user=user,
+            action=action,
+            model_name=model_name,
+            object_id=str(object_id),
+            description=description,
+            ip_address=get_client_ip(request) if request else None,
+            retailer=getattr(user, "retailer", None) if user else None,
+            branch=getattr(user, "branch", None) if user else None,
+        )
+    except Exception:
+        pass
 
 # ================= LOGIN ================= #
 
@@ -113,63 +165,85 @@ class LoginView(APIView):
         ip = get_client_ip(request)
         user_agent = get_user_agent(request)
 
-        if serializer.is_valid():
-
-            user = serializer.validated_data
-
-            if not user.is_active:
-                return Response({
-                    "success": False,
-                    "message": "Account is inactive"
-                }, status=status.HTTP_403_FORBIDDEN)
-
-            tokens = get_tokens_for_user(user)
-
-            device_id = request.data.get(
-                "device_id",
-                "unknown"
-            )
-
-            UserSession.objects.filter(
-                user=user,
-                is_active=True
-            ).update(is_active=False)
-
-            UserSession.objects.create(
-                user=user,
-                device_id=device_id,
-                refresh_token=tokens["refresh"],
-                ip_address=ip,
-                user_agent=user_agent,
-                is_active=True
-            )
-
+        if not serializer.is_valid():
             LoginLog.objects.create(
-                user=user,
                 ip_address=ip,
                 user_agent=user_agent,
-                status="success"
+                status="failed"
             )
 
-            update_last_login(None, user)
+            create_audit_log(
+                user=None,
+                action="login",
+                model_name="UserSession",
+                object_id="failed",
+                description="Failed login attempt",
+                request=request
+            )
 
             return Response({
-                "success": True,
-                "user": UserSerializer(user).data,
-                "tokens": tokens
-            }, status=status.HTTP_200_OK)
+                "success": False,
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
 
-        LoginLog.objects.create(
-            user=None,
-            ip_address=ip,
-            user_agent=user_agent,
-            status="failed"
+        user = serializer.validated_data
+
+        if not user.is_active:
+            return Response({
+                "success": False,
+                "message": "Account is inactive"
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        tokens = get_tokens_for_user(user)
+        device_id = request.data.get("device_id", "unknown")
+
+        UserSession.objects.filter(
+            user_id=user.id,
+            is_active=True
+        ).update(
+            is_active=False,
+            revoked_at=timezone.now()
         )
 
+        # Create new session
+        session = UserSession.objects.create(
+            user=user,
+            retailer_id=user.retailer_id,
+            branch_id=user.branch_id,
+            device_id=device_id,
+            refresh_token=tokens["refresh"],
+            ip_address=ip,
+            user_agent=user_agent,
+            is_active=True
+        )
+
+        # Login log
+        LoginLog.objects.create(
+            user=user,
+            retailer=user.retailer,
+            branch=user.branch,
+            ip_address=ip,
+            user_agent=user_agent,
+            status="success"
+        )
+
+        # Audit log
+        create_audit_log(
+            user=user,
+            action="login",
+            model_name="UserSession",
+            object_id=session.id,
+            description=f"User logged in from device {device_id}",
+            request=request
+        )
+
+        update_last_login(None, user)
+
         return Response({
-            "success": False,
-            "errors": serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
+            "success": True,
+            "user": UserSerializer(user).data,
+            "tokens": tokens
+        }, status=status.HTTP_200_OK)
 
 
 # ================= TOKEN REFRESH ================= #
@@ -202,7 +276,7 @@ class CustomTokenRefreshView(TokenRefreshView):
 
             if session:
                 session.refresh_token = new_refresh
-                session.save()
+                session.save(update_fields=["refresh_token"])
 
         return response
 
@@ -213,11 +287,11 @@ class ProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+
         return Response({
             "success": True,
             "data": UserSerializer(request.user).data
         })
-
 
 # ================= CREATE STAFF ================= #
 
@@ -233,7 +307,6 @@ class CreateStaffView(APIView):
 
         if serializer.is_valid():
 
-            # Django Superuser
             if request.user.is_superuser:
 
                 retailer_id = request.data.get("retailer")
@@ -261,7 +334,6 @@ class CreateStaffView(APIView):
                     branch_id=branch_id
                 )
 
-            # Retailer SuperAdmin
             elif request.user.role == "superadmin":
 
                 branch_id = request.data.get("branch")
@@ -288,7 +360,6 @@ class CreateStaffView(APIView):
                     branch=branch
                 )
 
-            # Admin
             else:
 
                 serializer.save(
@@ -341,7 +412,8 @@ class LogoutView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
         session.is_active = False
-        session.save()
+        session.revoked_at = timezone.now()
+        session.save(update_fields=["is_active", "revoked_at"])
 
         log = LoginLog.objects.filter(
             user=request.user,
@@ -350,13 +422,22 @@ class LogoutView(APIView):
 
         if log:
             log.logout_time = timezone.now()
-            log.save()
+            log.save(update_fields=["logout_time"])
+
+        create_audit_log(
+            user=request.user,
+            action="logout",
+            model_name="UserSession",
+            object_id=session.id,
+            description="User logged out from device",
+            request=request
+        )
 
         return Response({
             "success": True,
             "message": "Logged out successfully"
         })
-
+    
 
 # ================= LOGOUT ALL DEVICES ================= #
 
@@ -367,30 +448,39 @@ class LogoutAllDevicesView(APIView):
 
         user = request.user
 
-        # Django Superuser
+        # ================= PLATFORM OWNER =================
         if user.is_superuser:
 
+            retailer_id = request.data.get("retailer_id")
+
+            if not retailer_id:
+                return Response({
+                    "error": "retailer_id required for platform logout"
+                }, status=status.HTTP_400_BAD_REQUEST)
+
             sessions = UserSession.objects.filter(
+                user__retailer_id=retailer_id,
                 is_active=True
             )
 
-        # Retailer SuperAdmin
+        # ================= RETAILER SUPERADMIN =================
         elif user.role == "superadmin":
 
             sessions = UserSession.objects.filter(
-                user__retailer=user.retailer,
+                user__retailer_id=user.retailer_id,
                 is_active=True
             )
 
-        # Admin
+        # ================= ADMIN =================
         elif user.role == "admin":
 
             sessions = UserSession.objects.filter(
-                user__retailer=user.retailer,
-                user__branch=user.branch,
+                user__retailer_id=user.retailer_id,
+                user__branch_id=user.branch_id,
                 is_active=True
             )
 
+        # ================= NORMAL USER =================
         else:
 
             sessions = UserSession.objects.filter(
@@ -398,14 +488,25 @@ class LogoutAllDevicesView(APIView):
                 is_active=True
             )
 
+        count = sessions.count()
+
         for session in sessions:
             try:
                 RefreshToken(session.refresh_token).blacklist()
             except Exception:
                 pass
 
-        count = sessions.update(is_active=False)
+        sessions.update(is_active=False)
 
+        create_audit_log(
+            user=request.user,
+            action="logout",
+            model_name="UserSession",
+            object_id="all_devices",
+            description=f"Logged out {count} devices",
+            request=request
+        )
+                
         return Response({
             "success": True,
             "message": f"Logged out from {count} device(s)."
@@ -420,48 +521,47 @@ class LogoutAllExceptOwnView(APIView):
     def post(self, request):
 
         current_refresh = request.data.get("refresh")
+        retailer_id = request.data.get("retailer_id")
 
         if not current_refresh:
-            return Response({
-                "error": "Refresh token required"
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Refresh token required"}, status=400)
 
         user = request.user
 
-        # Django Superuser
         if user.is_superuser:
 
+            if not retailer_id:
+                return Response({
+                    "error": "retailer_id required for superuser"
+                }, status=400)
+
             sessions = UserSession.objects.filter(
+                user__retailer_id=retailer_id,
                 is_active=True
             )
 
-        # Retailer SuperAdmin
         elif user.role == "superadmin":
-
             sessions = UserSession.objects.filter(
-                user__retailer=user.retailer,
+                user__retailer_id=user.retailer_id,
                 is_active=True
             )
 
-        # Admin
         elif user.role == "admin":
-
             sessions = UserSession.objects.filter(
-                user__retailer=user.retailer,
-                user__branch=user.branch,
+                user__retailer_id=user.retailer_id,
+                user__branch_id=user.branch_id,
                 is_active=True
             )
 
         else:
-
             sessions = UserSession.objects.filter(
                 user=user,
                 is_active=True
             )
 
-        sessions = sessions.exclude(
-            refresh_token=current_refresh
-        )
+        sessions = sessions.exclude(refresh_token=current_refresh)
+
+        count = sessions.count()
 
         for session in sessions:
             try:
@@ -469,12 +569,21 @@ class LogoutAllExceptOwnView(APIView):
             except Exception:
                 pass
 
-        count = sessions.update(is_active=False)
+        sessions.update(is_active=False)
+
+        create_audit_log(
+            user=request.user,
+            action="logout",
+            model_name="UserSession",
+            object_id="except_current",
+            description=f"Logged out {count} other sessions",
+            request=request
+        )
 
         return Response({
             "success": True,
             "message": f"Logged out from {count} other device(s)."
-        }, status=status.HTTP_200_OK)
+        }, status=200)
 
 
 # ================= LOGOUT BRANCH ================= #
@@ -542,9 +651,19 @@ class LogoutBranchView(APIView):
                 RefreshToken(session.refresh_token).blacklist()
                 logged_out_count += 1
             except Exception:
+
                 pass
 
         sessions.update(is_active=False)
+
+        create_audit_log(
+            user=request.user,
+            action="logout",
+            model_name="UserSession",
+            object_id=f"branch_{branch.id}",
+            description=f"Logged out branch {branch.name}",
+            request=request
+        )
 
         return Response({
             "success": True,
@@ -552,9 +671,7 @@ class LogoutBranchView(APIView):
             "branch": branch.name
         }, status=status.HTTP_200_OK)
 
-
 # ================= ADMIN RESET PASSWORD ================= #
-
 class AdminResetPasswordView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin]
 
@@ -567,6 +684,15 @@ class AdminResetPasswordView(APIView):
         if serializer.is_valid():
             serializer.save()
 
+            create_audit_log(
+                user=request.user,
+                action="update",
+                model_name="User",
+                object_id="password_reset",
+                description="Admin reset user password",
+                request=request
+            )
+
             return Response({
                 "success": True,
                 "message": "Password reset successfully"
@@ -577,9 +703,7 @@ class AdminResetPasswordView(APIView):
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
 
-
 # ================= DEACTIVATE USER ================= #
-
 class DeactivateUserView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -588,32 +712,27 @@ class DeactivateUserView(APIView):
             target_user = User.objects.get(id=user_id)
 
         except User.DoesNotExist:
-            return Response({
-                "error": "User not found"
-            }, status=404)
+            return Response({"error": "User not found"}, status=404)
 
         if not can_manage_user(request.user, target_user):
-            return Response({
-                "error": "Permission denied"
-            }, status=403)
+            return Response({"error": "Permission denied"}, status=403)
 
         if request.user == target_user:
-            return Response({
-                "error": "You cannot deactivate yourself"
-            }, status=400)
-
-        if (
-            request.user.role == "superadmin" and
-            request.user.retailer != target_user.retailer
-        ):
-            return Response({
-                "error": "You can manage only your retailer users"
-            }, status=403)
+            return Response({"error": "You cannot deactivate yourself"}, status=400)
 
         blacklist_user_sessions(target_user)
 
         target_user.is_active = False
         target_user.save()
+
+        create_audit_log(
+            user=request.user,
+            action="update",
+            model_name="User",
+            object_id=target_user.id,
+            description=f"Deactivated user {target_user.username}",
+            request=request
+        )
 
         return Response({
             "success": True,
@@ -631,25 +750,22 @@ class ReactivateUserView(APIView):
             target_user = User.objects.get(id=user_id)
 
         except User.DoesNotExist:
-            return Response({
-                "error": "User not found"
-            }, status=404)
+            return Response({"error": "User not found"}, status=404)
 
         if not can_manage_user(request.user, target_user):
-            return Response({
-                "error": "Permission denied"
-            }, status=403)
-
-        if (
-            request.user.role == "superadmin" and
-            request.user.retailer != target_user.retailer
-        ):
-            return Response({
-                "error": "You can manage only your retailer users"
-            }, status=403)
+            return Response({"error": "Permission denied"}, status=403)
 
         target_user.is_active = True
         target_user.save()
+
+        create_audit_log(
+            user=request.user,
+            action="update",
+            model_name="User",
+            object_id=target_user.id,
+            description=f"Reactivated user {target_user.username}",
+            request=request
+        )
 
         return Response({
             "success": True,
@@ -668,34 +784,30 @@ class DeleteUserView(APIView):
             request.user.is_superuser or
             request.user.role == "superadmin"
         ):
-            return Response({
-                "error": "Only superadmin can delete users"
-            }, status=403)
+            return Response({"error": "Only superadmin can delete users"}, status=403)
 
         try:
             target_user = User.objects.get(id=user_id)
 
         except User.DoesNotExist:
-            return Response({
-                "error": "User not found"
-            }, status=404)
+            return Response({"error": "User not found"}, status=404)
 
         if request.user == target_user:
-            return Response({
-                "error": "You cannot delete yourself"
-            }, status=400)
-
-        if (
-            request.user.role == "superadmin" and
-            request.user.retailer != target_user.retailer
-        ):
-            return Response({
-                "error": "You can delete only your retailer users"
-            }, status=403)
+            return Response({"error": "You cannot delete yourself"}, status=400)
 
         blacklist_user_sessions(target_user)
 
+        username = target_user.username
         target_user.delete()
+
+        create_audit_log(
+            user=request.user,
+            action="delete",
+            model_name="User",
+            object_id=user_id,
+            description=f"Deleted user {username}",
+            request=request
+        )
 
         return Response({
             "success": True,
@@ -703,73 +815,7 @@ class DeleteUserView(APIView):
         })
 
 
-# ================= USER LIST ================= #
-
-class UserListView(ListAPIView):
-    permission_classes = [IsAuthenticated, IsAdmin]
-    serializer_class = UserSerializer
-
-    def get_queryset(self):
-        user = self.request.user
-
-        queryset = User.objects.select_related(
-            "retailer",
-            "branch"
-        )
-
-        if user.is_superuser:
-
-            queryset = queryset.all()
-
-        elif user.role == "superadmin":
-
-            queryset = queryset.filter(
-                retailer=user.retailer
-            )
-
-        else:
-
-            queryset = queryset.filter(
-                retailer=user.retailer,
-                branch=user.branch
-            )
-
-        role = self.request.query_params.get("role")
-        is_active = self.request.query_params.get("is_active")
-        retailer_id = self.request.query_params.get("retailer_id")
-        branch_id = self.request.query_params.get("branch_id")
-        search = self.request.query_params.get("search")
-
-        if role:
-            queryset = queryset.filter(role=role)
-
-        if is_active is not None:
-            queryset = queryset.filter(
-                is_active=is_active.lower() == "true"
-            )
-
-        if retailer_id and user.is_superuser:
-            queryset = queryset.filter(
-                retailer_id=retailer_id
-            )
-
-        if branch_id:
-            queryset = queryset.filter(
-                branch_id=branch_id
-            )
-
-        if search:
-            queryset = queryset.filter(
-                Q(username__icontains=search) |
-                Q(email__icontains=search) |
-                Q(phone__icontains=search)
-            )
-
-        return queryset.order_by("-id")
-
-
 # ================= BULK USER ACTION ================= #
-
 class BulkUserActionView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -778,68 +824,85 @@ class BulkUserActionView(APIView):
         user_ids = request.data.get("user_ids", [])
 
         if not user_ids:
-            return Response({
-                "error": "No users selected"
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "No users selected"}, status=400)
 
-        users = User.objects.filter(
-            id__in=user_ids
-        )
+        users = User.objects.filter(id__in=user_ids).exclude(id=request.user.id)
 
         if request.user.is_superuser:
-
-            users = users.all()
+            pass
 
         elif request.user.role == "superadmin":
-
-            users = users.filter(
-                retailer=request.user.retailer
-            )
+            users = users.filter(retailer=request.user.retailer)
 
         else:
-
             users = users.filter(
                 retailer=request.user.retailer,
                 branch=request.user.branch
             )
 
-        users = users.exclude(
-            id=request.user.id
-        )
+        if not users.exists():
+            return Response({"error": "No valid users found"}, status=400)
 
-        if action == "deactivate":
+        affected_ids = []
 
-            for user in users:
-                blacklist_user_sessions(user)
-                user.is_active = False
-                user.save()
+        # ================= TRANSACTION SAFETY =================
+        with transaction.atomic():
 
-        elif action == "reactivate":
+            if action == "deactivate":
 
-            users.update(is_active=True)
+                for user in users:
+                    blacklist_user_sessions(user)
+                    user.is_active = False
+                    user.save(update_fields=["is_active"])
+                    affected_ids.append(user.id)
 
-        elif action == "delete":
+                audit_action = "update"
+                audit_desc = f"Bulk deactivated users: {affected_ids}"
 
-            if not (
-                request.user.is_superuser or
-                request.user.role == "superadmin"
-            ):
-                return Response({
-                    "error": "Only superadmin can delete users"
-                }, status=403)
+            elif action == "reactivate":
 
-            for user in users:
-                blacklist_user_sessions(user)
-                user.delete()
+                updated = users.update(is_active=True)
 
-        else:
-            return Response({
-                "error": "Invalid action"
-            }, status=status.HTTP_400_BAD_REQUEST)
+                affected_ids = list(users.values_list("id", flat=True))
+                audit_action = "update"
+                audit_desc = f"Bulk reactivated {updated} users: {affected_ids}"
+
+            elif action == "delete":
+
+                if not (request.user.is_superuser or request.user.role == "superadmin"):
+                    return Response(
+                        {"error": "Only superadmin can delete users"},
+                        status=403
+                    )
+
+                for user in users:
+                    affected_ids.append({
+                        "id": user.id,
+                        "username": user.username
+                    })
+                    blacklist_user_sessions(user)
+                    user.delete()
+
+                audit_action = "delete"
+                audit_desc = f"Bulk deleted users: {affected_ids}"
+
+            else:
+                return Response({"error": "Invalid action"}, status=400)
+
+            # ================= AUDIT LOG =================
+            create_audit_log(
+                user=request.user,
+                action=audit_action,
+                model_name="User",
+                object_id="bulk",
+                description=audit_desc,
+                request=request
+            )
 
         return Response({
             "success": True,
-            "message": f"{action.capitalize()} completed successfully"
+            "message": f"{action.capitalize()} completed successfully",
+            "affected_count": len(affected_ids)
         })
 
 
@@ -852,17 +915,12 @@ class UserFilterView(ListAPIView):
         user = self.request.user
 
         if user.is_superuser:
-
             queryset = User.objects.all()
 
         elif user.role == "superadmin":
-
-            queryset = User.objects.filter(
-                retailer=user.retailer
-            )
+            queryset = User.objects.filter(retailer=user.retailer)
 
         else:
-
             queryset = User.objects.filter(
                 retailer=user.retailer,
                 branch=user.branch
@@ -878,19 +936,13 @@ class UserFilterView(ListAPIView):
             queryset = queryset.filter(role=role)
 
         if is_active is not None:
-            queryset = queryset.filter(
-                is_active=is_active.lower() == "true"
-            )
+            queryset = queryset.filter(is_active=is_active.lower() == "true")
 
         if retailer_id and user.is_superuser:
-            queryset = queryset.filter(
-                retailer_id=retailer_id
-            )
+            queryset = queryset.filter(retailer_id=retailer_id)
 
         if branch_id:
-            queryset = queryset.filter(
-                branch_id=branch_id
-            )
+            queryset = queryset.filter(branch_id=branch_id)
 
         if search:
             queryset = queryset.filter(
@@ -903,11 +955,7 @@ class UserFilterView(ListAPIView):
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
-
-        serializer = self.get_serializer(
-            queryset,
-            many=True
-        )
+        serializer = self.get_serializer(queryset, many=True)
 
         return Response({
             "success": True,

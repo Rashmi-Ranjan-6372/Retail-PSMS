@@ -4,8 +4,12 @@ from datetime import datetime
 from django.db import transaction
 from .constants import STATUS
 from django.conf import settings
+from accounts.models import Retailer
+from branches.models import Branch
 
 class PurchaseReturn(models.Model):
+    retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="purchase_returns")
+    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name="purchase_returns")
     return_no = models.CharField(max_length=50, unique=True, blank=True)
     supplier = models.ForeignKey("masters.Supplier", on_delete=models.CASCADE)
     branch = models.ForeignKey("branches.Branch", on_delete=models.CASCADE)
@@ -19,19 +23,41 @@ class PurchaseReturn(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def save(self, *args, **kwargs):
+    class Meta:
 
+        ordering = ["-created_at"]
+
+        indexes = [
+            models.Index(fields=["return_no"]),
+            models.Index(fields=["retailer"]),
+            models.Index(fields=["branch"]),
+            models.Index(fields=["supplier"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+    # =========================
+    # AUTO GENERATE RETURN NO
+    # =========================
+
+    def save(self, *args, **kwargs):
         if not self.return_no:
             year = datetime.now().year
-
             with transaction.atomic():
-                last_id = PurchaseReturn.objects.filter(
-                    return_no__startswith=f"PR-{year}"
-                ).aggregate(Max("id"))["id__max"] or 0
+                last_id = (
+                    PurchaseReturn.objects.filter(
+                        return_no__startswith=f"PR-{year}"
+                    ).aggregate(
+                        max_id=Max("id")
+                    )["max_id"] or 0
+                )
+                next_number = last_id + 1
 
-                self.return_no = f"PR-{year}-{last_id + 1:04d}"
-
+                self.return_no = (
+                    f"PR-{year}-{next_number:04d}"
+                )
         super().save(*args, **kwargs)
 
     def __str__(self):
+
         return self.return_no
