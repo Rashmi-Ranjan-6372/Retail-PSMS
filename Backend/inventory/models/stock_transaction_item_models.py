@@ -10,7 +10,6 @@ class StockTransactionItem(models.Model):
     transaction = models.ForeignKey("StockTransaction", on_delete=models.CASCADE, related_name="items")
     product = models.ForeignKey("masters.Product", on_delete=models.CASCADE)
     batch = models.ForeignKey("inventory.StockBatch", on_delete=models.CASCADE)
-    branch = models.ForeignKey("branches.Branch", on_delete=models.CASCADE)
     movement_type = models.CharField(max_length=10, choices=ADJUSTMENT_TYPE)
 
     qty = models.PositiveIntegerField()

@@ -12,20 +12,14 @@ class Sales(models.Model):
     branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name="sales")
     invoice_no = models.CharField(max_length=50, unique=True, blank=True)
     customer = models.ForeignKey("masters.Customer", on_delete=models.SET_NULL, null=True)
-    branch = models.ForeignKey("branches.Branch", on_delete=models.CASCADE)
-
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     discount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     net_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-
     paid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     due_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     payment_status = models.CharField(max_length=20, default="UNPAID")
-
     status = models.CharField(max_length=20, choices=STATUS, default="CONFIRMED")
-
     remarks = models.TextField(null=True, blank=True)
-
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.SET_NULL,null=True,blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)

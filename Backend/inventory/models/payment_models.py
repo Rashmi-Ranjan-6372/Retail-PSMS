@@ -13,7 +13,6 @@ class Payment(models.Model):
     branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name="payments")
     payment_no = models.CharField(max_length=50, unique=True, blank=True)
     supplier = models.ForeignKey("masters.Supplier", on_delete=models.CASCADE)
-    branch = models.ForeignKey("branches.Branch", on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     paid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     due_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)

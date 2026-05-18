@@ -12,7 +12,6 @@ class PurchaseReturn(models.Model):
     branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name="purchase_returns")
     return_no = models.CharField(max_length=50, unique=True, blank=True)
     supplier = models.ForeignKey("masters.Supplier", on_delete=models.CASCADE)
-    branch = models.ForeignKey("branches.Branch", on_delete=models.CASCADE)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     adjusted_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     status = models.CharField(max_length=20, choices=STATUS, default="DRAFT")

@@ -9,7 +9,6 @@ class ExpiryDamage(models.Model):
     branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name="expiry_damages")
     product = models.ForeignKey("masters.Product", on_delete=models.CASCADE)
     batch = models.ForeignKey("inventory.StockBatch", on_delete=models.CASCADE)
-    branch = models.ForeignKey("branches.Branch", on_delete=models.CASCADE)
     issue_type = models.CharField(max_length=20, choices=STOCK_ISSUE_REASON)
     quantity = models.IntegerField()
     unit_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)

@@ -12,7 +12,6 @@ class StockTransaction(models.Model):
     branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name="stock_transactions")
     transaction_no = models.CharField(max_length=50, unique=True, blank=True)
     transaction_type = models.CharField(max_length=30, choices=TRANSACTION_TYPE)
-    branch = models.ForeignKey("branches.Branch", on_delete=models.CASCADE)
     supplier = models.ForeignKey("masters.Supplier", on_delete=models.SET_NULL, null=True, blank=True)
     customer = models.ForeignKey("masters.Customer",on_delete=models.SET_NULL,null=True,blank=True)
     reference_no = models.CharField(max_length=50, null=True, blank=True)

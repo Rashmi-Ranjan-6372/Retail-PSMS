@@ -7,8 +7,6 @@ class StockBatch(models.Model):
     retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="stock_batches")
     branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name="stock_batches")
     product = models.ForeignKey("masters.Product", on_delete=models.CASCADE)
-    branch = models.ForeignKey("branches.Branch", on_delete=models.CASCADE)
-
     supplier = models.ForeignKey("masters.Supplier", on_delete=models.SET_NULL, null=True, blank=True)
     batch_no = models.CharField(max_length=50)
 
