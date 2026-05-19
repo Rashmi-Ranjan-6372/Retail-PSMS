@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models.customers_models import Customer
+from masters.models.customers_models import Customer
 
 
 class CustomerSerializer(serializers.ModelSerializer):

@@ -1,7 +1,6 @@
 from rest_framework import serializers
 
-from masters.models import Manufacturer
-
+from masters.models.manufacturers_models import Manufacturer
 
 class ManufacturerSerializer(serializers.ModelSerializer):
 

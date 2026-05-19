@@ -1,9 +1,6 @@
 from rest_framework import serializers
 
 from masters.models.products_models import Product
-from masters.models.products_category_models import Category
-from masters.models.manufacturers_models import Manufacturer
-
 
 class ProductSerializer(serializers.ModelSerializer):
 

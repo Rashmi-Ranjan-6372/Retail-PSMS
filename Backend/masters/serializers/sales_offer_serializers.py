@@ -2,7 +2,6 @@ from rest_framework import serializers
 
 from masters.models.sales_offer_models import SalesOffer
 
-
 class SalesOfferSerializer(serializers.ModelSerializer):
 
     product_name = serializers.CharField(

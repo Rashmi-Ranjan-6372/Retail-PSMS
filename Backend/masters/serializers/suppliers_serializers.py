@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from masters.models import Supplier
+from masters.models.suppliers_models import Supplier
 from branches.models import Branch
 
 

@@ -20,8 +20,8 @@ class Sales(models.Model):
     payment_status = models.CharField(max_length=20, default="UNPAID")
     status = models.CharField(max_length=20, choices=STATUS, default="CONFIRMED")
     remarks = models.TextField(null=True, blank=True)
-    created_by = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.SET_NULL,null=True,blank=True)
 
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.SET_NULL,null=True,blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

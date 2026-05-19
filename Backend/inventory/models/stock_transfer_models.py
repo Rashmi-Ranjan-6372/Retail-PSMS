@@ -18,11 +18,9 @@ class StockTransfer(models.Model):
     quantity = models.IntegerField()
     unit_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     total_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-
     status = models.CharField(max_length=20, choices=TRANSFER_STATUS, default="PENDING")
 
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.SET_NULL,null=True,blank=True)
-
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
