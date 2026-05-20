@@ -1,5 +1,3 @@
-# inventory/urls/expiry_damage_urls.py
-
 from rest_framework.routers import DefaultRouter
 from inventory.views.expiry_damage_views import (
     ExpiryDamageViewSet
