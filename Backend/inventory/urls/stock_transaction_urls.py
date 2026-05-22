@@ -1,15 +1,21 @@
-# inventory/urls/stock_transaction_urls.py
+from django.urls import path
 
-from rest_framework.routers import DefaultRouter
 from inventory.views.stock_transaction_views import (
-    StockTransactionViewSet
+    StockTransactionListCreateView,
+    StockTransactionDetailView,
 )
 
-router = DefaultRouter()
-router.register(
-    r'stock-transactions',
-    StockTransactionViewSet,
-    basename='stock-transaction'
-)
+urlpatterns = [
 
-urlpatterns = router.urls
+    path(
+        "stock-transactions/",
+        StockTransactionListCreateView.as_view(),
+        name="stock-transaction-list-create",
+    ),
+
+    path(
+        "stock-transactions/<int:pk>/",
+        StockTransactionDetailView.as_view(),
+        name="stock-transaction-detail",
+    ),
+]

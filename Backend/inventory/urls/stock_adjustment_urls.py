@@ -1,15 +1,23 @@
-# inventory/urls/stock_adjustment_urls.py
+from django.urls import path
 
-from rest_framework.routers import DefaultRouter
 from inventory.views.stock_adjustment_views import (
-    StockAdjustmentViewSet
+    StockAdjustmentListCreateView,
+    StockAdjustmentDetailView,
 )
 
-router = DefaultRouter()
-router.register(
-    r'stock-adjustments',
-    StockAdjustmentViewSet,
-    basename='stock-adjustment'
-)
+urlpatterns = [
 
-urlpatterns = router.urls
+    # ================= STOCK ADJUSTMENT ================= #
+
+    path(
+        "stock-adjustments/",
+        StockAdjustmentListCreateView.as_view(),
+        name="stock-adjustment-list-create"
+    ),
+
+    path(
+        "stock-adjustments/<int:pk>/",
+        StockAdjustmentDetailView.as_view(),
+        name="stock-adjustment-detail"
+    ),
+]

@@ -1,15 +1,13 @@
-# inventory/urls/sales_urls.py
+from django.urls import path
 
-from rest_framework.routers import DefaultRouter
 from inventory.views.sales_views import (
-    SalesViewSet
+    SalesListCreateView,
+    SalesDetailView,
 )
 
-router = DefaultRouter()
-router.register(
-    r'sales',
-    SalesViewSet,
-    basename='sales'
-)
-
-urlpatterns = router.urls
+urlpatterns = [
+    # SALES LIST + CREATE
+    path("", SalesListCreateView.as_view(), name="sales-list-create",),
+    # SALES DETAIL VIEW
+    path("<int:pk>/", SalesDetailView.as_view(), name="sales-detail",),
+]

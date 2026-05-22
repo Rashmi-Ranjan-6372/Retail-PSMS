@@ -1,15 +1,29 @@
-# inventory/urls/sales_return_urls.py
+from django.urls import path
 
-from rest_framework.routers import DefaultRouter
 from inventory.views.sales_return_views import (
-    SalesReturnViewSet
+    SalesReturnListCreateView,
+    SalesReturnDetailView,
 )
 
-router = DefaultRouter()
-router.register(
-    r'sales-returns',
-    SalesReturnViewSet,
-    basename='sales-return'
-)
+urlpatterns = [
 
-urlpatterns = router.urls
+    # ==========================================
+    # SALES RETURN LIST + CREATE
+    # ==========================================
+
+    path(
+        "",
+        SalesReturnListCreateView.as_view(),
+        name="sales-return-list-create",
+    ),
+
+    # ==========================================
+    # SALES RETURN DETAIL
+    # ==========================================
+
+    path(
+        "<int:pk>/",
+        SalesReturnDetailView.as_view(),
+        name="sales-return-detail",
+    ),
+]

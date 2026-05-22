@@ -1,15 +1,29 @@
-# inventory/urls/purchase_return_urls.py
+from django.urls import path
 
-from rest_framework.routers import DefaultRouter
 from inventory.views.purchase_return_views import (
-    PurchaseReturnViewSet
+    PurchaseReturnListCreateView,
+    PurchaseReturnDetailView,
 )
 
-router = DefaultRouter()
-router.register(
-    r'purchase-returns',
-    PurchaseReturnViewSet,
-    basename='purchase-return'
-)
+urlpatterns = [
 
-urlpatterns = router.urls
+    # ==========================================
+    # PURCHASE RETURN LIST + CREATE
+    # ==========================================
+
+    path(
+        "",
+        PurchaseReturnListCreateView.as_view(),
+        name="purchase-return-list-create",
+    ),
+
+    # ==========================================
+    # PURCHASE RETURN DETAIL
+    # ==========================================
+
+    path(
+        "<int:pk>/",
+        PurchaseReturnDetailView.as_view(),
+        name="purchase-return-detail",
+    ),
+]

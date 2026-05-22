@@ -5,12 +5,12 @@ from rest_framework.generics import (
 
 from rest_framework.permissions import IsAuthenticated
 
-from inventory.models.stock_adjustment_models import (
-    StockAdjustment
+from inventory.models.stock_transaction_item_models import (
+    StockTransactionItem
 )
 
-from inventory.serializers.stock_adjustment_serializers import (
-    StockAdjustmentSerializer
+from inventory.serializers.stock_transaction_item_serializers import (
+    StockTransactionItemSerializer
 )
 
 from accounts.permissions import (
@@ -19,14 +19,14 @@ from accounts.permissions import (
 
 
 # =====================================================
-# STOCK ADJUSTMENT LIST + CREATE
+# STOCK TRANSACTION ITEM LIST + CREATE
 # =====================================================
 
-class StockAdjustmentListCreateView(
+class StockTransactionItemListCreateView(
     ListCreateAPIView
 ):
 
-    serializer_class = StockAdjustmentSerializer
+    serializer_class = StockTransactionItemSerializer
 
     permission_classes = [
         IsAuthenticated,
@@ -38,10 +38,11 @@ class StockAdjustmentListCreateView(
         user = self.request.user
 
         queryset = (
-            StockAdjustment.objects
+            StockTransactionItem.objects
             .select_related(
                 "retailer",
                 "branch",
+                "transaction",
                 "product",
                 "batch",
                 "created_by",
@@ -83,15 +84,15 @@ class StockAdjustmentListCreateView(
 
 
 # =====================================================
-# STOCK ADJUSTMENT DETAIL VIEW
+# STOCK TRANSACTION ITEM DETAIL VIEW
 # =====================================================
 
-class StockAdjustmentDetailView(
+class StockTransactionItemDetailView(
     RetrieveUpdateDestroyAPIView
 ):
 
     serializer_class = (
-        StockAdjustmentSerializer
+        StockTransactionItemSerializer
     )
 
     permission_classes = [
@@ -106,10 +107,11 @@ class StockAdjustmentDetailView(
         user = self.request.user
 
         queryset = (
-            StockAdjustment.objects
+            StockTransactionItem.objects
             .select_related(
                 "retailer",
                 "branch",
+                "transaction",
                 "product",
                 "batch",
                 "created_by",

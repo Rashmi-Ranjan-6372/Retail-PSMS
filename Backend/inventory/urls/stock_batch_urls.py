@@ -1,15 +1,11 @@
-# inventory/urls/stock_batch_urls.py
+from django.urls import path
 
-from rest_framework.routers import DefaultRouter
 from inventory.views.stock_batch_views import (
-    StockBatchViewSet
+    StockBatchListCreateView,
+    StockBatchDetailView,
 )
 
-router = DefaultRouter()
-router.register(
-    r'stock-batches',
-    StockBatchViewSet,
-    basename='stock-batch'
-)
-
-urlpatterns = router.urls
+urlpatterns = [
+    path("stock-batches/", StockBatchListCreateView.as_view(), name="stock-batch-list-create",),
+    path("stock-batches/<int:pk>/", StockBatchDetailView.as_view(), name="stock-batch-detail",),
+]

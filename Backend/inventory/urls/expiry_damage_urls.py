@@ -1,13 +1,21 @@
-from rest_framework.routers import DefaultRouter
+from django.urls import path
+
 from inventory.views.expiry_damage_views import (
-    ExpiryDamageViewSet
+    ExpiryDamageListCreateView,
+    ExpiryDamageDetailView,
 )
 
-router = DefaultRouter()
-router.register(
-    r'expiry-damages',
-    ExpiryDamageViewSet,
-    basename='expiry-damage'
-)
+urlpatterns = [
 
-urlpatterns = router.urls
+    path(
+        "",
+        ExpiryDamageListCreateView.as_view(),
+        name="expiry-damage-list-create"
+    ),
+
+    path(
+        "<int:pk>/",
+        ExpiryDamageDetailView.as_view(),
+        name="expiry-damage-detail"
+    ),
+]

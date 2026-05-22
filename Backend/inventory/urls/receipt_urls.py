@@ -1,15 +1,21 @@
-# inventory/urls/receipt_urls.py
+from django.urls import path
 
-from rest_framework.routers import DefaultRouter
 from inventory.views.receipt_views import (
-    ReceiptViewSet
+    ReceiptListCreateView,
+    ReceiptDetailView,
 )
 
-router = DefaultRouter()
-router.register(
-    r'receipts',
-    ReceiptViewSet,
-    basename='receipt'
-)
+urlpatterns = [
 
-urlpatterns = router.urls
+    path(
+        "",
+        ReceiptListCreateView.as_view(),
+        name="receipt-list-create",
+    ),
+
+    path(
+        "<int:pk>/",
+        ReceiptDetailView.as_view(),
+        name="receipt-detail",
+    ),
+]

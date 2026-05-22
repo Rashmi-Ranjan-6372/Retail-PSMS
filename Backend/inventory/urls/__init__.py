@@ -8,3 +8,6 @@ from .stock_adjustment_urls import *
 from .stock_batch_urls import *
 from .stock_transaction_urls import *
 from .stock_transfer_urls import *
+from .sales_return_item_urls import *
+from .purchase_return_item_urls import *
+from .stock_transaction_item_urls import *

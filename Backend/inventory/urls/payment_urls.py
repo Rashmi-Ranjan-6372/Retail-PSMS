@@ -1,15 +1,21 @@
-# inventory/urls/payment_urls.py
+from django.urls import path
 
-from rest_framework.routers import DefaultRouter
 from inventory.views.payment_views import (
-    PaymentViewSet
+    PaymentListCreateView,
+    PaymentDetailView,
 )
 
-router = DefaultRouter()
-router.register(
-    r'payments',
-    PaymentViewSet,
-    basename='payment'
-)
+urlpatterns = [
 
-urlpatterns = router.urls
+    path(
+        "",
+        PaymentListCreateView.as_view(),
+        name="payment-list-create",
+    ),
+
+    path(
+        "<int:pk>/",
+        PaymentDetailView.as_view(),
+        name="payment-detail",
+    ),
+]

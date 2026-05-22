@@ -3,14 +3,20 @@ from rest_framework.generics import (
     RetrieveUpdateDestroyAPIView
 )
 
-from rest_framework.permissions import IsAuthenticated
-
-from inventory.models.stock_adjustment_models import (
-    StockAdjustment
+from rest_framework.permissions import (
+    IsAuthenticated
 )
 
-from inventory.serializers.stock_adjustment_serializers import (
-    StockAdjustmentSerializer
+from inventory.models.purchase_return_item_models import (
+    PurchaseReturnItem
+)
+
+from inventory.serializers.purchase_return_item_serializers import (
+    PurchaseReturnItemSerializer
+)
+
+from inventory.services.purchase_return_item_service import (
+    process_purchase_return_item
 )
 
 from accounts.permissions import (
@@ -19,14 +25,16 @@ from accounts.permissions import (
 
 
 # =====================================================
-# STOCK ADJUSTMENT LIST + CREATE
+# PURCHASE RETURN ITEM LIST + CREATE
 # =====================================================
 
-class StockAdjustmentListCreateView(
+class PurchaseReturnItemListCreateView(
     ListCreateAPIView
 ):
 
-    serializer_class = StockAdjustmentSerializer
+    serializer_class = (
+        PurchaseReturnItemSerializer
+    )
 
     permission_classes = [
         IsAuthenticated,
@@ -38,10 +46,11 @@ class StockAdjustmentListCreateView(
         user = self.request.user
 
         queryset = (
-            StockAdjustment.objects
+            PurchaseReturnItem.objects
             .select_related(
                 "retailer",
                 "branch",
+                "purchase_return",
                 "product",
                 "batch",
                 "created_by",
@@ -75,23 +84,31 @@ class StockAdjustmentListCreateView(
 
     def perform_create(self, serializer):
 
-        serializer.save(
+        purchase_return_item = serializer.save(
             retailer=self.request.user.retailer,
             branch=self.request.user.branch,
             created_by=self.request.user,
         )
 
+        # =========================
+        # BUSINESS LOGIC
+        # =========================
+
+        process_purchase_return_item(
+            purchase_return_item
+        )
+
 
 # =====================================================
-# STOCK ADJUSTMENT DETAIL VIEW
+# PURCHASE RETURN ITEM DETAIL VIEW
 # =====================================================
 
-class StockAdjustmentDetailView(
+class PurchaseReturnItemDetailView(
     RetrieveUpdateDestroyAPIView
 ):
 
     serializer_class = (
-        StockAdjustmentSerializer
+        PurchaseReturnItemSerializer
     )
 
     permission_classes = [
@@ -106,10 +123,11 @@ class StockAdjustmentDetailView(
         user = self.request.user
 
         queryset = (
-            StockAdjustment.objects
+            PurchaseReturnItem.objects
             .select_related(
                 "retailer",
                 "branch",
+                "purchase_return",
                 "product",
                 "batch",
                 "created_by",
@@ -117,21 +135,15 @@ class StockAdjustmentDetailView(
             .all()
         )
 
-        # ================= SUPER ADMIN ================= #
-
         if (
             user.is_superuser or
             getattr(user, "role", None) == "superadmin"
         ):
             return queryset
 
-        # ================= RETAILER FILTER ================= #
-
         queryset = queryset.filter(
             retailer=user.retailer
         )
-
-        # ================= BRANCH FILTER ================= #
 
         if getattr(user, "branch", None):
 

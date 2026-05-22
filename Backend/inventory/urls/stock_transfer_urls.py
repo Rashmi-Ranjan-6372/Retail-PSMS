@@ -1,15 +1,25 @@
-# inventory/urls/stock_transfer_urls.py
+from django.urls import path
 
-from rest_framework.routers import DefaultRouter
 from inventory.views.stock_transfer_views import (
-    StockTransferViewSet
+    StockTransferListCreateView,
+    StockTransferDetailView,
 )
 
-router = DefaultRouter()
-router.register(
-    r'stock-transfers',
-    StockTransferViewSet,
-    basename='stock-transfer'
-)
+urlpatterns = [
 
-urlpatterns = router.urls
+    # =================================================
+    # STOCK TRANSFER
+    # =================================================
+
+    path(
+        "",
+        StockTransferListCreateView.as_view(),
+        name="stock-transfer-list-create"
+    ),
+
+    path(
+        "<int:pk>/",
+        StockTransferDetailView.as_view(),
+        name="stock-transfer-detail"
+    ),
+]

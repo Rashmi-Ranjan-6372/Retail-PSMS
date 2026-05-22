@@ -1,32 +1,34 @@
 from rest_framework.generics import (
     ListCreateAPIView,
-    RetrieveUpdateDestroyAPIView
+    RetrieveUpdateDestroyAPIView,
 )
 
-from rest_framework.permissions import IsAuthenticated
-
-from inventory.models.stock_adjustment_models import (
-    StockAdjustment
+from rest_framework.permissions import (
+    IsAuthenticated,
 )
 
-from inventory.serializers.stock_adjustment_serializers import (
-    StockAdjustmentSerializer
+from inventory.models.sales_item_models import (
+    SalesItem,
+)
+
+from inventory.serializers.sales_item_serializers import (
+    SalesItemSerializer,
 )
 
 from accounts.permissions import (
-    IsAdminOrStaff
+    IsAdminOrStaff,
 )
 
 
 # =====================================================
-# STOCK ADJUSTMENT LIST + CREATE
+# SALES ITEM LIST + CREATE
 # =====================================================
 
-class StockAdjustmentListCreateView(
+class SalesItemListCreateView(
     ListCreateAPIView
 ):
 
-    serializer_class = StockAdjustmentSerializer
+    serializer_class = SalesItemSerializer
 
     permission_classes = [
         IsAuthenticated,
@@ -38,10 +40,11 @@ class StockAdjustmentListCreateView(
         user = self.request.user
 
         queryset = (
-            StockAdjustment.objects
+            SalesItem.objects
             .select_related(
                 "retailer",
                 "branch",
+                "sales",
                 "product",
                 "batch",
                 "created_by",
@@ -49,7 +52,9 @@ class StockAdjustmentListCreateView(
             .all()
         )
 
-        # ================= SUPER ADMIN ================= #
+        # =========================================
+        # SUPER ADMIN
+        # =========================================
 
         if (
             user.is_superuser or
@@ -57,13 +62,17 @@ class StockAdjustmentListCreateView(
         ):
             return queryset
 
-        # ================= RETAILER FILTER ================= #
+        # =========================================
+        # RETAILER FILTER
+        # =========================================
 
         queryset = queryset.filter(
             retailer=user.retailer
         )
 
-        # ================= BRANCH FILTER ================= #
+        # =========================================
+        # BRANCH FILTER
+        # =========================================
 
         if getattr(user, "branch", None):
 
@@ -83,16 +92,14 @@ class StockAdjustmentListCreateView(
 
 
 # =====================================================
-# STOCK ADJUSTMENT DETAIL VIEW
+# SALES ITEM DETAIL VIEW
 # =====================================================
 
-class StockAdjustmentDetailView(
+class SalesItemDetailView(
     RetrieveUpdateDestroyAPIView
 ):
 
-    serializer_class = (
-        StockAdjustmentSerializer
-    )
+    serializer_class = SalesItemSerializer
 
     permission_classes = [
         IsAuthenticated,
@@ -106,10 +113,11 @@ class StockAdjustmentDetailView(
         user = self.request.user
 
         queryset = (
-            StockAdjustment.objects
+            SalesItem.objects
             .select_related(
                 "retailer",
                 "branch",
+                "sales",
                 "product",
                 "batch",
                 "created_by",
@@ -117,7 +125,9 @@ class StockAdjustmentDetailView(
             .all()
         )
 
-        # ================= SUPER ADMIN ================= #
+        # =========================================
+        # SUPER ADMIN
+        # =========================================
 
         if (
             user.is_superuser or
@@ -125,13 +135,17 @@ class StockAdjustmentDetailView(
         ):
             return queryset
 
-        # ================= RETAILER FILTER ================= #
+        # =========================================
+        # RETAILER FILTER
+        # =========================================
 
         queryset = queryset.filter(
             retailer=user.retailer
         )
 
-        # ================= BRANCH FILTER ================= #
+        # =========================================
+        # BRANCH FILTER
+        # =========================================
 
         if getattr(user, "branch", None):
 
