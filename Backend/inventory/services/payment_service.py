@@ -2,11 +2,11 @@ from django.db import transaction
 
 
 # =====================================================
-# PROCESS PAYMENT
+# UPDATE PAYMENT STATUS
 # =====================================================
 
 @transaction.atomic
-def process_payment(
+def update_payment_status(
     payment
 ):
 

@@ -16,7 +16,7 @@ from inventory.serializers.payment_serializers import (
 )
 
 from inventory.services.payment_service import (
-    process_payment
+    update_payment_status
 )
 
 from accounts.permissions import (
@@ -92,7 +92,7 @@ class PaymentListCreateView(
         # BUSINESS LOGIC
         # =========================
 
-        process_payment(payment)
+        update_payment_status(payment)
 
 
 # =====================================================

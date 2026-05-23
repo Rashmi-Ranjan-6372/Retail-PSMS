@@ -16,7 +16,7 @@ from inventory.serializers.receipt_serializers import (
 )
 
 from inventory.services.receipt_service import (
-    process_receipt
+    update_receipt_status
 )
 
 from accounts.permissions import (
@@ -92,7 +92,7 @@ class ReceiptListCreateView(
         # BUSINESS LOGIC
         # =========================
 
-        process_receipt(receipt)
+        update_receipt_status(receipt)
 
 
 # =====================================================

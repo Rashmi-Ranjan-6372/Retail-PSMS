@@ -200,3 +200,32 @@ def create_sale(
     sale.save()
 
     return sale
+
+# =====================================================
+# UPDATE SALES TOTALS
+# =====================================================
+
+def update_sales_totals(sale):
+
+    items = sale.items.all()
+
+    total_amount = Decimal("0.00")
+
+    for item in items:
+
+        total_amount += (
+            item.amount or Decimal("0.00")
+        )
+
+    sale.total_amount = total_amount
+
+    sale.save(
+        update_fields=[
+            "total_amount",
+            "net_amount",
+            "due_amount",
+            "payment_status",
+        ]
+    )
+
+    return sale

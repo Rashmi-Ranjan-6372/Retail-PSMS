@@ -6,7 +6,7 @@ from django.db import transaction
 # =====================================================
 
 @transaction.atomic
-def process_receipt(
+def update_receipt_status(
     receipt
 ):
 
