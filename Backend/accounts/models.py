@@ -16,6 +16,13 @@ class Retailer(models.Model):
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_retailers"
+    )
 
     def __str__(self):
         return self.name
@@ -102,6 +109,13 @@ class User(AbstractUser):
     is_two_factor_enabled = models.BooleanField(default=False)
     otp_secret = models.CharField(max_length=255, blank=True, null=True)
     is_deleted = models.BooleanField(default=False)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_users"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -138,6 +152,10 @@ class User(AbstractUser):
             models.Index(fields=["role"]),
             models.Index(fields=["retailer"]),
             models.Index(fields=["branch"]),
+            models.Index(fields=["is_active"]),
+            models.Index(fields=["retailer", "branch"]),
+            models.Index(fields=["retailer", "role"]),
+            models.Index(fields=["retailer", "is_active"]),
         ]
 
         permissions = [
@@ -182,6 +200,7 @@ class LoginLog(RetailerBranchAutoFillMixin):
             models.Index(fields=["status"]),
             models.Index(fields=["retailer"]),
             models.Index(fields=["branch"]),
+            models.Index(fields=["login_time"]),
         ]
 
 
@@ -217,6 +236,7 @@ class UserSession(RetailerBranchAutoFillMixin):
             models.Index(fields=["is_active"]),
             models.Index(fields=["retailer"]),
             models.Index(fields=["branch"]),
+            models.Index(fields=["refresh_token"]),
         ]
 
 class AuditLog(RetailerBranchAutoFillMixin):
@@ -266,4 +286,5 @@ class AuditLog(RetailerBranchAutoFillMixin):
             models.Index(fields=["action"]),
             models.Index(fields=["branch"]),
             models.Index(fields=["retailer"]),
+            models.Index(fields=["timestamp"]),
         ]

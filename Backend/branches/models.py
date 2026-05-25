@@ -14,6 +14,13 @@ class Branch(models.Model):
     logo = models.ImageField(upload_to='branch_logos/', blank=True, null=True)
     is_active = models.BooleanField(default=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_branches"
+    )
     deleted_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -50,6 +57,8 @@ class Branch(models.Model):
             models.Index(fields=["code"]),
             models.Index(fields=["is_active"]),
             models.Index(fields=["retailer"]),
+            models.Index(fields=["retailer", "is_active"]),
+            models.Index(fields=["retailer", "name"]),
         ]
         unique_together = ("retailer", "name")
 

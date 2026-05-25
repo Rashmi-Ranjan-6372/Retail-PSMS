@@ -35,6 +35,11 @@ class Receipt(models.Model):
             models.Index(fields=["customer"]),
             models.Index(fields=["status"]),
             models.Index(fields=["created_at"]),
+            models.Index(fields=["retailer", "branch"]),
+            models.Index(fields=["retailer", "customer"]),
+            models.Index(fields=["retailer", "status"]),
+            models.Index(fields=["branch", "status"]),
+            models.Index(fields=["customer", "status"]),
         ]
 
     # =========================
@@ -62,6 +67,26 @@ class Receipt(models.Model):
                 self.receipt_no = (
                     f"RCPT-{year}-{next_number:04d}"
                 )
+
+        if self.paid_amount > self.amount:
+            raise ValueError(
+                "Paid amount cannot exceed total amount"
+            )
+
+        self.due_amount = (
+            self.amount - self.paid_amount
+        )
+
+        if self.due_amount <= 0:
+            self.status = "RECEIVED"
+
+        elif self.paid_amount > 0:
+            self.status = "PARTIAL"
+
+        else:
+            self.status = "PENDING"
+
+        super().save(*args, **kwargs)
 
         # =========================
         # DUE CALCULATION

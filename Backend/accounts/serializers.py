@@ -8,6 +8,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from branches.models import Branch
 from .models import Retailer
+from django.db import transaction
 
 User = get_user_model()
 class RetailerCreateSerializer(serializers.Serializer):
@@ -21,7 +22,9 @@ class RetailerCreateSerializer(serializers.Serializer):
     branch_name = serializers.CharField(max_length=255)
     username = serializers.CharField(max_length=150)
     password = serializers.CharField(write_only=True)
-
+    # =====================================================
+    # EMAIL VALIDATION
+    # =====================================================
     def validate_email(self, value):
         if Retailer.objects.filter(email=value).exists():
             raise serializers.ValidationError(
@@ -35,6 +38,23 @@ class RetailerCreateSerializer(serializers.Serializer):
 
         return value
 
+    # =====================================================
+    # MOBILE VALIDATION
+    # =====================================================
+    def validate_mobile(self, value):
+
+        if Retailer.objects.filter(
+            mobile=value
+        ).exists():
+
+            raise serializers.ValidationError(
+                "Mobile number already exists"
+            )
+
+        return value
+    # =====================================================
+    # USERNAME VALIDATION
+    # =====================================================
     def validate_username(self, value):
         if User.objects.filter(username=value).exists():
             raise serializers.ValidationError(
@@ -42,8 +62,12 @@ class RetailerCreateSerializer(serializers.Serializer):
             )
 
         return value
-
+    # =====================================================
+    # CREATE RETAILER
+    # =====================================================
+    @transaction.atomic
     def create(self, validated_data):
+        request = self.context.get("request")
 
         retailer = Retailer.objects.create(
             name=validated_data["retailer_name"],
@@ -53,13 +77,21 @@ class RetailerCreateSerializer(serializers.Serializer):
             address=validated_data.get("address"),
             gst_number=validated_data.get("gst_number"),
             license_number=validated_data.get("license_number"),
+            created_by=request.user
         )
+
+        # =====================================================
+        # CREATE DEFAULT BRANCH
+        # =====================================================
 
         branch = Branch.objects.create(
             retailer=retailer,
-            name=validated_data["branch_name"]
+            name=validated_data["branch_name"],
+            created_by=request.user
         )
-
+        # =====================================================
+        # CREATE SUPERADMIN USER
+        # =====================================================
         user = User.objects.create_user(
             username=validated_data["username"],
             email=validated_data["email"],
@@ -67,6 +99,7 @@ class RetailerCreateSerializer(serializers.Serializer):
             role="superadmin",
             retailer=retailer,
             branch=branch,
+            created_by=request.user,
             is_staff=True,
             is_active=True
         )
@@ -103,40 +136,204 @@ class UserSerializer(serializers.ModelSerializer):
 
 # ================= CREATE STAFF ================= #
 
-class CreateStaffSerializer(serializers.ModelSerializer):
+class CreateStaffSerializer(
+    serializers.ModelSerializer
+):
+
     password = serializers.CharField(
         write_only=True
     )
 
+    role = serializers.CharField(
+        required=False,
+        default="staff"
+    )
+
     class Meta:
+
         model = User
 
         fields = [
-            'username',
-            'email',
-            'password',
-            'phone',
+            "username",
+            "email",
+            "password",
+            "phone",
+            "role",
         ]
 
-    def validate_password(self, value):
-        validate_password(value)
+    # =====================================================
+    # VALIDATE USERNAME
+    # =====================================================
+
+    def validate_username(
+        self,
+        value
+    ):
+
+        if User.objects.filter(
+            username=value
+        ).exists():
+
+            raise serializers.ValidationError(
+                "Username already exists"
+            )
+
         return value
 
-    def create(self, validated_data):
-        request = self.context.get("request")
+    # =====================================================
+    # VALIDATE EMAIL
+    # =====================================================
 
-        validated_data['role'] = 'staff'
+    def validate_email(
+        self,
+        value
+    ):
 
-        validated_data['retailer'] = request.user.retailer
-        validated_data['branch'] = request.user.branch
+        if User.objects.filter(
+            email=value
+        ).exists():
+
+            raise serializers.ValidationError(
+                "Email already exists"
+            )
+
+        return value
+
+    # =====================================================
+    # VALIDATE PASSWORD
+    # =====================================================
+
+    def validate_password(
+        self,
+        value
+    ):
+
+        validate_password(value)
+
+        return value
+
+    # =====================================================
+    # CREATE USER
+    # =====================================================
+
+    def create(
+        self,
+        validated_data
+    ):
+
+        request = self.context.get(
+            "request"
+        )
+
+        role = validated_data.pop(
+            "role",
+            "staff"
+        )
+
+        # =====================================================
+        # ROLE RESTRICTION
+        # =====================================================
+
+        allowed_roles = []
+
+        # PLATFORM OWNER
+        if request.user.is_superuser:
+
+            allowed_roles = [
+                "superadmin",
+                "admin",
+                "manager",
+                "staff",
+            ]
+
+        # RETAILER SUPERADMIN
+        elif request.user.role == "superadmin":
+
+            allowed_roles = [
+                "admin",
+                "manager",
+                "staff",
+            ]
+
+        # ADMIN
+        elif request.user.role == "admin":
+
+            allowed_roles = [
+                "staff",
+            ]
+
+        # STAFF CANNOT CREATE USERS
+        else:
+
+            raise serializers.ValidationError({
+                "error": (
+                    "You do not have permission "
+                    "to create users"
+                )
+            })
+
+        # =====================================================
+        # INVALID ROLE CHECK
+        # =====================================================
+
+        if role not in allowed_roles:
+
+            raise serializers.ValidationError({
+                "role": (
+                    f"You cannot create "
+                    f"{role} users"
+                )
+            })
+
+        # =====================================================
+        # RETAILER / BRANCH ASSIGNMENT
+        # =====================================================
+
+        retailer = validated_data.pop(
+            "retailer",
+            request.user.retailer
+        )
+
+        branch = validated_data.pop(
+            "branch",
+            request.user.branch
+        )
+
+        # =====================================================
+        # CREATE USER
+        # =====================================================
 
         user = User.objects.create_user(
-            **validated_data
+            username=validated_data["username"],
+
+            email=validated_data["email"],
+
+            password=validated_data["password"],
+
+            phone=validated_data.get(
+                "phone"
+            ),
+
+            role=role,
+
+            retailer=retailer,
+
+            branch=branch,
+
+            is_active=True,
         )
+
+        # =====================================================
+        # PASSWORD CHANGE TIME
+        # =====================================================
 
         user.password_changed_at = now()
 
-        user.save()
+        user.save(
+            update_fields=[
+                "password_changed_at"
+            ]
+        )
 
         return user
 

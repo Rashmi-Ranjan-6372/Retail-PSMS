@@ -30,9 +30,21 @@ class PurchaseReturnItem(models.Model):
             models.Index(fields=["product"]),
             models.Index(fields=["batch"]),
             models.Index(fields=["return_type"]),
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["retailer", "branch"]),
+            models.Index(fields=["retailer", "product"]),
+            models.Index(fields=["branch", "product"]),
+            models.Index(fields=["product", "batch"]),
+            models.Index(fields=["retailer", "return_type"]),
         ]
 
     def save(self, *args, **kwargs):
+
+        if self.qty < 0:
+            raise ValueError("Quantity cannot be negative")
+
+        if self.free_qty < 0:
+            raise ValueError("Free quantity cannot be negative")
 
         self.amount = (
             self.qty * self.unit_price

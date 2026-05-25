@@ -32,6 +32,12 @@ class SalesItem(models.Model):
             models.Index(fields=["product"]),
             models.Index(fields=["batch"]),
             models.Index(fields=["created_at"]),
+            models.Index(fields=["retailer", "branch"]),
+            models.Index(fields=["retailer", "sales"]),
+            models.Index(fields=["retailer", "product"]),
+            models.Index(fields=["branch", "product"]),
+            models.Index(fields=["sales", "product"]),
+            models.Index(fields=["product", "batch"]),
         ]
 
     # =========================
@@ -39,6 +45,26 @@ class SalesItem(models.Model):
     # =========================
 
     def save(self, *args, **kwargs):
+
+        if self.qty <= 0:
+            raise ValueError(
+                "Quantity must be greater than 0"
+            )
+
+        if self.unit_price < 0:
+            raise ValueError(
+                "Unit price cannot be negative"
+            )
+
+        if self.discount < 0:
+            raise ValueError(
+                "Discount cannot be negative"
+            )
+
+        if self.tax_percent < 0:
+            raise ValueError(
+                "Tax percent cannot be negative"
+            )
 
         base_amount = (
             (self.qty or 0) *
@@ -48,6 +74,9 @@ class SalesItem(models.Model):
         discounted_amount = (
             base_amount - (self.discount or 0)
         )
+
+        if discounted_amount < 0:
+            discounted_amount = 0
 
         self.tax_amount = (
             discounted_amount *

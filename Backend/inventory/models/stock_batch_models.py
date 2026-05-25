@@ -35,7 +35,19 @@ class StockBatch(models.Model):
             models.Index(fields=["batch_no"]),
             models.Index(fields=["expiry_date"]),
             models.Index(fields=["is_expired"]),
+
+            models.Index(fields=["retailer", "branch"]),
+            models.Index(fields=["retailer", "product"]),
+            models.Index(fields=["branch", "product"]),
+            models.Index(fields=["product", "batch_no"]),
+            models.Index(fields=["product", "expiry_date"]),
+            models.Index(fields=["branch", "expiry_date"]),
+            models.Index(fields=["available_qty"]),
+            models.Index(fields=["available_qty", "expiry_date"]),
+            models.Index(fields=["product", "available_qty"]),
+            models.Index(fields=["product", "is_expired"]),
         ]
+
 
         unique_together = [
             ("product", "batch_no", "branch")
@@ -53,6 +65,46 @@ class StockBatch(models.Model):
         if self.expiry_date:
             self.is_expired = (
                 self.expiry_date < now().date()
+            )
+
+        if self.quantity < 0:
+            raise ValueError(
+                "Quantity cannot be negative"
+            )
+
+        if self.available_qty < 0:
+            raise ValueError(
+                "Available quantity cannot be negative"
+            )
+
+        if self.reserved_qty < 0:
+            raise ValueError(
+                "Reserved quantity cannot be negative"
+            )
+
+        if self.available_qty > self.quantity:
+            raise ValueError(
+                "Available quantity cannot exceed total quantity"
+            )
+
+        if self.purchase_price < 0:
+            raise ValueError(
+                "Purchase price cannot be negative"
+            )
+
+        if self.sale_price < 0:
+            raise ValueError(
+                "Sale price cannot be negative"
+            )
+
+        if self.mrp < 0:
+            raise ValueError(
+                "MRP cannot be negative"
+            )
+
+        if self.sale_price > self.mrp:
+            raise ValueError(
+                "Sale price cannot exceed MRP"
             )
 
         super().save(*args, **kwargs)

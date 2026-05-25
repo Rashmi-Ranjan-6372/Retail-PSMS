@@ -30,6 +30,10 @@ class ExpiryDamage(models.Model):
             models.Index(fields=["issue_type"]),
             models.Index(fields=["expiry_date"]),
             models.Index(fields=["created_at"]),
+            models.Index(fields=["retailer", "branch"]),
+            models.Index(fields=["retailer", "issue_type"]),
+            models.Index(fields=["retailer", "expiry_date"]),
+            models.Index(fields=["branch", "issue_type"]),
         ]
 
     def save(self, *args, **kwargs):

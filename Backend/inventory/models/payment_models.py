@@ -40,6 +40,11 @@ class Payment(models.Model):
             models.Index(fields=["supplier"]),
             models.Index(fields=["status"]),
             models.Index(fields=["created_at"]),
+            models.Index(fields=["retailer", "branch"]),
+            models.Index(fields=["retailer", "supplier"]),
+            models.Index(fields=["retailer", "status"]),
+            models.Index(fields=["branch", "status"]),
+            models.Index(fields=["supplier", "status"]),
         ]
 
     # =========================

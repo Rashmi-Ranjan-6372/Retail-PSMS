@@ -35,6 +35,15 @@ class StockTransactionItem(models.Model):
             models.Index(fields=["batch"]),
             models.Index(fields=["movement_type"]),
             models.Index(fields=["created_at"]),
+            models.Index(fields=["retailer", "branch"]),
+            models.Index(fields=["retailer", "product"]),
+            models.Index(fields=["branch", "product"]),
+            models.Index(fields=["product", "batch"]),
+            models.Index(fields=["product", "movement_type"]),
+            models.Index(fields=["batch", "movement_type"]),
+            models.Index(fields=["transaction", "movement_type"]),
+            models.Index(fields=["created_at", "movement_type"]),
+            models.Index(fields=["expiry_date"]),
         ]
 
     # =========================
@@ -42,6 +51,31 @@ class StockTransactionItem(models.Model):
     # =========================
 
     def save(self, *args, **kwargs):
+
+        if self.qty <= 0:
+            raise ValueError(
+                "Quantity must be greater than 0"
+            )
+
+        if self.free_qty < 0:
+            raise ValueError(
+                "Free quantity cannot be negative"
+            )
+
+        if self.purchase_price < 0:
+            raise ValueError(
+                "Purchase price cannot be negative"
+            )
+
+        if self.sale_price < 0:
+            raise ValueError(
+                "Sale price cannot be negative"
+            )
+
+        if self.available_after < 0:
+            raise ValueError(
+                "Available stock cannot be negative"
+            )
 
         self.total_amount = (
             (self.qty or 0) *

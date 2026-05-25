@@ -5,7 +5,7 @@ from .models import Retailer, User, LoginLog, UserSession, AuditLog
 
 @admin.register(Retailer)
 class RetailerAdmin(admin.ModelAdmin):
-    list_display = ("id", "name", "owner_name", "mobile", "email", "is_active", "created_at")
+    list_display = ("id", "name", "owner_name", "mobile", "email", "is_active", "created_by", "created_at")
     search_fields = ("name", "owner_name", "mobile", "email", "gst_number")
     list_filter = ("is_active", "created_at")
     ordering = ("-created_at",)
@@ -13,7 +13,7 @@ class RetailerAdmin(admin.ModelAdmin):
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    list_display = ("id", "username", "email", "role", "retailer", "branch", "is_active", "is_deleted")
+    list_display = ("id", "username", "email", "role", "retailer", "branch", "is_active", "is_deleted", "created_by", "created_at")
     list_filter = ("role", "is_active", "is_deleted", "retailer", "branch")
     search_fields = ("username", "email", "phone", "employee_id")
 

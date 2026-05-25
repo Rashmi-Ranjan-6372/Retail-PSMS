@@ -32,6 +32,13 @@ class StockAdjustment(models.Model):
             models.Index(fields=["batch"]),
             models.Index(fields=["adjustment_type"]),
             models.Index(fields=["created_at"]),
+            models.Index(fields=["retailer", "branch"]),
+            models.Index(fields=["retailer", "product"]),
+            models.Index(fields=["branch", "product"]),
+            models.Index(fields=["product", "batch"]),
+            models.Index(fields=["retailer", "adjustment_type"]),
+            models.Index(fields=["branch", "adjustment_type"]),
+            models.Index(fields=["created_at", "adjustment_type"]),
         ]
 
     # =========================
@@ -39,6 +46,16 @@ class StockAdjustment(models.Model):
     # =========================
 
     def save(self, *args, **kwargs):
+
+        if self.adjustment_qty <= 0:
+            raise ValueError(
+                "Adjustment quantity must be greater than 0"
+            )
+
+        if self.unit_price < 0:
+            raise ValueError(
+                "Unit price cannot be negative"
+            )
 
         self.total_value = (
             (self.adjustment_qty or 0) *

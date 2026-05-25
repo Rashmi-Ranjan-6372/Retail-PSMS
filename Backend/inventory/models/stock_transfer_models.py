@@ -28,14 +28,24 @@ class StockTransfer(models.Model):
 
         ordering = ["-id"]
 
+
         indexes = [
             models.Index(fields=["transfer_no"]),
             models.Index(fields=["retailer"]),
+            models.Index(fields=["branch"]),
             models.Index(fields=["from_branch"]),
             models.Index(fields=["to_branch"]),
             models.Index(fields=["product"]),
+            models.Index(fields=["batch"]),
             models.Index(fields=["status"]),
             models.Index(fields=["created_at"]),
+            models.Index(fields=["retailer", "status"]),
+            models.Index(fields=["from_branch", "status"]),
+            models.Index(fields=["to_branch", "status"]),
+            models.Index(fields=["from_branch", "to_branch"]),
+            models.Index(fields=["product", "batch"]),
+            models.Index(fields=["retailer", "product"]),
+            models.Index(fields=["created_at", "status"]),
         ]
 
     # =========================
@@ -44,20 +54,51 @@ class StockTransfer(models.Model):
 
     def save(self, *args, **kwargs):
 
+        if self.quantity <= 0:
+            raise ValueError(
+                "Quantity must be greater than 0"
+            )
+
+        if self.unit_cost < 0:
+            raise ValueError(
+                "Unit cost cannot be negative"
+            )
+
+        if self.from_branch == self.to_branch:
+            raise ValueError(
+                "From branch and To branch cannot be same"
+            )
+
         if not self.transfer_no:
 
             year = datetime.now().year
 
             with transaction.atomic():
 
-                last_id = (
-                    StockTransfer.objects.filter(
+                last_transfer = (
+                    StockTransfer.objects
+                    .select_for_update()
+                    .filter(
                         transfer_no__startswith=f"TR-{year}"
-                    ).aggregate(Max("id"))["id__max"] or 0
+                    )
+                    .order_by("-id")
+                    .first()
                 )
 
+                next_number = 1
+
+                if last_transfer:
+
+                    try:
+                        next_number = int(
+                            last_transfer.transfer_no.split("-")[-1]
+                        ) + 1
+
+                    except Exception:
+                        next_number = last_transfer.id + 1
+
                 self.transfer_no = (
-                    f"TR-{year}-{last_id + 1:04d}"
+                    f"TR-{year}-{next_number:04d}"
                 )
 
         self.total_cost = (

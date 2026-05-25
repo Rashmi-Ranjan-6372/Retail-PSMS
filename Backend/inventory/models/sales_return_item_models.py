@@ -29,14 +29,40 @@ class SalesReturnItem(models.Model):
             models.Index(fields=["product"]),
             models.Index(fields=["batch"]),
             models.Index(fields=["created_at"]),
+            models.Index(fields=["retailer", "branch"]),
+            models.Index(fields=["retailer", "product"]),
+            models.Index(fields=["branch", "product"]),
+            models.Index(fields=["sales_return"]),
+            models.Index(fields=["sales_return", "product"]),
+            models.Index(fields=["product", "batch"]),
         ]
 
     def save(self, *args, **kwargs):
+
+        if self.qty <= 0:
+            raise ValueError(
+                "Quantity must be greater than 0"
+            )
+
+        if self.unit_price < 0:
+            raise ValueError(
+                "Unit price cannot be negative"
+            )
+
+        if self.discount < 0:
+            raise ValueError(
+                "Discount cannot be negative"
+            )
 
         base_amount = (
             (self.qty or 0) *
             (self.unit_price or 0)
         )
+
+        if self.discount > base_amount:
+            raise ValueError(
+                "Discount cannot exceed amount"
+            )
 
         self.amount = (
             base_amount -

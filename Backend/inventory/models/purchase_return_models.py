@@ -20,6 +20,8 @@ class PurchaseReturn(models.Model):
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.SET_NULL,null=True,blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    is_deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
 
@@ -32,6 +34,11 @@ class PurchaseReturn(models.Model):
             models.Index(fields=["supplier"]),
             models.Index(fields=["status"]),
             models.Index(fields=["created_at"]),
+            models.Index(fields=["retailer", "branch"]),
+            models.Index(fields=["retailer", "supplier"]),
+            models.Index(fields=["retailer", "status"]),
+            models.Index(fields=["branch", "status"]),
+            models.Index(fields=["supplier", "status"]),
         ]
 
     # =========================
@@ -39,9 +46,13 @@ class PurchaseReturn(models.Model):
     # =========================
 
     def save(self, *args, **kwargs):
+
         if not self.return_no:
+
             year = datetime.now().year
+
             with transaction.atomic():
+
                 last_id = (
                     PurchaseReturn.objects.filter(
                         return_no__startswith=f"PR-{year}"
@@ -49,11 +60,18 @@ class PurchaseReturn(models.Model):
                         max_id=Max("id")
                     )["max_id"] or 0
                 )
+
                 next_number = last_id + 1
 
                 self.return_no = (
                     f"PR-{year}-{next_number:04d}"
                 )
+
+        if self.adjusted_amount > self.total_amount:
+            raise ValueError(
+                "Adjusted amount cannot exceed total amount"
+            )
+
         super().save(*args, **kwargs)
 
     def __str__(self):

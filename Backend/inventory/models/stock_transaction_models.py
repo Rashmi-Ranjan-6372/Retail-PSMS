@@ -34,6 +34,14 @@ class StockTransaction(models.Model):
             models.Index(fields=["retailer"]),
             models.Index(fields=["branch"]),
             models.Index(fields=["created_at"]),
+            models.Index(fields=["retailer", "branch"]),
+            models.Index(fields=["retailer", "transaction_type"]),
+            models.Index(fields=["retailer", "status"]),
+            models.Index(fields=["branch", "status"]),
+            models.Index(fields=["transaction_type", "status"]),
+            models.Index(fields=["supplier"]),
+            models.Index(fields=["customer"]),
+            models.Index(fields=["reference_no"]),
         ]
 
     # =========================
@@ -42,20 +50,46 @@ class StockTransaction(models.Model):
 
     def save(self, *args, **kwargs):
 
+        if self.total_amount < 0:
+            raise ValueError(
+                "Total amount cannot be negative"
+            )
+
+        if not self.transaction_type:
+            raise ValueError(
+                "Transaction type is required"
+            )
+
         if not self.transaction_no:
 
             year = datetime.now().year
 
             with transaction.atomic():
 
-                last_id = (
-                    StockTransaction.objects.filter(
+                last_transaction = (
+                    StockTransaction.objects
+                    .select_for_update()
+                    .filter(
                         transaction_no__startswith=f"ST-{year}"
-                    ).aggregate(Max("id"))["id__max"] or 0
+                    )
+                    .order_by("-id")
+                    .first()
                 )
 
+                next_number = 1
+
+                if last_transaction:
+
+                    try:
+                        next_number = int(
+                            last_transaction.transaction_no.split("-")[-1]
+                        ) + 1
+
+                    except Exception:
+                        next_number = last_transaction.id + 1
+
                 self.transaction_no = (
-                    f"ST-{year}-{last_id + 1:04d}"
+                    f"ST-{year}-{next_number:04d}"
                 )
 
         super().save(*args, **kwargs)

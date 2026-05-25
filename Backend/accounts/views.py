@@ -23,6 +23,7 @@ from .serializers import (
 )
 from .permissions import IsAdmin
 from .models import AuditLog, LoginLog, UserSession, Retailer
+from django.db import transaction
 User = get_user_model()
 
 class CreateRetailerView(APIView):
@@ -36,11 +37,15 @@ class CreateRetailerView(APIView):
                 "message": "Only platform owner can create retailer"
             }, status=status.HTTP_403_FORBIDDEN)
 
-        serializer = RetailerCreateSerializer(data=request.data)
+        serializer = RetailerCreateSerializer(
+            data=request.data,
+            context={"request": request}
+        )
 
         if serializer.is_valid():
 
-            data = serializer.save()
+            with transaction.atomic():
+                data = serializer.save()
 
             return Response({
                 "success": True,
@@ -158,6 +163,8 @@ def create_audit_log(user, action, model_name, object_id="", description="", req
 class LoginView(APIView):
     permission_classes = [AllowAny]
 
+    MAX_ACTIVE_DEVICES = 3
+
     def post(self, request):
 
         serializer = LoginSerializer(data=request.data)
@@ -166,6 +173,7 @@ class LoginView(APIView):
         user_agent = get_user_agent(request)
 
         if not serializer.is_valid():
+
             LoginLog.objects.create(
                 ip_address=ip,
                 user_agent=user_agent,
@@ -189,23 +197,66 @@ class LoginView(APIView):
         user = serializer.validated_data
 
         if not user.is_active:
+
             return Response({
                 "success": False,
                 "message": "Account is inactive"
             }, status=status.HTTP_403_FORBIDDEN)
 
-        tokens = get_tokens_for_user(user)
-        device_id = request.data.get("device_id", "unknown")
-
-        UserSession.objects.filter(
-            user_id=user.id,
-            is_active=True
-        ).update(
-            is_active=False,
-            revoked_at=timezone.now()
+        device_id = request.data.get(
+            "device_id",
+            "unknown"
         )
 
-        # Create new session
+        # =====================================================
+        # DEVICE LIMIT CHECK
+        # =====================================================
+
+        active_sessions = (
+            UserSession.objects.filter(
+                user=user,
+                is_active=True
+            ).order_by("created_at")
+        )
+
+        if (
+            active_sessions.count() >=
+            self.MAX_ACTIVE_DEVICES
+        ):
+
+            oldest_session = (
+                active_sessions.first()
+            )
+
+            try:
+
+                RefreshToken(
+                    oldest_session.refresh_token
+                ).blacklist()
+
+            except Exception:
+                pass
+
+            oldest_session.is_active = False
+            oldest_session.revoked_at = timezone.now()
+
+            oldest_session.save(
+                update_fields=[
+                    "is_active",
+                    "revoked_at"
+                ]
+            )
+
+        # =====================================================
+        # GENERATE TOKENS
+        # =====================================================
+
+        tokens = get_tokens_for_user(user)
+
+        # =====================================================
+        # CREATE SESSION
+        # =====================================================
+
         session = UserSession.objects.create(
             user=user,
             retailer_id=user.retailer_id,
@@ -217,7 +268,10 @@ class LoginView(APIView):
             is_active=True
         )
 
-        # Login log
+        # =====================================================
+        # LOGIN LOG
+        # =====================================================
+
         LoginLog.objects.create(
             user=user,
             retailer=user.retailer,
@@ -227,17 +281,30 @@ class LoginView(APIView):
             status="success"
         )
 
-        # Audit log
+        # =====================================================
+        # AUDIT LOG
+        # =====================================================
+
         create_audit_log(
             user=user,
             action="login",
             model_name="UserSession",
             object_id=session.id,
-            description=f"User logged in from device {device_id}",
+            description=(
+                f"User logged in "
+                f"from device {device_id}"
+            ),
             request=request
         )
 
-        update_last_login(None, user)
+        # =====================================================
+        # UPDATE LAST LOGIN
+        # =====================================================
+
+        update_last_login(
+            None,
+            user
+        )
 
         return Response({
             "success": True,
@@ -798,7 +865,9 @@ class DeleteUserView(APIView):
         blacklist_user_sessions(target_user)
 
         username = target_user.username
-        target_user.delete()
+        target_user.is_deleted = True
+        target_user.is_active = False
+        target_user.save()
 
         create_audit_log(
             user=request.user,
@@ -915,7 +984,10 @@ class UserFilterView(ListAPIView):
         user = self.request.user
 
         if user.is_superuser:
-            queryset = User.objects.all()
+            queryset = User.objects.select_related(
+                    "retailer",
+                    "branch"
+                )
 
         elif user.role == "superadmin":
             queryset = User.objects.filter(retailer=user.retailer)

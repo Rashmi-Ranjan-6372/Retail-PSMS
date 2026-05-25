@@ -26,8 +26,16 @@ class SalesReturn(models.Model):
 
         indexes = [
             models.Index(fields=["return_no"]),
+            models.Index(fields=["retailer"]),
+            models.Index(fields=["branch"]),
+            models.Index(fields=["sales"]),
             models.Index(fields=["status"]),
             models.Index(fields=["created_at"]),
+            models.Index(fields=["retailer", "branch"]),
+            models.Index(fields=["retailer", "status"]),
+            models.Index(fields=["branch", "status"]),
+            models.Index(fields=["sales", "status"]),
+            models.Index(fields=["created_at", "status"]),
         ]
 
     def save(self, *args, **kwargs):
@@ -41,12 +49,29 @@ class SalesReturn(models.Model):
                 last_id = (
                     SalesReturn.objects.filter(
                         return_no__startswith=f"SR-{year}"
-                    ).aggregate(Max("id"))["id__max"] or 0
+                    ).aggregate(
+                        Max("id")
+                    )["id__max"] or 0
                 )
 
                 self.return_no = (
                     f"SR-{year}-{last_id + 1:04d}"
                 )
+
+        if self.total_amount < 0:
+            raise ValueError(
+                "Total amount cannot be negative"
+            )
+
+        if self.refund_amount < 0:
+            raise ValueError(
+                "Refund amount cannot be negative"
+            )
+
+        if self.refund_amount > self.total_amount:
+            raise ValueError(
+                "Refund amount cannot exceed total amount"
+            )
 
         super().save(*args, **kwargs)
 

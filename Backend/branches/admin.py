@@ -4,7 +4,7 @@ from .models import Branch
 
 @admin.register(Branch)
 class BranchAdmin(admin.ModelAdmin):
-    list_display = ('id', 'retailer', 'name', 'code', 'logo_preview', 'phone', 'email', 'is_active', 'created_at', 'deleted_at')
+    list_display = ('id', 'retailer', 'name', 'code', 'logo_preview', 'phone', 'email', 'is_active', 'created_by', 'created_at', 'deleted_at')
     search_fields = ('name', 'code', 'phone', 'email', 'address', 'retailer__name')
     list_filter = ('retailer', 'is_active', 'created_at')
     ordering = ('name',)

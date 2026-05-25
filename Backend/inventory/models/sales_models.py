@@ -24,6 +24,8 @@ class Sales(models.Model):
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.SET_NULL,null=True,blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    is_deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
 
@@ -37,6 +39,13 @@ class Sales(models.Model):
             models.Index(fields=["payment_status"]),
             models.Index(fields=["status"]),
             models.Index(fields=["created_at"]),
+            models.Index(fields=["retailer", "branch"]),
+            models.Index(fields=["retailer", "customer"]),
+            models.Index(fields=["retailer", "payment_status"]),
+            models.Index(fields=["retailer", "status"]),
+            models.Index(fields=["branch", "status"]),
+            models.Index(fields=["customer", "payment_status"]),
+            models.Index(fields=["created_at", "status"]),
         ]
 
     # =========================
@@ -62,6 +71,55 @@ class Sales(models.Model):
                 self.invoice_no = (
                     f"INV-{year}-{last_id + 1:04d}"
                 )
+
+        if self.total_amount < 0:
+            raise ValueError(
+                "Total amount cannot be negative"
+            )
+
+        if self.discount < 0:
+            raise ValueError(
+                "Discount cannot be negative"
+            )
+
+        if self.paid_amount < 0:
+            raise ValueError(
+                "Paid amount cannot be negative"
+            )
+
+        if self.discount > self.total_amount:
+            raise ValueError(
+                "Discount cannot exceed total amount"
+            )
+
+        self.net_amount = (
+            (self.total_amount or 0) -
+            (self.discount or 0)
+        )
+
+        if self.paid_amount > self.net_amount:
+            raise ValueError(
+                "Paid amount cannot exceed net amount"
+            )
+
+        self.due_amount = (
+            self.net_amount -
+            (self.paid_amount or 0)
+        )
+
+        if self.due_amount <= 0:
+
+            self.payment_status = "PAID"
+
+        elif self.paid_amount > 0:
+
+            self.payment_status = "PARTIAL"
+
+        else:
+
+            self.payment_status = "UNPAID"
+
+        super().save(*args, **kwargs)
 
         # =========================
         # CALCULATE NET AMOUNT
