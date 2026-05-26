@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     'branches',
     'masters',
     'inventory',
+    'reports',
 ]
 
 
