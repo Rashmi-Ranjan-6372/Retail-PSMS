@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     'masters',
     'inventory',
     'reports',
+    'settings',
 ]
 
 
