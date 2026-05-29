@@ -134,11 +134,32 @@ class User(AbstractUser):
             self.account_locked_until > timezone.now()
         )
 
-    def is_super_admin(self):
-        return self.role == "superadmin" or self.is_superuser
+    def is_platform_owner(self):
+        return self.is_active and self.is_superuser
+
+
+    def is_retailer_owner(self):
+        return self.is_active and self.role == "superadmin"
+
 
     def is_admin(self):
-        return self.role == "admin"
+        return self.is_active and self.role == "admin"
+
+
+    def is_store_manager(self):
+        return self.is_active and self.role == "store_manager"
+
+
+    def is_pharmacist(self):
+        return self.is_active and self.role == "pharmacist"
+
+
+    def is_cashier(self):
+        return self.is_active and self.role == "cashier"
+
+
+    def is_staff_member(self):
+        return self.is_active and self.role == "staff"
 
     def __str__(self):
         return f"{self.username} ({self.role})"

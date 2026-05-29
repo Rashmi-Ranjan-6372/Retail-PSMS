@@ -7,7 +7,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 
 from .models import Branch
 from .serializers import BranchSerializer
-from accounts.permissions import IsSuperAdmin, is_super_admin
+from accounts.permissions import IsRetailerOwnerOrPlatformOwner
 from accounts.views import create_audit_log
 
 
@@ -16,7 +16,7 @@ from accounts.views import create_audit_log
 class BranchCreateView(generics.CreateAPIView):
     queryset = Branch.objects.select_related("retailer")
     serializer_class = BranchSerializer
-    permission_classes = [IsAuthenticated, IsSuperAdmin]
+    permission_classes = [IsAuthenticated, IsRetailerOwnerOrPlatformOwner]
     parser_classes = [MultiPartParser, FormParser]
 
     def perform_create(self, serializer):
@@ -51,20 +51,20 @@ class BranchListView(generics.ListAPIView):
         user = self.request.user
 
         # PLATFORM OWNER
-        if is_super_admin(user):
+        if user.is_platform_owner():
             return Branch.objects.filter(
                 deleted_at__isnull=True
             ).select_related("retailer")
 
         # RETAILER OWNER
-        if user.role == "superadmin":
+        if user.is_retailer_owner():
             return Branch.objects.filter(
                 retailer=user.retailer,
                 deleted_at__isnull=True
             )
 
-        # ADMIN (branch level)
-        if user.role == "admin":
+        # ADMIN
+        if user.is_admin():
             return Branch.objects.filter(
                 id=user.branch_id,
                 retailer=user.retailer,
@@ -83,6 +83,7 @@ class BranchListView(generics.ListAPIView):
             "data": serializer.data
         })
 
+
 # ==================== BRANCH DETAIL VIEW ==================== #
 
 class BranchDetailView(generics.RetrieveAPIView):
@@ -97,13 +98,16 @@ class BranchDetailView(generics.RetrieveAPIView):
         branch = super().get_object()
         user = self.request.user
 
-        if is_super_admin(user):
+        # PLATFORM OWNER
+        if user.is_platform_owner():
             return branch
 
-        if user.role == "superadmin" and branch.retailer == user.retailer:
+        # RETAILER OWNER
+        if user.is_retailer_owner() and branch.retailer == user.retailer:
             return branch
 
-        if user.role == "admin" and branch.id == user.branch_id:
+        # ADMIN
+        if user.is_admin() and branch.id == user.branch_id:
             return branch
 
         raise PermissionDenied("You do not have access to this branch")
@@ -123,20 +127,22 @@ class BranchDetailView(generics.RetrieveAPIView):
 class BranchUpdateView(generics.UpdateAPIView):
     queryset = Branch.objects.filter(deleted_at__isnull=True)
     serializer_class = BranchSerializer
-    permission_classes = [IsAuthenticated, IsSuperAdmin]
+    permission_classes = [IsAuthenticated, IsRetailerOwnerOrPlatformOwner]
     parser_classes = [MultiPartParser, FormParser]
 
     def get_object(self):
         branch = super().get_object()
         user = self.request.user
 
-        if is_super_admin(user):
+        # PLATFORM OWNER
+        if user.is_platform_owner():
             return branch
 
-        if branch.retailer != user.retailer:
-            raise PermissionDenied("Not allowed")
+        # RETAILER OWNER
+        if user.is_retailer_owner() and branch.retailer == user.retailer:
+            return branch
 
-        return branch
+        raise PermissionDenied("Not allowed")
 
     def update(self, request, *args, **kwargs):
         response = super().update(request, *args, **kwargs)
@@ -160,11 +166,14 @@ class BranchUpdateView(generics.UpdateAPIView):
 # ==================== BRANCH SOFT DELETE VIEW ==================== #
 
 class BranchSoftDeleteView(APIView):
-    permission_classes = [IsAuthenticated, IsSuperAdmin]
+    permission_classes = [IsAuthenticated, IsRetailerOwnerOrPlatformOwner]
 
     def patch(self, request, pk):
         try:
-            branch = Branch.objects.get(pk=pk, deleted_at__isnull=True)
+            branch = Branch.objects.get(
+                pk=pk,
+                deleted_at__isnull=True
+            )
         except Branch.DoesNotExist:
             return Response({
                 "success": False,
@@ -173,7 +182,16 @@ class BranchSoftDeleteView(APIView):
 
         user = request.user
 
-        if not is_super_admin(user) and branch.retailer != user.retailer:
+        # PLATFORM OWNER
+        if user.is_platform_owner():
+            pass
+
+        # RETAILER OWNER
+        elif user.is_retailer_owner():
+            if branch.retailer != user.retailer:
+                raise PermissionDenied("Not allowed")
+
+        else:
             raise PermissionDenied("Not allowed")
 
         if not branch.is_active:
@@ -202,17 +220,29 @@ class BranchSoftDeleteView(APIView):
 # ==================== BRANCH RESTORE VIEW ==================== #
 
 class BranchRestoreView(APIView):
-    permission_classes = [IsAuthenticated, IsSuperAdmin]
+    permission_classes = [IsAuthenticated, IsRetailerOwnerOrPlatformOwner]
 
     def patch(self, request, pk):
         try:
             branch = Branch.objects.get(pk=pk)
         except Branch.DoesNotExist:
-            return Response({"error": "Not found"}, status=404)
+            return Response({
+                "success": False,
+                "message": "Branch not found"
+            }, status=404)
 
         user = request.user
 
-        if not is_super_admin(user) and branch.retailer != user.retailer:
+        # PLATFORM OWNER
+        if user.is_platform_owner():
+            pass
+
+        # RETAILER OWNER
+        elif user.is_retailer_owner():
+            if branch.retailer != user.retailer:
+                raise PermissionDenied("Not allowed")
+
+        else:
             raise PermissionDenied("Not allowed")
 
         if branch.is_active:
@@ -241,17 +271,29 @@ class BranchRestoreView(APIView):
 # ==================== BRANCH HARD DELETE VIEW ==================== #
 
 class BranchHardDeleteView(APIView):
-    permission_classes = [IsAuthenticated, IsSuperAdmin]
+    permission_classes = [IsAuthenticated, IsRetailerOwnerOrPlatformOwner]
 
     def delete(self, request, pk):
         try:
             branch = Branch.objects.get(pk=pk)
         except Branch.DoesNotExist:
-            return Response({"error": "Not found"}, status=404)
+            return Response({
+                "success": False,
+                "message": "Branch not found"
+            }, status=404)
 
         user = request.user
 
-        if not is_super_admin(user) and branch.retailer != user.retailer:
+        # PLATFORM OWNER
+        if user.is_platform_owner():
+            pass
+
+        # RETAILER OWNER
+        elif user.is_retailer_owner():
+            if branch.retailer != user.retailer:
+                raise PermissionDenied("Not allowed")
+
+        else:
             raise PermissionDenied("Not allowed")
 
         branch_name = branch.name
@@ -280,19 +322,26 @@ class BranchStatusFilterView(generics.ListAPIView):
 
     def get_queryset(self):
         status_param = self.request.query_params.get("status", "active")
-
         queryset = Branch.objects.select_related("retailer")
 
         if status_param == "active":
-            return queryset.filter(is_active=True, deleted_at__isnull=True)
+            return queryset.filter(
+                is_active=True,
+                deleted_at__isnull=True
+            )
 
         if status_param == "inactive":
-            return queryset.filter(is_active=False)
+            return queryset.filter(
+                is_active=False
+            )
 
         if status_param == "all":
             return queryset.all()
 
-        return queryset.filter(is_active=True, deleted_at__isnull=True)
+        return queryset.filter(
+            is_active=True,
+            deleted_at__isnull=True
+        )
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()

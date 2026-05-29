@@ -12,7 +12,7 @@ from branches.models import Branch
 
 from accounts.permissions import (
     IsAdmin,
-    IsSuperAdmin
+    IsRetailerOwnerOrPlatformOwner
 )
 
 
@@ -426,7 +426,7 @@ class SupplierDeleteView(
 
     permission_classes = [
         IsAuthenticated,
-        IsSuperAdmin
+        IsRetailerOwnerOrPlatformOwner
     ]
 
     def get_queryset(self):

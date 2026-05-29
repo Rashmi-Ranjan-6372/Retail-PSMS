@@ -21,57 +21,13 @@ from .serializers import (
     CreateStaffSerializer,
     RetailerCreateSerializer
 )
-from .permissions import IsAdmin
+from .permissions import (IsAdmin, IsRetailerOwnerOrPlatformOwner)
 from .models import AuditLog, LoginLog, UserSession, Retailer
-from django.db import transaction
 User = get_user_model()
 
-class CreateRetailerView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-
-        if not request.user.is_superuser:
-            return Response({
-                "success": False,
-                "message": "Only platform owner can create retailer"
-            }, status=status.HTTP_403_FORBIDDEN)
-
-        serializer = RetailerCreateSerializer(
-            data=request.data,
-            context={"request": request}
-        )
-
-        if serializer.is_valid():
-
-            with transaction.atomic():
-                data = serializer.save()
-
-            return Response({
-                "success": True,
-                "message": "Retailer created successfully",
-                "retailer": {
-                    "id": data["retailer"].id,
-                    "name": data["retailer"].name,
-                    "email": data["retailer"].email,
-                },
-                "branch": {
-                    "id": data["branch"].id,
-                    "name": data["branch"].name,
-                },
-                "superadmin": {
-                    "id": data["user"].id,
-                    "username": data["user"].username,
-                    "role": data["user"].role,
-                }
-            }, status=status.HTTP_201_CREATED)
-
-        return Response({
-            "success": False,
-            "errors": serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
-
-# ================= HELPER FUNCTIONS ================= #
+# =====================================================
+# HELPER FUNCTIONS
+# =====================================================
 
 def get_client_ip(request):
     x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
@@ -111,17 +67,17 @@ def can_manage_user(request_user, target_user):
         return True
 
     if (
-        request_user.role == "superadmin" and
-        request_user.retailer == target_user.retailer and
+        getattr(request_user, "role", None) == "superadmin" and
+        request_user.retailer_id == target_user.retailer_id and
         target_user.role != "superadmin"
     ):
         return True
 
     if (
-        request_user.role == "admin" and
-        request_user.retailer == target_user.retailer and
-        request_user.branch == target_user.branch and
-        target_user.role not in ["superadmin"]
+        getattr(request_user, "role", None) == "admin" and
+        request_user.retailer_id == target_user.retailer_id and
+        request_user.branch_id == target_user.branch_id and
+        target_user.role not in ["superadmin", "admin"]
     ):
         return True
 
@@ -141,9 +97,20 @@ def blacklist_user_sessions(user):
         except Exception:
             pass
 
-    sessions.update(is_active=False)
+    sessions.update(
+        is_active=False,
+        revoked_at=timezone.now()
+    )
 
-def create_audit_log(user, action, model_name, object_id="", description="", request=None):
+
+def create_audit_log(
+    user,
+    action,
+    model_name,
+    object_id="",
+    description="",
+    request=None
+):
     try:
         AuditLog.objects.create(
             user=user,
@@ -158,9 +125,75 @@ def create_audit_log(user, action, model_name, object_id="", description="", req
     except Exception:
         pass
 
-# ================= LOGIN ================= #
+# =====================================================
+# CREATE RETAILER
+# =====================================================
+
+class CreateRetailerView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        IsRetailerOwnerOrPlatformOwner
+    ]
+
+    def post(self, request):
+
+        if not request.user.is_superuser:
+            return Response({
+                "success": False,
+                "message": "Only platform owner can create retailer"
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = RetailerCreateSerializer(
+            data=request.data,
+            context={"request": request}
+        )
+
+        if serializer.is_valid():
+
+            with transaction.atomic():
+                data = serializer.save()
+
+            create_audit_log(
+                user=request.user,
+                action="create",
+                model_name="Retailer",
+                object_id=data["retailer"].id,
+                description=f"Created retailer {data['retailer'].name}",
+                request=request
+            )
+
+            return Response({
+                "success": True,
+                "message": "Retailer created successfully",
+                "retailer": {
+                    "id": data["retailer"].id,
+                    "name": data["retailer"].name,
+                    "email": data["retailer"].email,
+                },
+                "branch": {
+                    "id": data["branch"].id,
+                    "name": data["branch"].name,
+                },
+                "superadmin": {
+                    "id": data["user"].id,
+                    "username": data["user"].username,
+                    "role": data["user"].role,
+                }
+            }, status=status.HTTP_201_CREATED)
+
+        return Response({
+            "success": False,
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+
+# =====================================================
+# LOGIN
+# =====================================================
 
 class LoginView(APIView):
+
     permission_classes = [AllowAny]
 
     MAX_ACTIVE_DEVICES = 3
@@ -197,43 +230,26 @@ class LoginView(APIView):
         user = serializer.validated_data
 
         if not user.is_active:
-
             return Response({
                 "success": False,
                 "message": "Account is inactive"
             }, status=status.HTTP_403_FORBIDDEN)
 
-        device_id = request.data.get(
-            "device_id",
-            "unknown"
-        )
+        device_id = request.data.get("device_id", "unknown")
 
-        # =====================================================
-        # DEVICE LIMIT CHECK
-        # =====================================================
+        active_sessions = UserSession.objects.filter(
+            user=user,
+            is_active=True
+        ).order_by("created_at")
 
-        active_sessions = (
-            UserSession.objects.filter(
-                user=user,
-                is_active=True
-            ).order_by("created_at")
-        )
+        if active_sessions.count() >= self.MAX_ACTIVE_DEVICES:
 
-        if (
-            active_sessions.count() >=
-            self.MAX_ACTIVE_DEVICES
-        ):
-
-            oldest_session = (
-                active_sessions.first()
-            )
+            oldest_session = active_sessions.first()
 
             try:
-
                 RefreshToken(
                     oldest_session.refresh_token
                 ).blacklist()
-
             except Exception:
                 pass
 
@@ -247,15 +263,7 @@ class LoginView(APIView):
                 ]
             )
 
-        # =====================================================
-        # GENERATE TOKENS
-        # =====================================================
-
         tokens = get_tokens_for_user(user)
-
-        # =====================================================
-        # CREATE SESSION
-        # =====================================================
 
         session = UserSession.objects.create(
             user=user,
@@ -268,10 +276,6 @@ class LoginView(APIView):
             is_active=True
         )
 
-        # =====================================================
-        # LOGIN LOG
-        # =====================================================
-
         LoginLog.objects.create(
             user=user,
             retailer=user.retailer,
@@ -281,30 +285,16 @@ class LoginView(APIView):
             status="success"
         )
 
-        # =====================================================
-        # AUDIT LOG
-        # =====================================================
-
         create_audit_log(
             user=user,
             action="login",
             model_name="UserSession",
             object_id=session.id,
-            description=(
-                f"User logged in "
-                f"from device {device_id}"
-            ),
+            description=f"User logged in from device {device_id}",
             request=request
         )
 
-        # =====================================================
-        # UPDATE LAST LOGIN
-        # =====================================================
-
-        update_last_login(
-            None,
-            user
-        )
+        update_last_login(None, user)
 
         return Response({
             "success": True,
@@ -313,9 +303,11 @@ class LoginView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-# ================= TOKEN REFRESH ================= #
-
+# =====================================================
+# TOKEN REFRESH
+# =====================================================
 class CustomTokenRefreshView(TokenRefreshView):
+
     serializer_class = TokenRefreshSerializer
     permission_classes = [AllowAny]
 
@@ -360,9 +352,12 @@ class ProfileView(APIView):
             "data": UserSerializer(request.user).data
         })
 
-# ================= CREATE STAFF ================= #
 
+# =====================================================
+# CREATE STAFF
+# =====================================================
 class CreateStaffView(APIView):
+
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def post(self, request):
@@ -396,7 +391,7 @@ class CreateStaffView(APIView):
                         "message": "Branch does not belong to retailer"
                     }, status=status.HTTP_400_BAD_REQUEST)
 
-                serializer.save(
+                user = serializer.save(
                     retailer_id=retailer_id,
                     branch_id=branch_id
                 )
@@ -422,17 +417,26 @@ class CreateStaffView(APIView):
                         "message": "Invalid branch"
                     }, status=status.HTTP_400_BAD_REQUEST)
 
-                serializer.save(
+                user = serializer.save(
                     retailer=request.user.retailer,
                     branch=branch
                 )
 
             else:
 
-                serializer.save(
+                user = serializer.save(
                     retailer=request.user.retailer,
                     branch=request.user.branch
                 )
+
+            create_audit_log(
+                user=request.user,
+                action="create",
+                model_name="User",
+                object_id=user.id,
+                description=f"Created user {user.username}",
+                request=request
+            )
 
             return Response({
                 "success": True,
