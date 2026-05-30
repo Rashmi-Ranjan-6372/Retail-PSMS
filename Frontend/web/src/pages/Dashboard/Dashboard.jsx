@@ -5,52 +5,42 @@ import {
   Text,
   Heading,
   Flex,
+  SimpleGrid,
 } from "@chakra-ui/react";
 
-const Card = ({ title, value }) => {
+const DashboardCard = ({ title, value }) => {
   return (
     <Box
-      p={5}
-      borderRadius="lg"
-      boxShadow="md"
-      bg="white"
-      _dark={{ bg: "gray.700" }}
+      p={6}
+      borderRadius="xl"
+      boxShadow="sm"
+      border="1px solid"
+      borderColor="gray.100"
     >
-      <Text fontSize="sm" color="gray.500">
+      <Text fontSize="sm" color="gray.500" mb={2}>
         {title}
       </Text>
-      <Heading size="md">{value}</Heading>
+
+      <Heading size="lg" color="gray.700">
+        {value}
+      </Heading>
     </Box>
   );
 };
 
 const Dashboard = () => {
   return (
-    <Box p={5}>
+    <Box w="100%" minH="calc(100vh - 70px)" bg="gray.50" px={6} py={4}>
       {/* Header */}
-      <Flex justify="space-between" mb={5}>
-        <Heading size="lg">Dashboard</Heading>
-        <Text>Welcome back, John! 👋</Text>
+      <Flex justify="space-between" align="center" mb={8}>
+        <Box>
+          <Heading size="lg" color="gray.700">
+            Dashboard
+          </Heading>
+
+          <Text color="gray.500">Welcome back 👋</Text>
+        </Box>
       </Flex>
-
-      {/* Cards */}
-      <Grid templateColumns="repeat(4, 1fr)" gap={5}>
-        <GridItem>
-          <Card title="Total Sales" value="₹25,000" />
-        </GridItem>
-
-        <GridItem>
-          <Card title="Today's Revenue" value="₹5,000" />
-        </GridItem>
-
-        <GridItem>
-          <Card title="Customers" value="120" />
-        </GridItem>
-
-        <GridItem>
-          <Card title="Stock Items" value="350" />
-        </GridItem>
-      </Grid>
     </Box>
   );
 };

@@ -4,15 +4,21 @@ import Sidebar from "./Sidebar";
 
 const Layout = ({ children }) => {
   return (
-    <Flex>
+    <Flex minH="100vh" bg="gray.50" gap={3}>
       {/* Sidebar */}
-      <Sidebar />
+      <Box w="260px" bg="white">
+        <Sidebar />
+      </Box>
 
       {/* Main Content */}
-      <Box flex="1">
-        <Navbar />
+      <Box flex="1" display="flex" flexDirection="column">
+        {/* Navbar */}
+        <Box position="sticky" top="0" zIndex="10" bg="white">
+          <Navbar />
+        </Box>
 
-        <Box p={5}>
+        {/* Page Content */}
+        <Box flex="1" p={5} bg="gray.50">
           {children}
         </Box>
       </Box>
