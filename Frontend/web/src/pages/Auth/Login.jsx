@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { loginUser } from "../../API/authAPI";
 import useAuth from "../../hooks/useAuth";
-
+import { FaEye, FaEyeSlash } from "react-icons/fa";
 const Login = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
@@ -15,7 +15,7 @@ const Login = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-
+  const [focusedField, setFocusedField] = useState("");
   // Handle input change
   const handleChange = (e) => {
     setForm({
@@ -63,48 +63,73 @@ const Login = () => {
 
         <form onSubmit={handleSubmit}>
           {/* Username */}
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>Username</label>
+          <div style={styles.field}>
             <input
               type="text"
               name="username"
-              placeholder="Enter username"
               value={form.username}
               onChange={handleChange}
+              onFocus={() => setFocusedField("username")}
+              onBlur={() => setFocusedField("")}
               style={styles.input}
             />
+
+            <label
+              style={{
+                ...styles.floatingLabel,
+                ...(focusedField === "username" || form.username
+                  ? styles.floatingLabelActive
+                  : {}),
+              }}
+            >
+              Username
+            </label>
           </div>
 
           {/* Password */}
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>Password</label>
-            <div style={{ position: "relative" }}>
-              <input
-                type={showPassword ? "text" : "password"}
-                name="password"
-                placeholder="Enter password"
-                value={form.password}
-                onChange={handleChange}
-                style={styles.input}
-              />
-              <span
-                onClick={() => setShowPassword(!showPassword)}
-                style={styles.toggle}
-              >
-                {showPassword ? "🙈" : "👁"}
-              </span>
-            </div>
+          <div style={styles.field}>
+            <input
+              type={showPassword ? "text" : "password"}
+              name="password"
+              value={form.password}
+              onChange={handleChange}
+              onFocus={() => setFocusedField("password")}
+              onBlur={() => setFocusedField("")}
+              style={styles.input}
+            />
+
+            <label
+              style={{
+                ...styles.floatingLabel,
+                ...(focusedField === "password" || form.password
+                  ? styles.floatingLabelActive
+                  : {}),
+              }}
+            >
+              Password
+            </label>
+
+            <span
+              onClick={() => setShowPassword(!showPassword)}
+              style={styles.toggle}
+            >
+              {showPassword ? <FaEyeSlash /> : <FaEye />}
+            </span>
           </div>
 
-          {/* Button */}
-          <button type="submit" style={styles.button} disabled={loading}>
+          {/* Login Button */}
+          <button
+            type="submit"
+            style={styles.button}
+            disabled={loading}
+          >
             {loading ? "Logging in..." : "Login"}
           </button>
-        </form>
-      </div>
-    </div>
+        </form >
+      </div >
+    </div >
   );
-};                                                                                                                                                                                               
+};
 
 export default Login;
 
@@ -116,46 +141,72 @@ export default Login;
 
 const styles = {
   container: {
-    height: "100vh",
+    minHeight: "100vh",
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
-    background: "#CBD0DD",
+    background: "linear-gradient(135deg, #F8FAFC 0%, #EEF6FF 100%)",
+    padding: "20px",
     fontFamily: "Inter, Arial, sans-serif",
   },
 
   card: {
-    width: "420px",
-    padding: "40px",
-    borderRadius: "20px",
+    width: "100%",
+    maxWidth: "450px",
+    padding: "30px",
+    borderRadius: "16px",
     background: "#FFFFFF",
-    border: "1px solid #B8C0D0",
-    boxShadow: "0 10px 25px rgba(0, 0, 0, 0.08)",
+    border: "1px solid #E2E8F0",
+    boxShadow: "0 10px 25px rgba(0,0,0,0.08)",
+    boxSizing: "border-box",
+  },
+  field: {
+    position: "relative",
+    marginBottom: "24px",
   },
 
+  floatingLabel: {
+    position: "absolute",
+    left: "14px",
+    top: "16px",
+    color: "#94A3B8",
+    fontSize: "14px",
+    transition: "all 0.2s ease",
+    pointerEvents: "none",
+    background: "#FFFFFF",
+  },
+
+  floatingLabelActive: {
+    top: "-10px",
+    left: "12px",
+    padding: "0 6px",
+    fontSize: "12px",
+    color: "#2563EB",
+    fontWeight: "600",
+  },
   logo: {
     textAlign: "center",
-    fontSize: "52px",
-    marginBottom: "12px",
+    fontSize: "48px",
+    marginBottom: "10px",
   },
 
   title: {
     color: "#1E293B",
-    marginBottom: "6px",
+    marginBottom: "4px",
     textAlign: "center",
-    fontSize: "30px",
+    fontSize: "24px",
     fontWeight: "700",
   },
 
   subtitle: {
     color: "#64748B",
-    marginBottom: "28px",
+    marginBottom: "24px",
     textAlign: "center",
     fontSize: "14px",
   },
 
   inputGroup: {
-    marginBottom: "18px",
+    marginBottom: "16px",
     textAlign: "left",
   },
 
@@ -169,10 +220,11 @@ const styles = {
 
   input: {
     width: "100%",
-    padding: "14px",
-    borderRadius: "10px",
-    border: "1px solid #CBD0DD",
-    background: "#F8FAFC",
+    height: "52px",
+    padding: "18px 14px 0px 14px",
+    borderRadius: "8px",
+    border: "1.5px solid #94A3B8",
+    background: "#FFFFFF",
     color: "#1E293B",
     outline: "none",
     boxSizing: "border-box",
@@ -191,17 +243,16 @@ const styles = {
 
   button: {
     width: "100%",
-    padding: "14px",
-    marginTop: "14px",
-    borderRadius: "10px",
+    padding: "12px",
+    marginTop: "12px",
+    borderRadius: "8px",
     border: "none",
-    background: "#3B82F6",
+    background: "#2563EB",
     color: "#FFFFFF",
     fontWeight: "700",
     fontSize: "15px",
     cursor: "pointer",
-    boxShadow: "0 4px 12px rgba(59,130,246,0.25)",
-    transition: "all 0.2s ease",
+    boxShadow: "0 4px 12px rgba(37,99,235,0.25)",
   },
 
   error: {
@@ -209,22 +260,8 @@ const styles = {
     color: "#DC2626",
     padding: "12px",
     borderRadius: "8px",
-    marginBottom: "15px",
+    marginBottom: "16px",
     border: "1px solid #FECACA",
     fontSize: "14px",
-  },
-
-  footer: {
-    textAlign: "center",
-    marginTop: "20px",
-    color: "#64748B",
-    fontSize: "12px",
-  },
-
-  version: {
-    textAlign: "center",
-    color: "#94A3B8",
-    fontSize: "11px",
-    marginTop: "5px",
   },
 };
