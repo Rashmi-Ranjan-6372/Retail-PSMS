@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'inventory',
     'reports',
     'settings',
+    'backups',
 ]
 
 # ---------------- MIDDLEWARE ---------------- #
@@ -164,3 +165,18 @@ SIMPLE_JWT = {
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': True,
 }
+
+# ==========================================
+# EMAIL CONFIGURATION
+# ==========================================
+
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+
+EMAIL_HOST_USER = "rashmiranjan6372@gmail.com"
+EMAIL_HOST_PASSWORD = "lscazuhoyiqywqmz"
+
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER

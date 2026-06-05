@@ -7,8 +7,10 @@ from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from branches.models import Branch
-from .models import Retailer
+from .models import Retailer, User, EmailOTP
 from django.db import transaction
+from django.utils import timezone
+from datetime import timedelta
 
 User = get_user_model()
 class RetailerCreateSerializer(serializers.Serializer):
@@ -345,36 +347,135 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField()
 
     def validate(self, data):
+        username = data.get("username")
+        password = data.get("password")
+
+        try:
+            user = User.objects.get(
+                username=username
+            )
+
+        except User.DoesNotExist:
+
+            raise serializers.ValidationError(
+                "Invalid credentials"
+            )
+
+        # Check account lock
+        if user.account_locked_until:
+
+            if user.account_locked_until > timezone.now():
+
+                raise serializers.ValidationError(
+                    f"Account is locked until "
+                    f"{user.account_locked_until.strftime('%d-%m-%Y %H:%M')}"
+                )
+
+        # Authenticate user
         user = authenticate(
-            username=data['username'],
-            password=data['password']
+            username=username,
+            password=password
         )
 
         if not user:
+
+            db_user = User.objects.filter(
+                username=username
+            ).first()
+
+            if db_user:
+
+                db_user.failed_login_attempts += 1
+
+                if db_user.failed_login_attempts >= 4:
+
+                    db_user.account_locked_until = (
+                        timezone.now() +
+                        timedelta(minutes=30)
+                    )
+
+                db_user.save(
+                    update_fields=[
+                        "failed_login_attempts",
+                        "account_locked_until"
+                    ]
+                )
+
             raise serializers.ValidationError(
                 "Invalid credentials"
             )
 
         if not user.is_active:
+
             raise serializers.ValidationError(
                 "Account is inactive"
             )
 
         if getattr(user, "is_deleted", False):
+
             raise serializers.ValidationError(
                 "Account has been deleted"
             )
 
-        if (
-            hasattr(user, "is_account_locked") and
-            user.is_account_locked()
-        ):
-            raise serializers.ValidationError(
-                "Account is temporarily locked"
+        # Reset failed attempts after successful login
+        user.failed_login_attempts = 0
+        user.account_locked_until = None
+
+        user.save(
+            update_fields=[
+                "failed_login_attempts",
+                "account_locked_until"
+            ]
+        )
+
+        return user 
+
+# ================= VERIFY OTP ================= #
+
+class VerifyOTPSerializer(serializers.Serializer):
+
+    user_id = serializers.IntegerField()
+
+    otp = serializers.CharField(
+        max_length=6,
+        min_length=6
+    )
+
+    def validate(self, data):
+
+        try:
+            user = User.objects.get(
+                id=data["user_id"]
             )
 
-        return user
+        except User.DoesNotExist:
 
+            raise serializers.ValidationError(
+                "Invalid user"
+            )
+
+        data["user"] = user
+
+        return data
+    
+# ================= RESEND OTP ================= #
+
+class ResendOTPSerializer(serializers.Serializer):
+
+    user_id = serializers.IntegerField()
+
+    def validate_user_id(self, value):
+
+        if not User.objects.filter(
+            id=value
+        ).exists():
+
+            raise serializers.ValidationError(
+                "User not found"
+            )
+
+        return value
+    
 
 # ================= ADMIN RESET PASSWORD ================= #
 

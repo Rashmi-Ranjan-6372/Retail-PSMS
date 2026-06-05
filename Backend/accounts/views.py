@@ -1,3 +1,4 @@
+from config import settings
 from branches.models import Branch
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -13,16 +14,22 @@ from django.contrib.auth.models import update_last_login
 from django.db.models import Q
 from django.utils import timezone
 from django.db import transaction
-
+from django.contrib.auth import authenticate
+from django.core.mail import send_mail
+import random
+from datetime import timedelta
 from .serializers import (
     AdminResetPasswordSerializer,
     LoginSerializer,
     UserSerializer,
     CreateStaffSerializer,
-    RetailerCreateSerializer
+    RetailerCreateSerializer,
+    VerifyOTPSerializer,
+    ResendOTPSerializer
 )
+
 from .permissions import (IsAdmin, IsRetailerOwnerOrPlatformOwner)
-from .models import AuditLog, LoginLog, UserSession, Retailer
+from .models import AuditLog, LoginLog, UserSession, EmailOTP
 User = get_user_model()
 
 # =====================================================
@@ -191,11 +198,8 @@ class CreateRetailerView(APIView):
 # =====================================================
 # LOGIN
 # =====================================================
-
 class LoginView(APIView):
-
     permission_classes = [AllowAny]
-
     MAX_ACTIVE_DEVICES = 3
 
     def post(self, request):
@@ -229,13 +233,93 @@ class LoginView(APIView):
 
         user = serializer.validated_data
 
+        # =====================================================
+        #               ACCOUNT LOCKOUT CHECK
+        # =====================================================
+
+        if user.is_account_locked():
+
+            return Response({
+                "success": False,
+                "message":
+                f"Account locked until {user.account_locked_until}"
+            }, status=status.HTTP_403_FORBIDDEN)
+
         if not user.is_active:
+
             return Response({
                 "success": False,
                 "message": "Account is inactive"
             }, status=status.HTTP_403_FORBIDDEN)
 
-        device_id = request.data.get("device_id", "unknown")
+        # Reset failed attempts after successful password verification
+
+        user.failed_login_attempts = 0
+        user.account_locked_until = None
+        user.save(
+            update_fields=[
+                "failed_login_attempts",
+                "account_locked_until"
+            ]
+        )
+
+        # =====================================================
+        # EMAIL OTP FOR SUPERADMIN & ADMIN
+        # =====================================================
+
+        if user.role in ["superadmin", "admin"]:
+
+            otp = str(
+                random.randint(
+                    100000,
+                    999999
+                )
+            )
+
+            EmailOTP.objects.filter(
+                user=user
+            ).delete()
+
+            EmailOTP.objects.create(
+                user=user,
+                otp=otp,
+                expires_at=timezone.now() +
+                timedelta(minutes=5)
+            )
+
+            send_mail(
+                subject="Retail PSMS Login OTP",
+                message=f"Your OTP is {otp}. Valid for 5 minutes.",
+                from_email=settings.EMAIL_HOST_USER,
+                recipient_list=[user.email],
+                fail_silently=False
+            )
+
+            create_audit_log(
+                user=user,
+                action="login",
+                model_name="EmailOTP",
+                object_id=user.id,
+                description="OTP sent for login verification",
+                request=request
+            )
+
+            return Response({
+                "success": True,
+                "otp_required": True,
+                "user_id": user.id,
+                "message":
+                "OTP has been sent to your registered email."
+            }, status=status.HTTP_200_OK)
+
+        # =====================================================
+        # NORMAL LOGIN FOR OTHER ROLES
+        # =====================================================
+
+        device_id = request.data.get(
+            "device_id",
+            "unknown"
+        )
 
         active_sessions = UserSession.objects.filter(
             user=user,
@@ -302,7 +386,223 @@ class LoginView(APIView):
             "tokens": tokens
         }, status=status.HTTP_200_OK)
 
+# =====================================================
+#                  VERIFY OTP
+# =====================================================
+class VerifyOTPView(APIView):
+    permission_classes = [AllowAny]
+    MAX_ACTIVE_DEVICES = 3
 
+    def post(self, request):
+
+        serializer = VerifyOTPSerializer(
+            data=request.data
+        )
+
+        if not serializer.is_valid():
+
+            return Response(
+                {
+                    "success": False,
+                    "errors": serializer.errors
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user = serializer.validated_data["user"]
+        otp = serializer.validated_data["otp"]
+
+        try:
+
+            otp_obj = EmailOTP.objects.get(
+                user=user,
+                otp=otp,
+                is_verified=False
+            )
+
+        except EmailOTP.DoesNotExist:
+
+            return Response(
+                {
+                    "success": False,
+                    "message": "Invalid OTP"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if otp_obj.expires_at < timezone.now():
+
+            otp_obj.delete()
+
+            return Response(
+                {
+                    "success": False,
+                    "message": "OTP expired"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        otp_obj.delete()
+
+        ip = get_client_ip(request)
+        user_agent = get_user_agent(request)
+
+        device_id = request.data.get(
+            "device_id",
+            "unknown"
+        )
+
+        active_sessions = UserSession.objects.filter(
+            user=user,
+            is_active=True
+        ).order_by("created_at")
+
+        if active_sessions.count() >= self.MAX_ACTIVE_DEVICES:
+
+            oldest_session = active_sessions.first()
+
+            try:
+                RefreshToken(
+                    oldest_session.refresh_token
+                ).blacklist()
+            except Exception:
+                pass
+
+            oldest_session.is_active = False
+            oldest_session.revoked_at = timezone.now()
+
+            oldest_session.save(
+                update_fields=[
+                    "is_active",
+                    "revoked_at"
+                ]
+            )
+
+        refresh = RefreshToken.for_user(user)
+
+        session = UserSession.objects.create(
+            user=user,
+            retailer=user.retailer,
+            branch=user.branch,
+            device_id=device_id,
+            refresh_token=str(refresh),
+            ip_address=ip,
+            user_agent=user_agent,
+            is_active=True
+        )
+
+        LoginLog.objects.create(
+            user=user,
+            retailer=user.retailer,
+            branch=user.branch,
+            ip_address=ip,
+            user_agent=user_agent,
+            status="success"
+        )
+
+        create_audit_log(
+            user=user,
+            action="login",
+            model_name="UserSession",
+            object_id=session.id,
+            description=f"OTP verified and login completed from {device_id}",
+            request=request
+        )
+
+        return Response(
+            {
+                "success": True,
+
+                "access": str(
+                    refresh.access_token
+                ),
+
+                "refresh": str(
+                    refresh
+                ),
+
+                "user": UserSerializer(
+                    user
+                ).data
+            },
+            status=status.HTTP_200_OK
+        )
+
+# =====================================================
+#                  RESEND OTP
+# =====================================================
+class ResendOTPView(APIView):
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+
+        serializer = ResendOTPSerializer(
+            data=request.data
+        )
+
+        if not serializer.is_valid():
+
+            return Response(
+                {
+                    "success": False,
+                    "errors": serializer.errors
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user = serializer.validated_data["user"]
+
+        EmailOTP.objects.filter(
+            user=user
+        ).delete()
+
+        otp = str(
+            random.randint(
+                100000,
+                999999
+            )
+        )
+
+        EmailOTP.objects.create(
+            user=user,
+            otp=otp,
+            expires_at=timezone.now() +
+            timedelta(minutes=5)
+        )
+
+        send_mail(
+            subject="Retail PSMS Login OTP",
+            message=(
+                f"Dear {user.username},\n\n"
+                f"Your login OTP is: {otp}\n\n"
+                f"This OTP is valid for 5 minutes."
+            ),
+            from_email=settings.EMAIL_HOST_USER,
+            recipient_list=[
+                user.email
+            ],
+            fail_silently=False
+        )
+
+        create_audit_log(
+            user=user,
+            action="login",
+            model_name="EmailOTP",
+            object_id=user.id,
+            description="OTP resent successfully",
+            request=request
+        )
+
+        return Response(
+            {
+                "success": True,
+                "message":
+                "OTP resent successfully"
+            },
+            status=status.HTTP_200_OK
+        )
+    
 # =====================================================
 # TOKEN REFRESH
 # =====================================================
@@ -339,8 +639,9 @@ class CustomTokenRefreshView(TokenRefreshView):
 
         return response
 
-
-# ================= PROFILE ================= #
+# =====================================================
+#                        PROFILE 
+# =====================================================
 
 class ProfileView(APIView):
     permission_classes = [IsAuthenticated]

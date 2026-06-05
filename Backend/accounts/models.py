@@ -186,6 +186,34 @@ class User(AbstractUser):
             ("can_view_reports", "Can view reports"),
         ]
 
+class EmailOTP(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="otps"
+    )
+    otp = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_verified = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"{self.user.username} - {self.otp}"
+    
+    class Meta:
+        ordering = ["-created_at"]
+
+        indexes = [
+            models.Index(fields=["user"]),
+            models.Index(fields=["otp"]),
+            models.Index(fields=["is_verified"]),
+            models.Index(fields=["expires_at"]),
+
+            models.Index(
+                fields=["user", "otp", "is_verified"]
+            ),
+        ]
+    
 class LoginLog(RetailerBranchAutoFillMixin):
     STATUS_CHOICES = (
         ("success", "Success"),

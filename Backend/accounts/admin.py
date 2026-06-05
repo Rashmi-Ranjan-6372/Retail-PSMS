@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import Retailer, User, LoginLog, UserSession, AuditLog
+from .models import Retailer, User, LoginLog, UserSession, AuditLog, EmailOTP
 
 
 @admin.register(Retailer)
@@ -74,3 +74,36 @@ class AuditLogAdmin(admin.ModelAdmin):
     search_fields = ("user__username", "model_name", "object_id", "description")
     readonly_fields = ("timestamp",)
     ordering = ("-timestamp",)
+
+@admin.register(EmailOTP)
+class EmailOTPAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "user",
+        "otp",
+        "is_verified",
+        "created_at",
+        "expires_at",
+    )
+
+    list_filter = (
+        "is_verified",
+        "created_at",
+        "expires_at",
+    )
+
+    search_fields = (
+        "user__username",
+        "user__email",
+        "otp",
+    )
+
+    readonly_fields = (
+        "created_at",
+    )
+
+    ordering = (
+        "-created_at",
+    )
+
+    list_per_page = 25

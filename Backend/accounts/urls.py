@@ -4,6 +4,8 @@ from .views import *
 urlpatterns = [
     path("create-retailer/", CreateRetailerView.as_view(), name="create-retailer"),
     path('login/', LoginView.as_view()),
+    path('refresh-token/', CustomTokenRefreshView.as_view()),
+    path('resend-otp/', ResendOTPView.as_view()),
     path('logout/', LogoutView.as_view()),
     path('logout-all/', LogoutAllDevicesView.as_view()),
     path('logout-all-except-own/', LogoutAllExceptOwnView.as_view()),
