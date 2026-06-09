@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     'reports',
     'settings',
     'backups',
+    'subscriptions',
 ]
 
 # ---------------- MIDDLEWARE ---------------- #

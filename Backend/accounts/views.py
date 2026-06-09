@@ -29,7 +29,8 @@ from .serializers import (
 )
 
 from .permissions import (IsAdmin, IsRetailerOwnerOrPlatformOwner)
-from .models import AuditLog, LoginLog, UserSession, EmailOTP
+from .models import AuditLog, LoginLog, Retailer, UserSession, EmailOTP
+from subscriptions.utils import validate_user_subscription
 User = get_user_model()
 
 # =====================================================
@@ -668,86 +669,119 @@ class CreateStaffView(APIView):
             context={"request": request}
         )
 
-        if serializer.is_valid():
-
-            if request.user.is_superuser:
-
-                retailer_id = request.data.get("retailer")
-                branch_id = request.data.get("branch")
-
-                if not retailer_id or not branch_id:
-                    return Response({
-                        "success": False,
-                        "message": "Retailer and branch are required"
-                    }, status=status.HTTP_400_BAD_REQUEST)
-
-                branch = Branch.objects.filter(
-                    id=branch_id,
-                    retailer_id=retailer_id
-                ).first()
-
-                if not branch:
-                    return Response({
-                        "success": False,
-                        "message": "Branch does not belong to retailer"
-                    }, status=status.HTTP_400_BAD_REQUEST)
-
-                user = serializer.save(
-                    retailer_id=retailer_id,
-                    branch_id=branch_id
-                )
-
-            elif request.user.role == "superadmin":
-
-                branch_id = request.data.get("branch")
-
-                if not branch_id:
-                    return Response({
-                        "success": False,
-                        "message": "Branch is required"
-                    }, status=status.HTTP_400_BAD_REQUEST)
-
-                branch = Branch.objects.filter(
-                    id=branch_id,
-                    retailer=request.user.retailer
-                ).first()
-
-                if not branch:
-                    return Response({
-                        "success": False,
-                        "message": "Invalid branch"
-                    }, status=status.HTTP_400_BAD_REQUEST)
-
-                user = serializer.save(
-                    retailer=request.user.retailer,
-                    branch=branch
-                )
-
-            else:
-
-                user = serializer.save(
-                    retailer=request.user.retailer,
-                    branch=request.user.branch
-                )
-
-            create_audit_log(
-                user=request.user,
-                action="create",
-                model_name="User",
-                object_id=user.id,
-                description=f"Created user {user.username}",
-                request=request
-            )
+        if not serializer.is_valid():
 
             return Response({
-                "success": True,
-                "message": "Staff created successfully"
-            }, status=status.HTTP_201_CREATED)
+                "success": False,
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # ==========================================
+        # PLATFORM OWNER
+        # ==========================================
+        if request.user.is_superuser:
+
+            retailer_id = request.data.get("retailer")
+            branch_id = request.data.get("branch")
+
+            if not retailer_id or not branch_id:
+                return Response({
+                    "success": False,
+                    "message": "Retailer and branch are required"
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                retailer = Retailer.objects.get(
+                    id=retailer_id
+                )
+            except Retailer.DoesNotExist:
+                return Response({
+                    "success": False,
+                    "message": "Retailer not found"
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            # Subscription Validation
+            validate_user_subscription(
+                retailer
+            )
+
+            branch = Branch.objects.filter(
+                id=branch_id,
+                retailer_id=retailer_id
+            ).first()
+
+            if not branch:
+                return Response({
+                    "success": False,
+                    "message": "Branch does not belong to retailer"
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            user = serializer.save(
+                retailer=retailer,
+                branch=branch
+            )
+
+        # ==========================================
+        # RETAILER OWNER (SUPERADMIN)
+        # ==========================================
+        elif request.user.role == "superadmin":
+
+            validate_user_subscription(
+                request.user.retailer
+            )
+
+            branch_id = request.data.get("branch")
+
+            if not branch_id:
+                return Response({
+                    "success": False,
+                    "message": "Branch is required"
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            branch = Branch.objects.filter(
+                id=branch_id,
+                retailer=request.user.retailer
+            ).first()
+
+            if not branch:
+                return Response({
+                    "success": False,
+                    "message": "Invalid branch"
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            user = serializer.save(
+                retailer=request.user.retailer,
+                branch=branch
+            )
+
+        # ==========================================
+        # ADMIN
+        # ==========================================
+        else:
+
+            validate_user_subscription(
+                request.user.retailer
+            )
+
+            user = serializer.save(
+                retailer=request.user.retailer,
+                branch=request.user.branch
+            )
+
+        create_audit_log(
+            user=request.user,
+            action="create",
+            model_name="User",
+            object_id=user.id,
+            description=f"Created user {user.username}",
+            request=request
+        )
 
         return Response({
-            "success": False,
-            "errors": serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
+            "success": True,
+            "message": "Staff created successfully",
+            "data": UserSerializer(user).data
+        }, status=status.HTTP_201_CREATED)
 
 
 # ================= LOGOUT ================= #

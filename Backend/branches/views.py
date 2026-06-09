@@ -9,7 +9,7 @@ from .models import Branch
 from .serializers import BranchSerializer
 from accounts.permissions import IsRetailerOwnerOrPlatformOwner
 from accounts.views import create_audit_log
-
+from subscriptions.utils import validate_branch_subscription
 
 # ==================== BRANCH CREATE VIEW ==================== #
 
@@ -20,7 +20,9 @@ class BranchCreateView(generics.CreateAPIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def perform_create(self, serializer):
-        branch = serializer.save(retailer=self.request.user.retailer)
+        retailer = self.request.user.retailer
+        validate_branch_subscription(retailer)
+        branch = serializer.save(retailer=retailer)
 
         create_audit_log(
             user=self.request.user,
@@ -250,7 +252,11 @@ class BranchRestoreView(APIView):
                 "success": False,
                 "message": "Branch already active"
             }, status=400)
-
+        
+        validate_branch_subscription(
+                branch.retailer
+            )
+        
         branch.restore()
 
         create_audit_log(
