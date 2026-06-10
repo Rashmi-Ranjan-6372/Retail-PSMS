@@ -222,11 +222,16 @@ class BranchSoftDeleteView(APIView):
 # ==================== BRANCH RESTORE VIEW ==================== #
 
 class BranchRestoreView(APIView):
-    permission_classes = [IsAuthenticated, IsRetailerOwnerOrPlatformOwner]
+    permission_classes = [
+        IsAuthenticated,
+        IsRetailerOwnerOrPlatformOwner
+    ]
 
     def patch(self, request, pk):
+
         try:
             branch = Branch.objects.get(pk=pk)
+
         except Branch.DoesNotExist:
             return Response({
                 "success": False,
@@ -235,28 +240,32 @@ class BranchRestoreView(APIView):
 
         user = request.user
 
-        # PLATFORM OWNER
         if user.is_platform_owner():
             pass
 
-        # RETAILER OWNER
         elif user.is_retailer_owner():
+
             if branch.retailer != user.retailer:
-                raise PermissionDenied("Not allowed")
+                raise PermissionDenied(
+                    "Not allowed"
+                )
 
         else:
-            raise PermissionDenied("Not allowed")
+            raise PermissionDenied(
+                "Not allowed"
+            )
 
         if branch.is_active:
             return Response({
                 "success": False,
                 "message": "Branch already active"
             }, status=400)
-        
-        validate_branch_subscription(
+
+        if user.is_retailer_owner():
+            validate_branch_subscription(
                 branch.retailer
             )
-        
+
         branch.restore()
 
         create_audit_log(
@@ -264,14 +273,14 @@ class BranchRestoreView(APIView):
             action="update",
             model_name="Branch",
             object_id=branch.id,
-            description="Branch restored",
+            description=f"Branch {branch.name} restored",
             request=request
         )
 
         return Response({
             "success": True,
             "message": "Branch restored successfully"
-        })
+        }, status=200)
 
 
 # ==================== BRANCH HARD DELETE VIEW ==================== #

@@ -2,7 +2,14 @@ from django.urls import path
 from .views import *
 
 urlpatterns = [
-    path("create-retailer/", CreateRetailerView.as_view(), name="create-retailer"),
+    path("create-retailer/", CreateRetailerView.as_view()),
+    path("assign/", AssignSubscriptionView.as_view()),
+    path("retailers/list/", RetailerSubscriptionListView.as_view()),
+    path("retailers/<int:retailer_id>/", UpdateRetailerView.as_view()),
+    path("retailers/deactivate/<int:retailer_id>/", DeactivateRetailerView.as_view()),
+    path("retailers/reactivate/<int:retailer_id>/", ReactivateRetailerView.as_view()),
+    path("retailers/hard-delete/<int:retailer_id>/", HardDeleteRetailerView.as_view()),
+    path("retailers/filter/", RetailerFilterView.as_view()),
     path('login/', LoginView.as_view()),
     path('refresh-token/', CustomTokenRefreshView.as_view()),
     path('resend-otp/', ResendOTPView.as_view()),

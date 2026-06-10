@@ -23,10 +23,7 @@ from accounts.permissions import (
 # =====================================================
 # SUBSCRIPTION PLAN
 # =====================================================
-
-class SubscriptionPlanListCreateView(
-    generics.ListCreateAPIView
-):
+class SubscriptionPlanListCreateView(generics.ListCreateAPIView):
     queryset = SubscriptionPlan.objects.all()
 
     serializer_class = SubscriptionPlanSerializer
@@ -37,9 +34,7 @@ class SubscriptionPlanListCreateView(
     ]
 
 
-class SubscriptionPlanDetailView(
-    generics.RetrieveUpdateDestroyAPIView
-):
+class SubscriptionPlanDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = SubscriptionPlan.objects.all()
 
     serializer_class = SubscriptionPlanSerializer
@@ -53,10 +48,8 @@ class SubscriptionPlanDetailView(
 # =====================================================
 # RETAILER SUBSCRIPTIONS
 # =====================================================
+class RetailerSubscriptionListView(generics.ListAPIView):
 
-class RetailerSubscriptionListView(
-    generics.ListAPIView
-):
     queryset = RetailerSubscription.objects.select_related(
         "retailer",
         "plan"
@@ -70,9 +63,8 @@ class RetailerSubscriptionListView(
     ]
 
 
-class RetailerSubscriptionCreateView(
-    generics.CreateAPIView
-):
+class RetailerSubscriptionCreateView(generics.CreateAPIView):
+
     queryset = RetailerSubscription.objects.all()
 
     serializer_class = (
@@ -85,9 +77,8 @@ class RetailerSubscriptionCreateView(
     ]
 
 
-class RetailerSubscriptionDetailView(
-    generics.RetrieveUpdateDestroyAPIView
-):
+class RetailerSubscriptionDetailView(generics.RetrieveUpdateDestroyAPIView):
+
     queryset = RetailerSubscription.objects.select_related(
         "retailer",
         "plan"
@@ -106,10 +97,8 @@ class RetailerSubscriptionDetailView(
 # =====================================================
 # PAYMENT HISTORY
 # =====================================================
+class PaymentHistoryListView(generics.ListAPIView):
 
-class PaymentHistoryListView(
-    generics.ListAPIView
-):
     queryset = PaymentHistory.objects.select_related(
         "retailer",
         "subscription"
@@ -125,9 +114,8 @@ class PaymentHistoryListView(
     ]
 
 
-class PaymentHistoryCreateView(
-    generics.CreateAPIView
-):
+class PaymentHistoryCreateView(generics.CreateAPIView):
+
     queryset = PaymentHistory.objects.all()
 
     serializer_class = (
@@ -140,9 +128,8 @@ class PaymentHistoryCreateView(
     ]
 
 
-class PaymentHistoryDetailView(
-    generics.RetrieveAPIView
-):
+class PaymentHistoryDetailView(generics.RetrieveAPIView):
+
     queryset = PaymentHistory.objects.select_related(
         "retailer",
         "subscription"

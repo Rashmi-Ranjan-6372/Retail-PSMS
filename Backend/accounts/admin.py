@@ -5,9 +5,9 @@ from .models import Retailer, User, LoginLog, UserSession, AuditLog, EmailOTP
 
 @admin.register(Retailer)
 class RetailerAdmin(admin.ModelAdmin):
-    list_display = ("id", "name", "owner_name", "mobile", "email", "is_active", "created_by", "created_at")
+    list_display = ("id", "name", "owner_name", "mobile", "email", "is_active", "created_by", "created_at", "is_deleted")
     search_fields = ("name", "owner_name", "mobile", "email", "gst_number")
-    list_filter = ("is_active", "created_at")
+    list_filter = ("is_active", "created_at", "is_deleted")
     ordering = ("-created_at",)
 
 

@@ -14,6 +14,7 @@ class Retailer(models.Model):
     license_number = models.CharField(max_length=100, null=True, blank=True)
     logo = models.ImageField(upload_to="retailer_logos/", null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    is_deleted = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(

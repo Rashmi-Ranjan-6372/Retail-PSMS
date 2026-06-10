@@ -7,7 +7,7 @@ from accounts.models import User
 
 
 def get_active_subscription(retailer):
-
+    
     subscription = (
         RetailerSubscription.objects
         .filter(
@@ -21,7 +21,7 @@ def get_active_subscription(retailer):
 
     if not subscription:
         raise ValidationError(
-            "No active subscription found."
+            "Subscription expired or inactive. Please renew your subscription."
         )
 
     return subscription

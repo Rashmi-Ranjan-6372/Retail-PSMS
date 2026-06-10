@@ -21,11 +21,14 @@ from datetime import timedelta
 from .serializers import (
     AdminResetPasswordSerializer,
     LoginSerializer,
+    RetailerSubscriptionListSerializer,
     UserSerializer,
     CreateStaffSerializer,
     RetailerCreateSerializer,
     VerifyOTPSerializer,
-    ResendOTPSerializer
+    ResendOTPSerializer,
+    AssignSubscriptionSerializer,
+    RetailerSerializer,
 )
 
 from .permissions import (IsAdmin, IsRetailerOwnerOrPlatformOwner)
@@ -134,7 +137,7 @@ def create_audit_log(
         pass
 
 # =====================================================
-# CREATE RETAILER
+#                 CREATE RETAILER
 # =====================================================
 
 class CreateRetailerView(APIView):
@@ -175,19 +178,19 @@ class CreateRetailerView(APIView):
                 "success": True,
                 "message": "Retailer created successfully",
                 "retailer": {
-                    "id": data["retailer"].id,
-                    "name": data["retailer"].name,
-                    "email": data["retailer"].email,
-                },
+                            "id": data["retailer"].id,
+                            "name": data["retailer"].name,
+                            "email": data["retailer"].email,
+                        },
                 "branch": {
-                    "id": data["branch"].id,
-                    "name": data["branch"].name,
-                },
+                            "id": data["branch"].id,
+                            "name": data["branch"].name,
+                        },
                 "superadmin": {
-                    "id": data["user"].id,
-                    "username": data["user"].username,
-                    "role": data["user"].role,
-                }
+                                "id": data["user"].id,
+                                "username": data["user"].username,
+                                "role": data["user"].role,
+                            }
             }, status=status.HTTP_201_CREATED)
 
         return Response({
@@ -195,6 +198,368 @@ class CreateRetailerView(APIView):
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
     
+# =====================================================
+#                 ASSIGN SUBSCRIPTION
+# =====================================================
+class AssignSubscriptionView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+
+        if not request.user.is_superuser:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Only Platform Owner can assign subscriptions"
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = AssignSubscriptionSerializer(
+            data=request.data
+        )
+
+        if not serializer.is_valid():
+            return Response(
+                {
+                    "success": False,
+                    "errors": serializer.errors
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        subscription = serializer.save()
+
+        create_audit_log(
+            user=request.user,
+            action="create",
+            model_name="RetailerSubscription",
+            object_id=subscription.id,
+            description=(
+                f"Assigned {subscription.plan.name} plan "
+                f"to retailer {subscription.retailer.name}"
+            ),
+            request=request
+        )
+
+        return Response(
+            {
+                "success": True,
+                "message": "Subscription assigned successfully",
+                "data": {
+                    "retailer": subscription.retailer.name,
+                    "plan": subscription.plan.name,
+                    "start_date": subscription.start_date,
+                    "expiry_date": subscription.expiry_date,
+                    "status": subscription.status,
+                }
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+# =====================================================
+# RETAILER LIST WITH SUBSCRIPTION
+# =====================================================
+
+class RetailerSubscriptionListView(ListAPIView):
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = RetailerSubscriptionListSerializer
+
+    def get_queryset(self):
+
+        if not self.request.user.is_superuser:
+            return Retailer.objects.none()
+
+        return Retailer.objects.select_related(
+            "subscription",
+            "subscription__plan"
+        ).order_by("-created_at")
+
+    def list(self, request, *args, **kwargs):
+
+        queryset = self.get_queryset()
+
+        serializer = self.get_serializer(
+            queryset,
+            many=True
+        )
+
+        return Response({
+            "success": True,
+            "count": queryset.count(),
+            "data": serializer.data
+        })
+
+# =====================================================
+#                   UPDATE RETAILER
+# =====================================================
+class UpdateRetailerView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, retailer_id):
+
+        if not request.user.is_superuser:
+            return Response(
+                {"error": "Permission denied"},
+                status=403
+            )
+
+        try:
+            retailer = Retailer.objects.get(
+                id=retailer_id,
+                is_deleted=False
+            )
+
+        except Retailer.DoesNotExist:
+            return Response(
+                {"error": "Retailer not found"},
+                status=404
+            )
+
+        serializer = RetailerCreateSerializer(
+            retailer,
+            data=request.data,
+            partial=True
+        )
+
+        if serializer.is_valid():
+
+            serializer.save()
+
+            create_audit_log(
+                user=request.user,
+                action="update",
+                model_name="Retailer",
+                object_id=retailer.id,
+                description=f"Updated retailer {retailer.name}",
+                request=request
+            )
+
+            return Response({
+                "success": True,
+                "message": "Retailer updated successfully",
+                "data": serializer.data
+            })
+
+        return Response(
+            serializer.errors,
+            status=400
+        )
+
+# =====================================================
+#                  HARD DELETE RETAILER
+# =====================================================
+class HardDeleteRetailerView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, retailer_id):
+
+        if not request.user.is_superuser:
+            return Response(
+                {"error": "Permission denied"},
+                status=403
+            )
+
+        try:
+            retailer = Retailer.objects.get(
+                id=retailer_id
+            )
+
+        except Retailer.DoesNotExist:
+            return Response(
+                {"error": "Retailer not found"},
+                status=404
+            )
+
+        retailer_name = retailer.name
+
+        retailer.delete()
+
+        create_audit_log(
+            user=request.user,
+            action="delete",
+            model_name="Retailer",
+            object_id=retailer_id,
+            description=f"Hard deleted retailer {retailer_name}",
+            request=request
+        )
+
+        return Response({
+            "success": True,
+            "message": "Retailer permanently deleted"
+        })
+
+# =====================================================
+#                  REACTIVATE RETAILER
+# =====================================================
+class ReactivateRetailerView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, retailer_id):
+
+        if not request.user.is_superuser:
+            return Response(
+                {"error": "Permission denied"},
+                status=403
+            )
+
+        try:
+            retailer = Retailer.objects.get(
+                id=retailer_id,
+                is_deleted=False
+            )
+
+        except Retailer.DoesNotExist:
+            return Response(
+                {"error": "Retailer not found"},
+                status=404
+            )
+
+        retailer.is_active = True
+        retailer.save()
+
+        create_audit_log(
+            user=request.user,
+            action="update",
+            model_name="Retailer",
+            object_id=retailer.id,
+            description=f"Reactivated retailer {retailer.name}",
+            request=request
+        )
+
+        return Response({
+            "success": True,
+            "message": "Retailer reactivated successfully"
+        })
+    
+
+# =====================================================
+#                  DEACTIVATE RETAILER
+# ====================================================
+class DeactivateRetailerView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, retailer_id):
+
+        if not request.user.is_superuser:
+            return Response(
+                {"error": "Permission denied"},
+                status=403
+            )
+
+        try:
+            retailer = Retailer.objects.get(
+                id=retailer_id,
+                is_deleted=False
+            )
+
+        except Retailer.DoesNotExist:
+            return Response(
+                {"error": "Retailer not found"},
+                status=404
+            )
+
+        retailer.is_active = False
+        retailer.save()
+
+        User.objects.filter(
+            retailer=retailer
+        ).update(is_active=False)
+
+        create_audit_log(
+            user=request.user,
+            action="update",
+            model_name="Retailer",
+            object_id=retailer.id,
+            description=f"Deactivated retailer {retailer.name}",
+            request=request
+        )
+
+        return Response({
+            "success": True,
+            "message": "Retailer deactivated successfully"
+        })
+    
+# =================================================
+#                RETAILER FILTER
+# =================================================
+class RetailerFilterView(ListAPIView):
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = RetailerSerializer
+
+    def get_queryset(self):
+
+        if not self.request.user.is_superuser:
+            return Retailer.objects.none()
+
+        queryset = Retailer.objects.select_related(
+            "subscription",
+            "subscription__plan"
+        )
+
+        search = self.request.query_params.get("search")
+        is_active = self.request.query_params.get("is_active")
+        plan_id = self.request.query_params.get("plan_id")
+        subscription_status = self.request.query_params.get("subscription_status")
+
+        # ================= SEARCH =================
+
+        if search:
+
+            queryset = queryset.filter(
+                Q(name__icontains=search) |
+                Q(owner_name__icontains=search) |
+                Q(email__icontains=search) |
+                Q(mobile__icontains=search)
+            )
+
+        # ================= ACTIVE FILTER =================
+
+        if is_active is not None:
+
+            queryset = queryset.filter(
+                is_active=is_active.lower() == "true"
+            )
+
+        # ================= PLAN FILTER =================
+
+        if plan_id:
+
+            queryset = queryset.filter(
+                subscription__plan_id=plan_id
+            )
+
+        # ================= STATUS FILTER =================
+
+        if subscription_status:
+
+            queryset = queryset.filter(
+                subscription__status=subscription_status
+            )
+
+        return queryset.order_by("-created_at")
+
+    def list(self, request, *args, **kwargs):
+
+        queryset = self.get_queryset()
+
+        serializer = self.get_serializer(
+            queryset,
+            many=True
+        )
+
+        return Response({
+            "success": True,
+            "count": queryset.count(),
+            "data": serializer.data
+        })
 
 # =====================================================
 # LOGIN
@@ -252,8 +617,6 @@ class LoginView(APIView):
                 "success": False,
                 "message": "Account is inactive"
             }, status=status.HTTP_403_FORBIDDEN)
-
-        # Reset failed attempts after successful password verification
 
         user.failed_login_attempts = 0
         user.account_locked_until = None
@@ -513,18 +876,9 @@ class VerifyOTPView(APIView):
         return Response(
             {
                 "success": True,
-
-                "access": str(
-                    refresh.access_token
-                ),
-
-                "refresh": str(
-                    refresh
-                ),
-
-                "user": UserSerializer(
-                    user
-                ).data
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "user": UserSerializer(user).data
             },
             status=status.HTTP_200_OK
         )
