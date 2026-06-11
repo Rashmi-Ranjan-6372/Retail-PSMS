@@ -1,3 +1,5 @@
+from urllib3 import request
+
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -6,6 +8,8 @@ from masters.models import Product
 from masters.serializers import ProductSerializer
 
 from accounts.permissions import IsAdmin, IsSuperAdmin
+from subscriptions.utils import check_subscription_write_access
+from accounts.views import create_audit_log
 
 
 # =========================================================
@@ -56,10 +60,25 @@ class ProductCreateView(
 
         user = self.request.user
 
-        serializer.save(
+        check_subscription_write_access(
+            user.retailer
+        )
+
+        product = serializer.save(
             retailer=user.retailer,
             branch=user.branch
         )
+
+        create_audit_log(
+            user=user,
+            action="create",
+            model_name="Product",
+            object_id=product.id,
+            description=f"Created Product {product.name}",
+            request=self.request
+        )
+
+        return product
 
     def create(self, request, *args, **kwargs):
 
@@ -180,15 +199,32 @@ class ProductUpdateView(
 
         instance = self.get_object()
 
+        check_subscription_write_access(
+            request.user.retailer
+        )
+
+        old_name = instance.name
+
         serializer = self.get_serializer(
             instance,
             data=request.data,
             partial=True
         )
 
-        serializer.is_valid(raise_exception=True)
+        serializer.is_valid(
+            raise_exception=True
+        )
 
         serializer.save()
+
+        create_audit_log(
+            user=request.user,
+            action="update",
+            model_name="Product",
+            object_id=instance.id,
+            description=f"Updated Product from {old_name} to {serializer.instance.name}",
+            request=request
+        )
 
         return Response({
             "success": True,
@@ -220,6 +256,10 @@ class ProductSoftDeleteView(
 
         product = self.get_object()
 
+        check_subscription_write_access(
+            request.user.retailer
+        )
+
         if not product.is_active:
             return Response({
                 "success": False,
@@ -227,8 +267,16 @@ class ProductSoftDeleteView(
             }, status=status.HTTP_400_BAD_REQUEST)
 
         product.is_active = False
-
         product.save(update_fields=["is_active"])
+
+        create_audit_log(
+            user=request.user,
+            action="soft_delete",
+            model_name="Product",
+            object_id=product.id,
+            description=f"Deactivated Product {product.name}",
+            request=request
+        )
 
         return Response({
             "success": True,
@@ -259,6 +307,10 @@ class ProductActivateView(
 
         product = self.get_object()
 
+        check_subscription_write_access(
+            request.user.retailer
+        )
+
         if product.is_active:
             return Response({
                 "success": False,
@@ -266,8 +318,16 @@ class ProductActivateView(
             }, status=status.HTTP_400_BAD_REQUEST)
 
         product.is_active = True
-
         product.save(update_fields=["is_active"])
+
+        create_audit_log(
+            user=request.user,
+            action="restore",
+            model_name="Product",
+            object_id=product.id,
+            description=f"Activated Product {product.name}",
+            request=request
+        )
 
         return Response({
             "success": True,
@@ -298,7 +358,23 @@ class ProductDeleteView(
 
         product = self.get_object()
 
+        check_subscription_write_access(
+            request.user.retailer
+        )
+
+        product_name = product.name
+        product_id = product.id
+
         product.delete()
+
+        create_audit_log(
+            user=request.user,
+            action="delete",
+            model_name="Product",
+            object_id=product_id,
+            description=f"Permanently Deleted Product {product_name}",
+            request=request
+        )
 
         return Response({
             "success": True,

@@ -1,11 +1,8 @@
 from decimal import Decimal
-
 from django.db import transaction
 from django.db.models import Sum
-
-from inventory.models.purchase_return_item_models import (
-    PurchaseReturnItem
-)
+from inventory.models.purchase_return_item_models import (PurchaseReturnItem)
+from subscriptions.utils import (check_subscription_write_access, validate_branch_subscription)
 
 
 # =====================================================
@@ -13,9 +10,15 @@ from inventory.models.purchase_return_item_models import (
 # =====================================================
 
 @transaction.atomic
-def update_purchase_return_totals(
-    purchase_return
-):
+def update_purchase_return_totals(purchase_return):
+
+    check_subscription_write_access(
+        purchase_return.retailer
+    )
+
+    validate_branch_subscription(
+        purchase_return.retailer
+    )
 
     # =====================================================
     # LOCK RETURN RECORD

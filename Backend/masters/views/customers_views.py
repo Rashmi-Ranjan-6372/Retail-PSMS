@@ -2,42 +2,27 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
-
 from .models.customers_models import Customer
 from .serializers import CustomerSerializer
 
-from accounts.permissions import (
-    IsAdmin,
-    IsAdminOrStaff,
-)
-
-
-# =========================================================
-# HELPER FUNCTION
-# =========================================================
+from accounts.permissions import (IsAdmin, IsAdminOrStaff,)
+from accounts.views import create_audit_log
+from subscriptions.utils import check_subscription_write_access
 
 def get_customer_queryset(user):
-
-    # PLATFORM OWNER
     if user.is_superuser:
         return Customer.objects.all()
 
-    # SUPERADMIN -> ALL RETAILER CUSTOMERS
     if user.role == "superadmin":
         return Customer.objects.filter(
             retailer=user.retailer
         )
 
-    # ADMIN / STAFF -> ONLY BRANCH CUSTOMERS
     return Customer.objects.filter(
         retailer=user.retailer,
         branch=user.branch
     )
 
-
-# =========================================================
-# CUSTOMER LIST + CREATE
-# =========================================================
 
 class CustomerListCreateAPIView(APIView):
 
@@ -67,6 +52,8 @@ class CustomerListCreateAPIView(APIView):
 
     def post(self, request):
 
+        check_subscription_write_access(request.user.retailer)
+
         if not (
             request.user.role in ["admin", "superadmin"]
             or request.user.is_superuser
@@ -85,9 +72,18 @@ class CustomerListCreateAPIView(APIView):
 
         if serializer.is_valid():
 
-            serializer.save(
+            customer = serializer.save(
                 retailer=request.user.retailer,
                 branch=request.user.branch
+            )
+
+            create_audit_log(
+                user=request.user,
+                action="create",
+                model_name="Customer",
+                object_id=customer.id,
+                description=f"Created Customer {customer.name}",
+                request=request
             )
 
             return Response(
@@ -107,10 +103,6 @@ class CustomerListCreateAPIView(APIView):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-
-# =========================================================
-# CUSTOMER DETAIL
-# =========================================================
 
 class CustomerDetailAPIView(APIView):
 
@@ -151,6 +143,8 @@ class CustomerDetailAPIView(APIView):
 
     def put(self, request, pk):
 
+        check_subscription_write_access(request.user.retailer)
+
         if not (
             request.user.role in ["admin", "superadmin"]
             or request.user.is_superuser
@@ -183,6 +177,15 @@ class CustomerDetailAPIView(APIView):
 
             serializer.save()
 
+            create_audit_log(
+                user=request.user,
+                action="update",
+                model_name="Customer",
+                object_id=customer.id,
+                description=f"Updated Customer {customer.name}",
+                request=request
+            )
+
             return Response(
                 {
                     "status": True,
@@ -201,6 +204,8 @@ class CustomerDetailAPIView(APIView):
         )
 
     def patch(self, request, pk):
+
+        check_subscription_write_access(request.user.retailer)
 
         if not (
             request.user.role in ["admin", "superadmin"]
@@ -235,6 +240,15 @@ class CustomerDetailAPIView(APIView):
 
             serializer.save()
 
+            create_audit_log(
+                user=request.user,
+                action="update",
+                model_name="Customer",
+                object_id=customer.id,
+                description=f"Partially Updated Customer {customer.name}",
+                request=request
+            )
+
             return Response(
                 {
                     "status": True,
@@ -252,11 +266,9 @@ class CustomerDetailAPIView(APIView):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # =========================================================
-    # SOFT DELETE
-    # =========================================================
-
     def delete(self, request, pk):
+
+        check_subscription_write_access(request.user.retailer)
 
         if not (
             request.user.role in ["admin", "superadmin"]
@@ -284,6 +296,15 @@ class CustomerDetailAPIView(APIView):
         customer.is_active = False
         customer.save()
 
+        create_audit_log(
+            user=request.user,
+            action="delete",
+            model_name="Customer",
+            object_id=customer.id,
+            description=f"Soft Deleted Customer {customer.name}",
+            request=request
+        )
+
         return Response(
             {
                 "status": True,
@@ -293,15 +314,13 @@ class CustomerDetailAPIView(APIView):
         )
 
 
-# =========================================================
-# ACTIVATE CUSTOMER
-# =========================================================
-
 class CustomerActivateAPIView(APIView):
 
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def patch(self, request, pk):
+
+        check_subscription_write_access(request.user.retailer)
 
         customer = get_customer_queryset(
             request.user
@@ -319,6 +338,15 @@ class CustomerActivateAPIView(APIView):
         customer.is_active = True
         customer.save()
 
+        create_audit_log(
+            user=request.user,
+            action="activate",
+            model_name="Customer",
+            object_id=customer.id,
+            description=f"Activated Customer {customer.name}",
+            request=request
+        )
+
         return Response(
             {
                 "status": True,
@@ -328,15 +356,13 @@ class CustomerActivateAPIView(APIView):
         )
 
 
-# =========================================================
-# DEACTIVATE CUSTOMER
-# =========================================================
-
 class CustomerDeactivateAPIView(APIView):
 
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def patch(self, request, pk):
+
+        check_subscription_write_access(request.user.retailer)
 
         customer = get_customer_queryset(
             request.user
@@ -354,6 +380,15 @@ class CustomerDeactivateAPIView(APIView):
         customer.is_active = False
         customer.save()
 
+        create_audit_log(
+            user=request.user,
+            action="deactivate",
+            model_name="Customer",
+            object_id=customer.id,
+            description=f"Deactivated Customer {customer.name}",
+            request=request
+        )
+
         return Response(
             {
                 "status": True,
@@ -363,15 +398,13 @@ class CustomerDeactivateAPIView(APIView):
         )
 
 
-# =========================================================
-# HARD DELETE CUSTOMER
-# =========================================================
-
 class CustomerHardDeleteAPIView(APIView):
 
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def delete(self, request, pk):
+
+        check_subscription_write_access(request.user.retailer)
 
         customer = get_customer_queryset(
             request.user
@@ -386,7 +419,19 @@ class CustomerHardDeleteAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        customer_name = customer.name
+        customer_id = customer.id
+
         customer.delete()
+
+        create_audit_log(
+            user=request.user,
+            action="hard_delete",
+            model_name="Customer",
+            object_id=customer_id,
+            description=f"Permanently Deleted Customer {customer_name}",
+            request=request
+        )
 
         return Response(
             {
@@ -396,10 +441,6 @@ class CustomerHardDeleteAPIView(APIView):
             status=status.HTTP_200_OK
         )
 
-
-# =========================================================
-# INACTIVE CUSTOMER LIST
-# =========================================================
 
 class InactiveCustomerListAPIView(APIView):
 

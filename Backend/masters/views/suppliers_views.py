@@ -14,6 +14,8 @@ from accounts.permissions import (
     IsAdmin,
     IsRetailerOwnerOrPlatformOwner
 )
+from subscriptions.utils import check_subscription_write_access
+from accounts.views import create_audit_log
 
 
 # =========================================================
@@ -73,28 +75,24 @@ class SupplierCreateView(
 
         user = self.request.user
 
-        # ================= SUPERUSER =================
+        if not user.is_superuser:
+            check_subscription_write_access(
+                user.retailer
+            )
+
         if user.is_superuser:
 
-            retailer_id = self.request.data.get(
-                "retailer"
-            )
-
-            branch_ids = self.request.data.get(
-                "branches",
-                []
-            )
+            retailer_id = self.request.data.get("retailer")
+            branch_ids = self.request.data.get("branches", [])
 
             if not retailer_id:
                 raise ValidationError({
-                    "retailer":
-                    "Retailer is required"
+                    "retailer": "Retailer is required"
                 })
 
             if not branch_ids:
                 raise ValidationError({
-                    "branches":
-                    "At least one branch is required"
+                    "branches": "At least one branch is required"
                 })
 
             branches = Branch.objects.filter(
@@ -104,8 +102,7 @@ class SupplierCreateView(
 
             if branches.count() != len(branch_ids):
                 raise ValidationError({
-                    "branches":
-                    "Invalid branch ids"
+                    "branches": "Invalid branch ids"
                 })
 
             supplier = serializer.save(
@@ -114,7 +111,6 @@ class SupplierCreateView(
 
             supplier.branches.set(branches)
 
-        # ================= RETAILER USERS =================
         else:
 
             supplier = serializer.save(
@@ -123,6 +119,15 @@ class SupplierCreateView(
             )
 
             supplier.branches.set([user.branch])
+
+        create_audit_log(
+            user=user,
+            action="create",
+            model_name="Supplier",
+            object_id=supplier.id,
+            description=f"Created Supplier {supplier.name}",
+            request=self.request
+        )
 
     def create(self, request, *args, **kwargs):
 
@@ -302,13 +307,27 @@ class SupplierUpdateView(
                 "Cannot update this supplier"
             )
 
+        check_subscription_write_access(
+            user.retailer
+        )
+
+        old_name = supplier.name
+
         updated_supplier = serializer.save()
 
-        # ================= ADMIN RESTRICTION =================
         if not user.is_superuser:
             updated_supplier.branches.set(
                 [user.branch]
             )
+
+        create_audit_log(
+            user=user,
+            action="update",
+            model_name="Supplier",
+            object_id=updated_supplier.id,
+            description=f"Updated Supplier from {old_name} to {updated_supplier.name}",
+            request=self.request
+        )
 
     def update(self, request, *args, **kwargs):
 
@@ -366,7 +385,21 @@ class SupplierSoftDeleteView(
 
         supplier.is_active = False
 
+        if not user.is_superuser:
+            check_subscription_write_access(
+                user.retailer
+            )
+                
         supplier.save(update_fields=["is_active"])
+
+        create_audit_log(
+            user=user,
+            action="soft_delete",
+            model_name="Supplier",
+            object_id=supplier.id,
+            description=f"Deactivated Supplier {supplier.name}",
+            request=request
+        )
 
         return Response({
             "success": True,
@@ -397,6 +430,16 @@ class SupplierActivateView(
 
         supplier = self.get_object()
 
+        user = request.user
+
+        if (
+            not user.is_superuser and
+            user.branch not in supplier.branches.all()
+        ):
+            raise PermissionDenied(
+                "Permission denied"
+            )
+
         if supplier.is_active:
             return Response({
                 "success": False,
@@ -405,7 +448,23 @@ class SupplierActivateView(
 
         supplier.is_active = True
 
-        supplier.save(update_fields=["is_active"])
+        if not user.is_superuser:
+            check_subscription_write_access(
+                user.retailer
+            )
+
+        supplier.save(
+            update_fields=["is_active"]
+        )
+
+        create_audit_log(
+            user=user,
+            action="activate",
+            model_name="Supplier",
+            object_id=supplier.id,
+            description=f"Activated Supplier {supplier.name}",
+            request=request
+        )
 
         return Response({
             "success": True,
@@ -436,7 +495,23 @@ class SupplierDeleteView(
 
         supplier = self.get_object()
 
+        check_subscription_write_access(
+            request.user.retailer
+        )
+
+        supplier_id = supplier.id
+        supplier_name = supplier.name
+
         supplier.delete()
+
+        create_audit_log(
+            user=request.user,
+            action="delete",
+            model_name="Supplier",
+            object_id=supplier_id,
+            description=f"Permanently Deleted Supplier {supplier_name}",
+            request=request
+        )
 
         return Response({
             "success": True,

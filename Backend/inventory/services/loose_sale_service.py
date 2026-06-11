@@ -1,9 +1,6 @@
 from decimal import Decimal
-
-from inventory.models.sales_item_models import (
-    SalesItem
-)
-
+from inventory.models.sales_item_models import SalesItem
+from subscriptions.utils import (check_subscription_write_access, validate_branch_subscription)
 
 class LooseSaleService:
 
@@ -20,41 +17,16 @@ class LooseSaleService:
     ):
 
         qty = Decimal(qty or 0)
-
         unit_price = Decimal(unit_price or 0)
-
         discount = Decimal(discount or 0)
-
         tax_percent = Decimal(tax_percent or 0)
-
-        # =========================
-        # BASE AMOUNT
-        # =========================
-
-        base_amount = (
-            qty * unit_price
-        )
-
-        # =========================
-        # AFTER DISCOUNT
-        # =========================
-
-        discounted_amount = (
-            base_amount - discount
-        )
-
-        # =========================
-        # TAX CALCULATION
-        # =========================
+        base_amount = (qty * unit_price)
+        discounted_amount = (base_amount - discount)
 
         tax_amount = (
             discounted_amount *
             tax_percent
         ) / Decimal("100")
-
-        # =========================
-        # FINAL AMOUNT
-        # =========================
 
         final_amount = (
             discounted_amount +
@@ -87,6 +59,14 @@ class LooseSaleService:
         free_qty=0,
         created_by=None
     ):
+
+        check_subscription_write_access(
+            retailer
+        )
+
+        validate_branch_subscription(
+            retailer
+        )
 
         calculation = (
             LooseSaleService.calculate_item_amount(

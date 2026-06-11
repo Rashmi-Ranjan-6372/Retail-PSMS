@@ -1,40 +1,21 @@
-from rest_framework.generics import (
-    ListCreateAPIView,
-    RetrieveUpdateDestroyAPIView
-)
+from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
+from rest_framework.permissions import IsAuthenticated
 
-from rest_framework.permissions import (
-    IsAuthenticated
-)
+from inventory.models.payment_models import Payment
+from inventory.serializers.payment_serializers import PaymentSerializer
+from inventory.services.payment_service import update_payment_status
 
-from inventory.models.payment_models import (
-    Payment
-)
-
-from inventory.serializers.payment_serializers import (
-    PaymentSerializer
-)
-
-from inventory.services.payment_service import (
-    update_payment_status
-)
-
-from accounts.permissions import (
-    IsAdminOrStaff
-)
+from accounts.permissions import IsAdminOrStaff
+from subscriptions.utils import check_subscription_write_access
 
 
 # =====================================================
 # PAYMENT LIST + CREATE
 # =====================================================
 
-class PaymentListCreateView(
-    ListCreateAPIView
-):
+class PaymentListCreateView(ListCreateAPIView):
 
-    serializer_class = (
-        PaymentSerializer
-    )
+    serializer_class = PaymentSerializer
 
     permission_classes = [
         IsAuthenticated,
@@ -82,15 +63,16 @@ class PaymentListCreateView(
 
     def perform_create(self, serializer):
 
+        if not self.request.user.is_superuser:
+            check_subscription_write_access(
+                self.request.user.retailer
+            )
+
         payment = serializer.save(
             retailer=self.request.user.retailer,
             branch=self.request.user.branch,
             created_by=self.request.user,
         )
-
-        # =========================
-        # BUSINESS LOGIC
-        # =========================
 
         update_payment_status(payment)
 
@@ -99,13 +81,9 @@ class PaymentListCreateView(
 # PAYMENT DETAIL VIEW
 # =====================================================
 
-class PaymentDetailView(
-    RetrieveUpdateDestroyAPIView
-):
+class PaymentDetailView(RetrieveUpdateDestroyAPIView):
 
-    serializer_class = (
-        PaymentSerializer
-    )
+    serializer_class = PaymentSerializer
 
     permission_classes = [
         IsAuthenticated,
@@ -146,3 +124,23 @@ class PaymentDetailView(
             )
 
         return queryset
+
+    def perform_update(self, serializer):
+
+        if not self.request.user.is_superuser:
+            check_subscription_write_access(
+                self.request.user.retailer
+            )
+
+        payment = serializer.save()
+
+        update_payment_status(payment)
+
+    def perform_destroy(self, instance):
+
+        if not self.request.user.is_superuser:
+            check_subscription_write_access(
+                self.request.user.retailer
+            )
+
+        instance.delete()

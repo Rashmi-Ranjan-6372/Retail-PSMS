@@ -1,36 +1,16 @@
-from rest_framework.generics import (
-    ListCreateAPIView,
-    RetrieveUpdateDestroyAPIView
-)
-
-from rest_framework.permissions import (
-    IsAuthenticated
-)
-
-from inventory.models.receipt_models import (
-    Receipt
-)
-
-from inventory.serializers.receipt_serializers import (
-    ReceiptSerializer
-)
-
-from inventory.services.receipt_service import (
-    update_receipt_status
-)
-
-from accounts.permissions import (
-    IsAdminOrStaff
-)
-
+from rest_framework.generics import (ListCreateAPIView, RetrieveUpdateDestroyAPIView)
+from rest_framework.permissions import (IsAuthenticated)
+from inventory.models.receipt_models import (Receipt)
+from inventory.serializers.receipt_serializers import (ReceiptSerializer)
+from inventory.services.receipt_service import (update_receipt_status)
+from accounts.permissions import (IsAdminOrStaff)
+from subscriptions.utils import (check_subscription_write_access)
 
 # =====================================================
 # RECEIPT LIST + CREATE
 # =====================================================
 
-class ReceiptListCreateView(
-    ListCreateAPIView
-):
+class ReceiptListCreateView(ListCreateAPIView):
 
     serializer_class = (
         ReceiptSerializer
@@ -82,6 +62,11 @@ class ReceiptListCreateView(
 
     def perform_create(self, serializer):
 
+        if not self.request.user.is_superuser:
+            check_subscription_write_access(
+                self.request.user.retailer
+            )
+
         receipt = serializer.save(
             retailer=self.request.user.retailer,
             branch=self.request.user.branch,
@@ -99,9 +84,7 @@ class ReceiptListCreateView(
 # RECEIPT DETAIL VIEW
 # =====================================================
 
-class ReceiptDetailView(
-    RetrieveUpdateDestroyAPIView
-):
+class ReceiptDetailView(RetrieveUpdateDestroyAPIView):
 
     serializer_class = (
         ReceiptSerializer
@@ -146,3 +129,23 @@ class ReceiptDetailView(
             )
 
         return queryset
+
+    def perform_update(self, serializer):
+
+        if not self.request.user.is_superuser:
+            check_subscription_write_access(
+                self.request.user.retailer
+            )
+
+        receipt = serializer.save()
+
+        update_receipt_status(receipt)
+
+    def perform_destroy(self, instance):
+
+        if not self.request.user.is_superuser:
+            check_subscription_write_access(
+                self.request.user.retailer
+            )
+
+        instance.delete()

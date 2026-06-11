@@ -1,41 +1,19 @@
-from rest_framework.generics import (
-    ListCreateAPIView,
-    RetrieveUpdateDestroyAPIView
-)
-
-from rest_framework.permissions import (
-    IsAuthenticated
-)
-
-from inventory.models.expiry_damage_models import (
-    ExpiryDamage
-)
-
-from inventory.serializers.expiry_damage_serializers import (
-    ExpiryDamageSerializer
-)
-
-from inventory.services.expiry_service import (
-    create_expiry_damage,
-    update_expiry_damage,
-    delete_expiry_damage,
-)
-
-from accounts.permissions import (
-    IsAdminOrStaff
-)
+from rest_framework.generics import (ListCreateAPIView, RetrieveUpdateDestroyAPIView)
+from rest_framework.permissions import (IsAuthenticated)
+from inventory.models.expiry_damage_models import (ExpiryDamage)
+from inventory.serializers.expiry_damage_serializers import (ExpiryDamageSerializer)
+from inventory.services.expiry_service import (create_expiry_damage, update_expiry_damage, delete_expiry_damage,)
+from accounts.permissions import (IsAdminOrStaff)
+from subscriptions.utils import check_subscription_write_access
 
 
 # =====================================================
 # EXPIRY DAMAGE LIST + CREATE
 # =====================================================
 
-class ExpiryDamageListCreateView(
-    ListCreateAPIView
-):
+class ExpiryDamageListCreateView(ListCreateAPIView):
 
     serializer_class = ExpiryDamageSerializer
-
     permission_classes = [
         IsAuthenticated,
         IsAdminOrStaff,
@@ -79,6 +57,11 @@ class ExpiryDamageListCreateView(
 
     def perform_create(self, serializer):
 
+        if not self.request.user.is_superuser:
+            check_subscription_write_access(
+                self.request.user.retailer
+            )
+
         create_expiry_damage(
             serializer.validated_data,
             self.request.user
@@ -89,9 +72,7 @@ class ExpiryDamageListCreateView(
 # EXPIRY DAMAGE DETAIL VIEW
 # =====================================================
 
-class ExpiryDamageDetailView(
-    RetrieveUpdateDestroyAPIView
-):
+class ExpiryDamageDetailView(RetrieveUpdateDestroyAPIView):
 
     serializer_class = ExpiryDamageSerializer
 
@@ -140,6 +121,11 @@ class ExpiryDamageDetailView(
 
     def perform_update(self, serializer):
 
+        if not self.request.user.is_superuser:
+            check_subscription_write_access(
+                self.request.user.retailer
+            )
+
         update_expiry_damage(
             self.get_object(),
             serializer.validated_data
@@ -147,4 +133,7 @@ class ExpiryDamageDetailView(
 
     def perform_destroy(self, instance):
 
-        delete_expiry_damage(instance)
+        if not self.request.user.is_superuser:
+            check_subscription_write_access(
+                self.request.user.retailer
+            )

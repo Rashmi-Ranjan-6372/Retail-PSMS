@@ -1,12 +1,7 @@
 from django.db import transaction
-
-from inventory.models.expiry_damage_models import (
-    ExpiryDamage
-)
-
-from inventory.models.stock_batch_models import (
-    StockBatch
-)
+from inventory.models.expiry_damage_models import ExpiryDamage
+from inventory.models.stock_batch_models import StockBatch
+from subscriptions.utils import (check_subscription_write_access, validate_branch_subscription)
 
 
 # =====================================================
@@ -15,25 +10,19 @@ from inventory.models.stock_batch_models import (
 
 def create_expiry_damage(data, user):
 
+    check_subscription_write_access(user.retailer)
+    validate_branch_subscription(user.retailer)
+
     with transaction.atomic():
 
         batch = data["batch"]
-
         quantity = data["quantity"]
-
-        # =========================
-        # VALIDATE STOCK
-        # =========================
 
         if batch.available_qty < quantity:
 
             raise ValueError(
                 "Insufficient stock available."
             )
-
-        # =========================
-        # CREATE ENTRY
-        # =========================
 
         expiry_damage = ExpiryDamage.objects.create(
             retailer=user.retailer,
@@ -42,13 +31,11 @@ def create_expiry_damage(data, user):
             **data
         )
 
-        # =========================
-        # REDUCE STOCK
-        # =========================
-
         batch.available_qty -= quantity
 
-        batch.save()
+        batch.save(
+            update_fields=["available_qty"]
+        )
 
         return expiry_damage
 
@@ -59,12 +46,13 @@ def create_expiry_damage(data, user):
 
 def update_expiry_damage(instance, validated_data):
 
+    check_subscription_write_access(instance.retailer)
+    validate_branch_subscription(instance.retailer)
+
     with transaction.atomic():
 
         old_qty = instance.quantity
-
         old_batch = instance.batch
-
         new_qty = validated_data.get(
             "quantity",
             instance.quantity
@@ -75,16 +63,11 @@ def update_expiry_damage(instance, validated_data):
             instance.batch
         )
 
-        # =========================
-        # RESTORE OLD STOCK
-        # =========================
-
         old_batch.available_qty += old_qty
-        old_batch.save()
 
-        # =========================
-        # VALIDATE NEW STOCK
-        # =========================
+        old_batch.save(
+            update_fields=["available_qty"]
+        )
 
         if new_batch.available_qty < new_qty:
 
@@ -92,16 +75,11 @@ def update_expiry_damage(instance, validated_data):
                 "Insufficient stock available."
             )
 
-        # =========================
-        # DEDUCT NEW STOCK
-        # =========================
-
         new_batch.available_qty -= new_qty
-        new_batch.save()
 
-        # =========================
-        # UPDATE INSTANCE
-        # =========================
+        new_batch.save(
+            update_fields=["available_qty"]
+        )
 
         for attr, value in validated_data.items():
 
@@ -118,12 +96,15 @@ def update_expiry_damage(instance, validated_data):
 
 def delete_expiry_damage(instance):
 
+    check_subscription_write_access(instance.retailer)
+    validate_branch_subscription(instance.retailer)
+
     with transaction.atomic():
 
         batch = instance.batch
-
         batch.available_qty += instance.quantity
-
-        batch.save()
+        batch.save(
+            update_fields=["available_qty"]
+        )
 
         instance.delete()

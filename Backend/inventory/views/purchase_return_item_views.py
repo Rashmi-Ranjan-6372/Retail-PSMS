@@ -1,40 +1,21 @@
-from rest_framework.generics import (
-    ListCreateAPIView,
-    RetrieveUpdateDestroyAPIView
-)
+from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
+from rest_framework.permissions import IsAuthenticated
 
-from rest_framework.permissions import (
-    IsAuthenticated
-)
+from inventory.models.purchase_return_item_models import PurchaseReturnItem
+from inventory.serializers.purchase_return_item_serializers import PurchaseReturnItemSerializer
+from inventory.services.purchase_return_item_service import process_purchase_return_item
 
-from inventory.models.purchase_return_item_models import (
-    PurchaseReturnItem
-)
-
-from inventory.serializers.purchase_return_item_serializers import (
-    PurchaseReturnItemSerializer
-)
-
-from inventory.services.purchase_return_item_service import (
-    process_purchase_return_item
-)
-
-from accounts.permissions import (
-    IsAdminOrStaff
-)
+from accounts.permissions import IsAdminOrStaff
+from subscriptions.utils import check_subscription_write_access
 
 
 # =====================================================
 # PURCHASE RETURN ITEM LIST + CREATE
 # =====================================================
 
-class PurchaseReturnItemListCreateView(
-    ListCreateAPIView
-):
+class PurchaseReturnItemListCreateView(ListCreateAPIView):
 
-    serializer_class = (
-        PurchaseReturnItemSerializer
-    )
+    serializer_class = PurchaseReturnItemSerializer
 
     permission_classes = [
         IsAuthenticated,
@@ -58,21 +39,15 @@ class PurchaseReturnItemListCreateView(
             .all()
         )
 
-        # ================= SUPER ADMIN ================= #
-
         if (
             user.is_superuser or
             getattr(user, "role", None) == "superadmin"
         ):
             return queryset
 
-        # ================= RETAILER FILTER ================= #
-
         queryset = queryset.filter(
             retailer=user.retailer
         )
-
-        # ================= BRANCH FILTER ================= #
 
         if getattr(user, "branch", None):
 
@@ -84,15 +59,16 @@ class PurchaseReturnItemListCreateView(
 
     def perform_create(self, serializer):
 
+        if not self.request.user.is_superuser:
+            check_subscription_write_access(
+                self.request.user.retailer
+            )
+
         purchase_return_item = serializer.save(
             retailer=self.request.user.retailer,
             branch=self.request.user.branch,
             created_by=self.request.user,
         )
-
-        # =========================
-        # BUSINESS LOGIC
-        # =========================
 
         process_purchase_return_item(
             purchase_return_item
@@ -103,13 +79,9 @@ class PurchaseReturnItemListCreateView(
 # PURCHASE RETURN ITEM DETAIL VIEW
 # =====================================================
 
-class PurchaseReturnItemDetailView(
-    RetrieveUpdateDestroyAPIView
-):
+class PurchaseReturnItemDetailView(RetrieveUpdateDestroyAPIView):
 
-    serializer_class = (
-        PurchaseReturnItemSerializer
-    )
+    serializer_class = PurchaseReturnItemSerializer
 
     permission_classes = [
         IsAuthenticated,
@@ -152,3 +124,25 @@ class PurchaseReturnItemDetailView(
             )
 
         return queryset
+
+    def perform_update(self, serializer):
+
+        if not self.request.user.is_superuser:
+            check_subscription_write_access(
+                self.request.user.retailer
+            )
+
+        purchase_return_item = serializer.save()
+
+        process_purchase_return_item(
+            purchase_return_item
+        )
+
+    def perform_destroy(self, instance):
+
+        if not self.request.user.is_superuser:
+            check_subscription_write_access(
+                self.request.user.retailer
+            )
+
+        instance.delete()

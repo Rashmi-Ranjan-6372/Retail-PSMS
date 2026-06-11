@@ -1,4 +1,5 @@
 from django.db import transaction
+from subscriptions.utils import (check_subscription_write_access, validate_branch_subscription)
 
 
 # =====================================================
@@ -9,6 +10,14 @@ from django.db import transaction
 def update_receipt_status(
     receipt
 ):
+
+    check_subscription_write_access(
+        receipt.retailer
+    )
+
+    validate_branch_subscription(
+        receipt.retailer
+    )
 
     # =========================
     # DUE CALCULATION
@@ -24,15 +33,19 @@ def update_receipt_status(
     # =========================
 
     if receipt.due_amount <= 0:
-
         receipt.status = "RECEIVED"
 
     elif receipt.paid_amount > 0:
-
         receipt.status = "PARTIAL"
 
     else:
-
         receipt.status = "PENDING"
 
-    receipt.save()
+    receipt.save(
+        update_fields=[
+            "due_amount",
+            "status"
+        ]
+    )
+
+    return receipt

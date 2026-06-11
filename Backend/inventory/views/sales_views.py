@@ -4,18 +4,10 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 
 from inventory.models.sales_models import Sales
-from inventory.serializers.sales_serializers import (
-    SalesSerializer
-)
-
-from inventory.services.sales_service import (
-    create_sale
-)
-
-from accounts.permissions import (
-    IsAdminOrStaff
-)
-
+from inventory.serializers.sales_serializers import SalesSerializer
+from inventory.services.sales_service import create_sale
+from accounts.permissions import IsAdminOrStaff
+from subscriptions.utils import check_subscription_write_access
 
 # =====================================================
 # SALES LIST + CREATE
@@ -47,8 +39,6 @@ class SalesListCreateView(APIView):
             .all()
         )
 
-        # ================= SUPER ADMIN ================= #
-
         if not (
             user.is_superuser or
             getattr(user, "role", None) == "superadmin"
@@ -76,6 +66,11 @@ class SalesListCreateView(APIView):
     # =========================
 
     def post(self, request):
+
+        if not request.user.is_superuser:
+            check_subscription_write_access(
+                request.user.retailer
+            )
 
         try:
 
@@ -145,8 +140,6 @@ class SalesDetailView(APIView):
             )
         )
 
-        # ================= SUPER ADMIN ================= #
-
         if (
             user.is_superuser or
             getattr(user, "role", None) == "superadmin"
@@ -154,13 +147,9 @@ class SalesDetailView(APIView):
 
             return queryset.get(pk=pk)
 
-        # ================= RETAILER FILTER ================= #
-
         queryset = queryset.filter(
             retailer=user.retailer
         )
-
-        # ================= BRANCH FILTER ================= #
 
         if getattr(user, "branch", None):
 
@@ -201,6 +190,11 @@ class SalesDetailView(APIView):
     # =========================
 
     def put(self, request, pk):
+
+        if not request.user.is_superuser:
+            check_subscription_write_access(
+                request.user.retailer
+            )
 
         try:
 
@@ -247,6 +241,11 @@ class SalesDetailView(APIView):
     # =========================
 
     def delete(self, request, pk):
+
+        if not request.user.is_superuser:
+            check_subscription_write_access(
+                request.user.retailer
+            )
 
         try:
 

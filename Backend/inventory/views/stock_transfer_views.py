@@ -1,34 +1,16 @@
-from rest_framework.generics import (
-    ListCreateAPIView,
-    RetrieveUpdateDestroyAPIView
-)
-
-from rest_framework.permissions import (
-    IsAuthenticated
-)
-
-from inventory.models.stock_transfer_models import (
-    StockTransfer
-)
-
-from inventory.serializers.stock_transfer_serializers import (
-    StockTransferSerializer
-)
-
-from accounts.permissions import (
-    IsAdminOrStaff
-)
-from inventory.services.stock_service import (
-    process_stock_transfer
-)
+from rest_framework.generics import (ListCreateAPIView,RetrieveUpdateDestroyAPIView)
+from rest_framework.permissions import (IsAuthenticated)
+from inventory.models.stock_transfer_models import (StockTransfer)
+from inventory.serializers.stock_transfer_serializers import (StockTransferSerializer)
+from accounts.permissions import (IsAdminOrStaff)
+from inventory.services.stock_service import (process_stock_transfer)
+from subscriptions.utils import (check_subscription_write_access, validate_branch_subscription)
 
 # =====================================================
 # STOCK TRANSFER LIST + CREATE
 # =====================================================
 
-class StockTransferListCreateView(
-    ListCreateAPIView
-):
+class StockTransferListCreateView(ListCreateAPIView):
 
     serializer_class = (
         StockTransferSerializer
@@ -57,21 +39,15 @@ class StockTransferListCreateView(
             .all()
         )
 
-        # ================= SUPER ADMIN ================= #
-
         if (
             user.is_superuser or
             getattr(user, "role", None) == "superadmin"
         ):
             return queryset
 
-        # ================= RETAILER FILTER ================= #
-
         queryset = queryset.filter(
             retailer=user.retailer
         )
-
-        # ================= BRANCH FILTER ================= #
 
         if getattr(user, "branch", None):
 
@@ -82,6 +58,14 @@ class StockTransferListCreateView(
         return queryset
 
     def perform_create(self, serializer):
+
+        if not self.request.user.is_superuser:
+            check_subscription_write_access(
+                self.request.user.retailer
+            )
+            validate_branch_subscription(
+                self.request.user.retailer
+            )
 
         stock_transfer = serializer.save(
             retailer=self.request.user.retailer,
@@ -96,9 +80,7 @@ class StockTransferListCreateView(
 # STOCK TRANSFER DETAIL VIEW
 # =====================================================
 
-class StockTransferDetailView(
-    RetrieveUpdateDestroyAPIView
-):
+class StockTransferDetailView(RetrieveUpdateDestroyAPIView):
 
     serializer_class = (
         StockTransferSerializer
@@ -129,21 +111,15 @@ class StockTransferDetailView(
             .all()
         )
 
-        # ================= SUPER ADMIN ================= #
-
         if (
             user.is_superuser or
             getattr(user, "role", None) == "superadmin"
         ):
             return queryset
 
-        # ================= RETAILER FILTER ================= #
-
         queryset = queryset.filter(
             retailer=user.retailer
         )
-
-        # ================= BRANCH FILTER ================= #
 
         if getattr(user, "branch", None):
 
@@ -152,3 +128,27 @@ class StockTransferDetailView(
             )
 
         return queryset
+
+    def perform_update(self, serializer):
+
+        if not self.request.user.is_superuser:
+            check_subscription_write_access(
+                self.request.user.retailer
+            )
+            validate_branch_subscription(
+                self.request.user.retailer
+            )
+
+        serializer.save()
+
+    def perform_destroy(self, instance):
+
+        if not self.request.user.is_superuser:
+            check_subscription_write_access(
+                self.request.user.retailer
+            )
+            validate_branch_subscription(
+                self.request.user.retailer
+            )
+
+        instance.delete()

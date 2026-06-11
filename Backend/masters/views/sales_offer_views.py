@@ -5,7 +5,8 @@ from rest_framework.permissions import IsAuthenticated
 from masters.models import SalesOffer
 from masters.serializers import SalesOfferSerializer
 from accounts.permissions import IsAdmin, IsSuperAdmin
-
+from subscriptions.utils import check_subscription_write_access
+from accounts.views import create_audit_log
 
 # =========================================================
 # BASE RETAILER MIXIN
@@ -63,14 +64,34 @@ class SalesOfferCreateView(
 
         user = self.request.user
 
-        serializer.save(
+        check_subscription_write_access(
+            user.retailer
+        )
+
+        sales_offer = serializer.save(
             retailer=user.retailer,
             branch=user.branch
         )
 
+        create_audit_log(
+            user=user,
+            action="create",
+            model_name="SalesOffer",
+            object_id=sales_offer.id,
+            description=(
+                f"Created Sales Offer "
+                f"{sales_offer.name}"
+            ),
+            request=self.request
+        )
+
     def create(self, request, *args, **kwargs):
 
-        response = super().create(request, *args, **kwargs)
+        response = super().create(
+            request,
+            *args,
+            **kwargs
+        )
 
         return Response({
             "success": True,
@@ -204,9 +225,30 @@ class SalesOfferUpdateView(
             partial=True
         )
 
-        serializer.is_valid(raise_exception=True)
+        serializer.is_valid(
+            raise_exception=True
+        )
+
+        check_subscription_write_access(
+            request.user.retailer
+        )
+
+        old_name = instance.name
 
         serializer.save()
+
+        create_audit_log(
+            user=request.user,
+            action="update",
+            model_name="SalesOffer",
+            object_id=instance.id,
+            description=(
+                f"Updated Sales Offer "
+                f"from {old_name} "
+                f"to {serializer.instance.name}"
+            ),
+            request=request
+        )
 
         return Response({
             "success": True,
@@ -244,9 +286,27 @@ class SalesOfferSoftDeleteView(
                 "message": "Offer already inactive"
             }, status=status.HTTP_400_BAD_REQUEST)
 
+        check_subscription_write_access(
+            request.user.retailer
+        )
+
         offer.is_active = False
 
-        offer.save(update_fields=["is_active"])
+        offer.save(
+            update_fields=["is_active"]
+        )
+
+        create_audit_log(
+            user=request.user,
+            action="deactivate",
+            model_name="SalesOffer",
+            object_id=offer.id,
+            description=(
+                f"Deactivated Sales Offer "
+                f"{offer.name}"
+            ),
+            request=request
+        )
 
         return Response({
             "success": True,
@@ -283,9 +343,27 @@ class SalesOfferActivateView(
                 "message": "Offer already active"
             }, status=status.HTTP_400_BAD_REQUEST)
 
+        check_subscription_write_access(
+            request.user.retailer
+        )
+
         offer.is_active = True
 
-        offer.save(update_fields=["is_active"])
+        offer.save(
+            update_fields=["is_active"]
+        )
+
+        create_audit_log(
+            user=request.user,
+            action="activate",
+            model_name="SalesOffer",
+            object_id=offer.id,
+            description=(
+                f"Activated Sales Offer "
+                f"{offer.name}"
+            ),
+            request=request
+        )
 
         return Response({
             "success": True,
@@ -316,7 +394,27 @@ class SalesOfferDeleteView(
 
         offer = self.get_object()
 
+        check_subscription_write_access(
+            request.user.retailer
+        )
+
+        offer_name = offer.name
+
+        offer_id = offer.id
+
         offer.delete()
+
+        create_audit_log(
+            user=request.user,
+            action="delete",
+            model_name="SalesOffer",
+            object_id=offer_id,
+            description=(
+                f"Deleted Sales Offer "
+                f"{offer_name}"
+            ),
+            request=request
+        )
 
         return Response({
             "success": True,

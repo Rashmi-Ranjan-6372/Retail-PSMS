@@ -1,15 +1,9 @@
 from decimal import Decimal
-
 from django.db import transaction
-
-from inventory.models.stock_transfer_models import (
-    StockTransfer
-)
-
-from inventory.models.stock_batch_models import (
-    StockBatch
-)
-
+from inventory.models.stock_transfer_models import StockTransfer
+from inventory.models.stock_batch_models import StockBatch
+from subscriptions.utils import check_subscription_write_access, validate_branch_subscription
+from accounts.views import create_audit_log
 
 # =====================================================
 # PROCESS STOCK TRANSFER
@@ -17,12 +11,9 @@ from inventory.models.stock_batch_models import (
 
 @transaction.atomic
 def process_stock_transfer(
-    stock_transfer_id
+    stock_transfer_id,
+    request=None
 ):
-
-    # =====================================================
-    # LOCK TRANSFER
-    # =====================================================
 
     stock_transfer = (
         StockTransfer.objects
@@ -36,6 +27,14 @@ def process_stock_transfer(
         )
         .get(id=stock_transfer_id)
     )
+
+    if not stock_transfer.created_by.is_superuser:
+        check_subscription_write_access(
+            stock_transfer.retailer
+        )
+        validate_branch_subscription(
+            stock_transfer.branch
+        )
 
     # =====================================================
     # PREVENT DOUBLE PROCESSING
@@ -54,6 +53,8 @@ def process_stock_transfer(
     )
 
     transfer_qty = stock_transfer.quantity
+
+    old_source_available = source_batch.available_qty
 
     # =====================================================
     # STOCK VALIDATION
@@ -85,13 +86,9 @@ def process_stock_transfer(
         .select_for_update()
         .get_or_create(
             retailer=stock_transfer.retailer,
-
             branch=stock_transfer.to_branch,
-
             product=source_batch.product,
-
             batch_no=source_batch.batch_no,
-
             defaults={
                 "supplier": source_batch.supplier,
                 "quantity": transfer_qty,
@@ -106,6 +103,11 @@ def process_stock_transfer(
                 "created_by": stock_transfer.created_by,
             }
         )
+    )
+
+    old_destination_available = (
+        destination_batch.available_qty
+        if not created else 0
     )
 
     # =====================================================
@@ -146,5 +148,27 @@ def process_stock_transfer(
             "status",
         ]
     )
+
+    # =====================================================
+    # AUDIT LOG
+    # =====================================================
+
+    if request:
+
+        create_audit_log(
+            user=request.user,
+            action="create",
+            model_name="StockTransfer",
+            object_id=stock_transfer.id,
+            description=(
+                f"Transferred {transfer_qty} of "
+                f"{stock_transfer.product.name} "
+                f"from {stock_transfer.from_branch.name} "
+                f"to {stock_transfer.to_branch.name}. "
+                f"Source Stock:{old_source_available}->{source_batch.available_qty}, "
+                f"Destination Stock:{old_destination_available}->{destination_batch.available_qty}"
+            ),
+            request=request
+        )
 
     return stock_transfer

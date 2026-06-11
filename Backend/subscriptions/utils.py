@@ -4,24 +4,51 @@ from rest_framework.exceptions import ValidationError
 from .models import RetailerSubscription
 from branches.models import Branch
 from accounts.models import User
+from rest_framework.exceptions import PermissionDenied
 
+def get_subscription(retailer):
 
-def get_active_subscription(retailer):
-    
-    subscription = (
+    return (
         RetailerSubscription.objects
-        .filter(
-            retailer=retailer,
-            is_active=True,
-            end_date__gte=timezone.now().date()
-        )
+        .filter(retailer=retailer)
         .select_related("plan")
         .first()
     )
 
+
+def is_subscription_active(retailer):
+
+    subscription = get_subscription(retailer)
+
     if not subscription:
-        raise ValidationError(
-            "Subscription expired or inactive. Please renew your subscription."
+        return False
+
+    if subscription.status != "active":
+        return False
+
+    if subscription.expiry_date < timezone.now().date():
+        return False
+
+    return True
+
+
+def check_subscription_write_access(retailer):
+
+    subscription = get_subscription(retailer)
+
+    if not subscription:
+        raise PermissionDenied(
+            "No subscription assigned."
+        )
+
+    if subscription.status != "active":
+        raise PermissionDenied(
+            "Subscription is suspended."
+        )
+
+    if subscription.expiry_date < timezone.now().date():
+        raise PermissionDenied(
+            "Subscription expired. Please renew your subscription."
         )
 
     return subscription
@@ -29,7 +56,7 @@ def get_active_subscription(retailer):
 
 def validate_branch_subscription(retailer):
 
-    subscription = get_active_subscription(retailer)
+    subscription = check_subscription_write_access(retailer)
 
     if subscription.plan.max_branches > 0:
 
@@ -41,8 +68,8 @@ def validate_branch_subscription(retailer):
         if current_branches >= subscription.plan.max_branches:
 
             raise ValidationError(
-                f"Branch limit reached. "
-                f"Allowed: {subscription.plan.max_branches}"
+                f"Branch limit reached. Allowed: "
+                f"{subscription.plan.max_branches}"
             )
 
     return subscription
@@ -50,7 +77,7 @@ def validate_branch_subscription(retailer):
 
 def validate_user_subscription(retailer):
 
-    subscription = get_active_subscription(retailer)
+    subscription = check_subscription_write_access(retailer)
 
     if subscription.plan.max_users > 0:
 
@@ -62,8 +89,8 @@ def validate_user_subscription(retailer):
         if current_users >= subscription.plan.max_users:
 
             raise ValidationError(
-                f"User limit reached. "
-                f"Allowed: {subscription.plan.max_users}"
+                f"User limit reached. Allowed: "
+                f"{subscription.plan.max_users}"
             )
 
     return subscription

@@ -1,10 +1,7 @@
 from django.db import transaction
 from django.db.models import F
-
-from inventory.models.stock_batch_models import (
-    StockBatch
-)
-
+from inventory.models.stock_batch_models import StockBatch
+from subscriptions.utils import (check_subscription_write_access, validate_branch_subscription)
 
 class BatchService:
 
@@ -26,11 +23,15 @@ class BatchService:
             .get(id=batch_id)
         )
 
-        qty = int(qty)
+        check_subscription_write_access(
+            batch.retailer
+        )
 
-        # =========================
-        # MINUS STOCK
-        # =========================
+        validate_branch_subscription(
+            batch.retailer
+        )
+
+        qty = int(qty)
 
         if operation == "minus":
 
@@ -44,10 +45,6 @@ class BatchService:
             batch.available_qty = (
                 batch.available_qty - qty
             )
-
-        # =========================
-        # ADD STOCK
-        # =========================
 
         elif operation == "plus":
 
@@ -83,6 +80,14 @@ class BatchService:
             StockBatch.objects
             .select_for_update()
             .get(id=batch_id)
+        )
+
+        check_subscription_write_access(
+            batch.retailer
+        )
+
+        validate_branch_subscription(
+            batch.retailer
         )
 
         qty = int(qty)
@@ -121,6 +126,14 @@ class BatchService:
             StockBatch.objects
             .select_for_update()
             .get(id=batch_id)
+        )
+
+        check_subscription_write_access(
+            batch.retailer
+        )
+
+        validate_branch_subscription(
+            batch.retailer
         )
 
         qty = int(qty)

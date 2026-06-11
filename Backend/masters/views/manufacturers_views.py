@@ -9,6 +9,8 @@ from accounts.permissions import (
     IsAdmin,
     IsSuperAdmin
 )
+from subscriptions.utils import check_subscription_write_access
+from accounts.views import create_audit_log
 
 
 # =========================================================
@@ -48,6 +50,24 @@ class ManufacturerCreateView(generics.CreateAPIView):
         serializer.save(
             retailer=self.request.user.retailer,
             branch=self.request.user.branch
+        )
+
+        check_subscription_write_access(
+            self.request.user.retailer
+        )
+
+        manufacturer = serializer.save(
+            retailer=self.request.user.retailer,
+            branch=self.request.user.branch
+        )
+
+        create_audit_log(
+            user=self.request.user,
+            action="create",
+            model_name="Manufacturer",
+            object_id=manufacturer.id,
+            description=f"Created Manufacturer {manufacturer.name}",
+            request=self.request
         )
 
     def create(self, request, *args, **kwargs):
@@ -158,6 +178,12 @@ class ManufacturerUpdateView(generics.UpdateAPIView):
 
         instance = self.get_object()
 
+        check_subscription_write_access(
+            request.user.retailer
+        )
+
+        old_name = instance.name
+
         serializer = self.get_serializer(
             instance,
             data=request.data,
@@ -169,6 +195,15 @@ class ManufacturerUpdateView(generics.UpdateAPIView):
         )
 
         serializer.save()
+
+        create_audit_log(
+            user=request.user,
+            action="update",
+            model_name="Manufacturer",
+            object_id=instance.id,
+            description=f"Updated Manufacturer from {old_name} to {serializer.instance.name}",
+            request=request
+        )
 
         return Response({
             "success": True,
@@ -196,6 +231,10 @@ class ManufacturerSoftDeleteView(generics.UpdateAPIView):
 
         manufacturer = self.get_object()
 
+        check_subscription_write_access(
+            request.user.retailer
+        )
+
         if not manufacturer.is_active:
 
             return Response({
@@ -205,6 +244,15 @@ class ManufacturerSoftDeleteView(generics.UpdateAPIView):
 
         manufacturer.is_active = False
         manufacturer.save()
+
+        create_audit_log(
+            user=request.user,
+            action="deactivate",
+            model_name="Manufacturer",
+            object_id=manufacturer.id,
+            description=f"Deactivated Manufacturer {manufacturer.name}",
+            request=request
+        )
 
         return Response({
             "success": True,
@@ -231,6 +279,10 @@ class ManufacturerRestoreView(generics.UpdateAPIView):
 
         manufacturer = self.get_object()
 
+        check_subscription_write_access(
+            request.user.retailer
+        )
+
         if manufacturer.is_active:
 
             return Response({
@@ -240,6 +292,15 @@ class ManufacturerRestoreView(generics.UpdateAPIView):
 
         manufacturer.is_active = True
         manufacturer.save()
+
+        create_audit_log(
+            user=request.user,
+            action="restore",
+            model_name="Manufacturer",
+            object_id=manufacturer.id,
+            description=f"Restored Manufacturer {manufacturer.name}",
+            request=request
+        )
 
         return Response({
             "success": True,
@@ -266,7 +327,23 @@ class ManufacturerDeleteView(generics.DestroyAPIView):
 
         manufacturer = self.get_object()
 
+        check_subscription_write_access(
+            request.user.retailer
+        )
+
+        manufacturer_name = manufacturer.name
+        manufacturer_id = manufacturer.id
+
         manufacturer.delete()
+
+        create_audit_log(
+            user=request.user,
+            action="delete",
+            model_name="Manufacturer",
+            object_id=manufacturer_id,
+            description=f"Permanently deleted Manufacturer {manufacturer_name}",
+            request=request
+        )
 
         return Response({
             "success": True,

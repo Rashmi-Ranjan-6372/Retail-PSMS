@@ -1,12 +1,11 @@
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-
 from masters.models import Category
 from masters.serializers import ProductCategorySerializer
-
 from accounts.permissions import IsAdmin
-
+from subscriptions.utils import (check_subscription_write_access)
+from accounts.views import (create_audit_log)
 
 # =========================================================
 # HELPER QUERYSET
@@ -73,9 +72,22 @@ class ProductCategoryListCreateView(
 
     def perform_create(self, serializer):
 
-        serializer.save(
+        check_subscription_write_access(
+            self.request.user.retailer
+        )
+
+        category = serializer.save(
             retailer=self.request.user.retailer,
             branch=self.request.user.branch
+        )
+
+        create_audit_log(
+            user=self.request.user,
+            action="create",
+            model_name="Category",
+            object_id=category.id,
+            description=f"Created Category {category.name}",
+            request=self.request
         )
 
     def list(self, request, *args, **kwargs):
@@ -154,6 +166,12 @@ class ProductCategoryRetrieveUpdateDeleteView(
 
         instance = self.get_object()
 
+        check_subscription_write_access(
+            request.user.retailer
+        )
+
+        old_name = instance.name
+
         serializer = self.get_serializer(
             instance,
             data=request.data,
@@ -166,6 +184,15 @@ class ProductCategoryRetrieveUpdateDeleteView(
 
         serializer.save()
 
+        create_audit_log(
+            user=request.user,
+            action="update",
+            model_name="Category",
+            object_id=instance.id,
+            description=f"Updated Category from {old_name} to {serializer.instance.name}",
+            request=request
+        )
+
         return Response({
             "success": True,
             "message": "Category updated successfully",
@@ -176,7 +203,23 @@ class ProductCategoryRetrieveUpdateDeleteView(
 
         instance = self.get_object()
 
+        check_subscription_write_access(
+            request.user.retailer
+        )
+
+        category_name = instance.name
+        category_id = instance.id
+
         instance.delete()
+
+        create_audit_log(
+            user=request.user,
+            action="delete",
+            model_name="Category",
+            object_id=category_id,
+            description=f"Deleted Category {category_name}",
+            request=request
+        )
 
         return Response({
             "success": True,

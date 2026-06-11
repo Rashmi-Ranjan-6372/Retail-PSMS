@@ -1,36 +1,16 @@
-from rest_framework.generics import (
-    ListCreateAPIView,
-    RetrieveUpdateDestroyAPIView
-)
-
-from rest_framework.permissions import (
-    IsAuthenticated
-)
-
-from inventory.models.sales_return_models import (
-    SalesReturn
-)
-
-from inventory.serializers.sales_return_serializers import (
-    SalesReturnSerializer
-)
-
-from accounts.permissions import (
-    IsAdminOrStaff
-)
-
-from inventory.services.sales_return_service import (
-    process_sales_return
-)
-
+from rest_framework.generics import (ListCreateAPIView, RetrieveUpdateDestroyAPIView)
+from rest_framework.permissions import (IsAuthenticated)
+from inventory.models.sales_return_models import (SalesReturn)
+from inventory.serializers.sales_return_serializers import (SalesReturnSerializer)
+from accounts.permissions import (IsAdminOrStaff)
+from inventory.services.sales_return_service import (process_sales_return)
+from subscriptions.utils import (check_subscription_write_access)
 
 # =====================================================
 # SALES RETURN LIST + CREATE
 # =====================================================
 
-class SalesReturnListCreateView(
-    ListCreateAPIView
-):
+class SalesReturnListCreateView(ListCreateAPIView):
 
     serializer_class = SalesReturnSerializer
 
@@ -54,21 +34,15 @@ class SalesReturnListCreateView(
             .all()
         )
 
-        # ================= SUPER ADMIN ================= #
-
         if (
             user.is_superuser or
             getattr(user, "role", None) == "superadmin"
         ):
             return queryset
 
-        # ================= RETAILER FILTER ================= #
-
         queryset = queryset.filter(
             retailer=user.retailer
         )
-
-        # ================= BRANCH FILTER ================= #
 
         if getattr(user, "branch", None):
 
@@ -80,15 +54,16 @@ class SalesReturnListCreateView(
 
     def perform_create(self, serializer):
 
+        if not self.request.user.is_superuser:
+            check_subscription_write_access(
+                self.request.user.retailer
+            )
+
         sales_return = serializer.save(
             retailer=self.request.user.retailer,
             branch=self.request.user.branch,
             created_by=self.request.user,
         )
-
-        # =========================
-        # PROCESS BUSINESS LOGIC
-        # =========================
 
         process_sales_return(
             sales_return
@@ -99,9 +74,7 @@ class SalesReturnListCreateView(
 # SALES RETURN DETAIL VIEW
 # =====================================================
 
-class SalesReturnDetailView(
-    RetrieveUpdateDestroyAPIView
-):
+class SalesReturnDetailView(RetrieveUpdateDestroyAPIView):
 
     serializer_class = (
         SalesReturnSerializer
@@ -129,21 +102,15 @@ class SalesReturnDetailView(
             .all()
         )
 
-        # ================= SUPER ADMIN ================= #
-
         if (
             user.is_superuser or
             getattr(user, "role", None) == "superadmin"
         ):
             return queryset
 
-        # ================= RETAILER FILTER ================= #
-
         queryset = queryset.filter(
             retailer=user.retailer
         )
-
-        # ================= BRANCH FILTER ================= #
 
         if getattr(user, "branch", None):
 
@@ -152,3 +119,21 @@ class SalesReturnDetailView(
             )
 
         return queryset
+
+    def perform_update(self, serializer):
+
+        if not self.request.user.is_superuser:
+            check_subscription_write_access(
+                self.request.user.retailer
+            )
+
+        serializer.save()
+
+    def perform_destroy(self, instance):
+
+        if not self.request.user.is_superuser:
+            check_subscription_write_access(
+                self.request.user.retailer
+            )
+
+        instance.delete()

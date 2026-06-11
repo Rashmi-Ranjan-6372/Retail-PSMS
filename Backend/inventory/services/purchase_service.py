@@ -1,18 +1,9 @@
 from decimal import Decimal
-
 from django.db import transaction
-
-from inventory.models.stock_transaction_models import (
-    StockTransaction
-)
-
-from inventory.models.stock_transaction_item_models import (
-    StockTransactionItem
-)
-
-from inventory.models.stock_batch_models import (
-    StockBatch
-)
+from inventory.models.stock_transaction_models import (StockTransaction)
+from inventory.models.stock_transaction_item_models import (StockTransactionItem)
+from inventory.models.stock_batch_models import (StockBatch)
+from subscriptions.utils import (check_subscription_write_access, validate_branch_subscription)
 
 
 # =====================================================
@@ -29,6 +20,14 @@ def create_purchase(
     created_by,
     remarks=None,
 ):
+
+    check_subscription_write_access(
+        retailer
+    )
+
+    validate_branch_subscription(
+        retailer
+    )
 
     total_amount = Decimal("0.00")
 
@@ -93,7 +92,6 @@ def create_purchase(
                 branch=branch,
                 product=product,
                 batch_no=batch_no,
-
                 defaults={
                     "supplier": supplier,
                     "quantity": total_qty,
@@ -115,22 +113,24 @@ def create_purchase(
         if not created:
 
             batch.quantity += total_qty
-
             batch.available_qty += total_qty
-
             batch.purchase_price = purchase_price
-
             batch.sale_price = sale_price
-
             batch.mrp = mrp
-
             batch.expiry_date = expiry_date
+            batch.manufacture_date = (manufacture_date)
 
-            batch.manufacture_date = (
-                manufacture_date
+            batch.save(
+                update_fields=[
+                    "quantity",
+                    "available_qty",
+                    "purchase_price",
+                    "sale_price",
+                    "mrp",
+                    "expiry_date",
+                    "manufacture_date",
+                ]
             )
-
-            batch.save()
 
         # =====================================================
         # ITEM TOTAL
@@ -150,29 +150,17 @@ def create_purchase(
         StockTransactionItem.objects.create(
             retailer=retailer,
             branch=branch,
-
             transaction=purchase,
-
             product=product,
-
             batch=batch,
-
             movement_type="IN",
-
             qty=qty,
-
             free_qty=free_qty,
-
             purchase_price=purchase_price,
-
             sale_price=sale_price,
-
             expiry_date=expiry_date,
-
             total_amount=item_total,
-
             available_after=batch.available_qty,
-
             created_by=created_by,
         )
 
@@ -182,6 +170,10 @@ def create_purchase(
 
     purchase.total_amount = total_amount
 
-    purchase.save()
+    purchase.save(
+        update_fields=[
+            "total_amount"
+        ]
+    )
 
     return purchase

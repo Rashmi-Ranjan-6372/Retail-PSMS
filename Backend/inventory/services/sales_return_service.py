@@ -18,6 +18,11 @@ from inventory.models.stock_batch_models import (
     StockBatch
 )
 
+from subscriptions.utils import (
+    check_subscription_write_access,
+    validate_branch_subscription
+)
+
 
 # =====================================================
 # PROCESS SALES RETURN
@@ -37,6 +42,14 @@ def process_sales_return(
         .select_for_update()
         .select_related("sales")
         .get(id=sales_return_id)
+    )
+
+    check_subscription_write_access(
+        sales_return.retailer
+    )
+
+    validate_branch_subscription(
+        sales_return.retailer
     )
 
     # =====================================================
@@ -90,7 +103,9 @@ def process_sales_return(
         batch.available_qty += return_qty
 
         batch.save(
-            update_fields=["available_qty"]
+            update_fields=[
+                "available_qty"
+            ]
         )
 
         # =====================================================
@@ -115,7 +130,13 @@ def process_sales_return(
 
     sales_return.status = "COMPLETED"
 
-    sales_return.save()
+    sales_return.save(
+        update_fields=[
+            "total_amount",
+            "refund_amount",
+            "status"
+        ]
+    )
 
     # =====================================================
     # UPDATE ORIGINAL SALES
@@ -138,7 +159,9 @@ def process_sales_return(
 
     if sales.total_amount < 0:
 
-        sales.total_amount = Decimal("0.00")
+        sales.total_amount = Decimal(
+            "0.00"
+        )
 
     # =====================================================
     # RECALCULATE NET AMOUNT
@@ -151,7 +174,9 @@ def process_sales_return(
 
     if sales.net_amount < 0:
 
-        sales.net_amount = Decimal("0.00")
+        sales.net_amount = Decimal(
+            "0.00"
+        )
 
     # =====================================================
     # RECALCULATE DUE
@@ -178,6 +203,13 @@ def process_sales_return(
 
         sales.payment_status = "UNPAID"
 
-    sales.save()
+    sales.save(
+        update_fields=[
+            "total_amount",
+            "net_amount",
+            "due_amount",
+            "payment_status"
+        ]
+    )
 
     return sales_return

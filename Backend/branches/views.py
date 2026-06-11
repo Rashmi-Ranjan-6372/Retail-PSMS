@@ -9,7 +9,7 @@ from .models import Branch
 from .serializers import BranchSerializer
 from accounts.permissions import IsRetailerOwnerOrPlatformOwner
 from accounts.views import create_audit_log
-from subscriptions.utils import validate_branch_subscription
+from subscriptions.utils import validate_branch_subscription, check_subscription_write_access
 
 # ==================== BRANCH CREATE VIEW ==================== #
 
@@ -22,6 +22,7 @@ class BranchCreateView(generics.CreateAPIView):
     def perform_create(self, serializer):
         retailer = self.request.user.retailer
         validate_branch_subscription(retailer)
+        check_subscription_write_access(retailer)
         branch = serializer.save(retailer=retailer)
 
         create_audit_log(
@@ -147,6 +148,12 @@ class BranchUpdateView(generics.UpdateAPIView):
         raise PermissionDenied("Not allowed")
 
     def update(self, request, *args, **kwargs):
+
+        if not request.user.is_platform_owner():
+            check_subscription_write_access(
+                request.user.retailer
+            )
+
         response = super().update(request, *args, **kwargs)
 
         create_audit_log(
@@ -201,6 +208,11 @@ class BranchSoftDeleteView(APIView):
                 "success": False,
                 "message": "Branch already inactive"
             }, status=400)
+
+        if not user.is_platform_owner():
+            check_subscription_write_access(
+                user.retailer
+            )
 
         branch.soft_delete(user)
 
@@ -262,7 +274,11 @@ class BranchRestoreView(APIView):
             }, status=400)
 
         if user.is_retailer_owner():
+            
             validate_branch_subscription(
+                branch.retailer
+            )
+            check_subscription_write_access(
                 branch.retailer
             )
 
@@ -310,6 +326,11 @@ class BranchHardDeleteView(APIView):
 
         else:
             raise PermissionDenied("Not allowed")
+
+        if not user.is_platform_owner():
+            check_subscription_write_access(
+                user.retailer
+            )
 
         branch_name = branch.name
         branch.hard_delete()

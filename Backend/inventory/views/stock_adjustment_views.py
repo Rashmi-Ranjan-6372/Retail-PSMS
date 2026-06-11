@@ -1,30 +1,16 @@
-from rest_framework.generics import (
-    ListCreateAPIView,
-    RetrieveUpdateDestroyAPIView
-)
-
+from rest_framework.generics import (ListCreateAPIView, RetrieveUpdateDestroyAPIView)
 from rest_framework.permissions import IsAuthenticated
-
-from inventory.models.stock_adjustment_models import (
-    StockAdjustment
-)
-
-from inventory.serializers.stock_adjustment_serializers import (
-    StockAdjustmentSerializer
-)
-
-from accounts.permissions import (
-    IsAdminOrStaff
-)
+from inventory.models.stock_adjustment_models import (StockAdjustment)
+from inventory.serializers.stock_adjustment_serializers import (StockAdjustmentSerializer)
+from accounts.permissions import (IsAdminOrStaff)
+from subscriptions.utils import (check_subscription_write_access)
 
 
 # =====================================================
 # STOCK ADJUSTMENT LIST + CREATE
 # =====================================================
 
-class StockAdjustmentListCreateView(
-    ListCreateAPIView
-):
+class StockAdjustmentListCreateView(ListCreateAPIView):
 
     serializer_class = StockAdjustmentSerializer
 
@@ -49,21 +35,15 @@ class StockAdjustmentListCreateView(
             .all()
         )
 
-        # ================= SUPER ADMIN ================= #
-
         if (
             user.is_superuser or
             getattr(user, "role", None) == "superadmin"
         ):
             return queryset
 
-        # ================= RETAILER FILTER ================= #
-
         queryset = queryset.filter(
             retailer=user.retailer
         )
-
-        # ================= BRANCH FILTER ================= #
 
         if getattr(user, "branch", None):
 
@@ -74,6 +54,11 @@ class StockAdjustmentListCreateView(
         return queryset
 
     def perform_create(self, serializer):
+
+        if not self.request.user.is_superuser:
+            check_subscription_write_access(
+                self.request.user.retailer
+            )
 
         serializer.save(
             retailer=self.request.user.retailer,
@@ -86,9 +71,7 @@ class StockAdjustmentListCreateView(
 # STOCK ADJUSTMENT DETAIL VIEW
 # =====================================================
 
-class StockAdjustmentDetailView(
-    RetrieveUpdateDestroyAPIView
-):
+class StockAdjustmentDetailView(RetrieveUpdateDestroyAPIView):
 
     serializer_class = (
         StockAdjustmentSerializer
@@ -117,21 +100,15 @@ class StockAdjustmentDetailView(
             .all()
         )
 
-        # ================= SUPER ADMIN ================= #
-
         if (
             user.is_superuser or
             getattr(user, "role", None) == "superadmin"
         ):
             return queryset
 
-        # ================= RETAILER FILTER ================= #
-
         queryset = queryset.filter(
             retailer=user.retailer
         )
-
-        # ================= BRANCH FILTER ================= #
 
         if getattr(user, "branch", None):
 
@@ -140,3 +117,21 @@ class StockAdjustmentDetailView(
             )
 
         return queryset
+
+    def perform_update(self, serializer):
+
+        if not self.request.user.is_superuser:
+            check_subscription_write_access(
+                self.request.user.retailer
+            )
+
+        serializer.save()
+
+    def perform_destroy(self, instance):
+
+        if not self.request.user.is_superuser:
+            check_subscription_write_access(
+                self.request.user.retailer
+            )
+
+        instance.delete()

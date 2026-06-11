@@ -1,4 +1,5 @@
 from django.db import transaction
+from subscriptions.utils import (check_subscription_write_access,validate_branch_subscription)
 
 
 # =====================================================
@@ -6,9 +7,10 @@ from django.db import transaction
 # =====================================================
 
 @transaction.atomic
-def update_payment_status(
-    payment
-):
+def update_payment_status(payment):
+
+    check_subscription_write_access(payment.retailer)
+    validate_branch_subscription(payment.retailer)
 
     # =========================
     # DUE CALCULATION
@@ -24,15 +26,20 @@ def update_payment_status(
     # =========================
 
     if payment.due_amount <= 0:
-
         payment.status = "PAID"
 
     elif payment.paid_amount > 0:
-
         payment.status = "PARTIAL"
 
     else:
 
         payment.status = "PENDING"
 
-    payment.save()
+    payment.save(
+        update_fields=[
+            "due_amount",
+            "status"
+        ]
+    )
+
+    return payment

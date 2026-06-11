@@ -1,3 +1,5 @@
+from urllib3 import request
+
 from config import settings
 from branches.models import Branch
 from rest_framework.views import APIView
@@ -33,7 +35,7 @@ from .serializers import (
 
 from .permissions import (IsAdmin, IsRetailerOwnerOrPlatformOwner)
 from .models import AuditLog, LoginLog, Retailer, UserSession, EmailOTP
-from subscriptions.utils import validate_user_subscription
+from subscriptions.utils import validate_branch_subscription, validate_user_subscription, check_subscription_write_access
 User = get_user_model()
 
 # =====================================================
@@ -1048,16 +1050,16 @@ class CreateStaffView(APIView):
                 retailer = Retailer.objects.get(
                     id=retailer_id
                 )
+
             except Retailer.DoesNotExist:
                 return Response({
                     "success": False,
                     "message": "Retailer not found"
                 }, status=status.HTTP_404_NOT_FOUND)
 
-            # Subscription Validation
-            validate_user_subscription(
-                retailer
-            )
+            # Subscription validations
+            check_subscription_write_access(retailer)
+            validate_user_subscription(retailer)
 
             branch = Branch.objects.filter(
                 id=branch_id,
@@ -1079,6 +1081,10 @@ class CreateStaffView(APIView):
         # RETAILER OWNER (SUPERADMIN)
         # ==========================================
         elif request.user.role == "superadmin":
+
+            check_subscription_write_access(
+                request.user.retailer
+            )
 
             validate_user_subscription(
                 request.user.retailer
@@ -1112,6 +1118,10 @@ class CreateStaffView(APIView):
         # ADMIN
         # ==========================================
         else:
+
+            check_subscription_write_access(
+                request.user.retailer
+            )
 
             validate_user_subscription(
                 request.user.retailer
@@ -1432,16 +1442,25 @@ class LogoutBranchView(APIView):
         }, status=status.HTTP_200_OK)
 
 # ================= ADMIN RESET PASSWORD ================= #
+# ================= ADMIN RESET PASSWORD ================= #
+
 class AdminResetPasswordView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def post(self, request):
+
+        if not request.user.is_superuser:
+            check_subscription_write_access(
+                request.user.retailer
+            )
+
         serializer = AdminResetPasswordSerializer(
             data=request.data,
             context={"request": request}
         )
 
         if serializer.is_valid():
+
             serializer.save()
 
             create_audit_log(
@@ -1463,27 +1482,44 @@ class AdminResetPasswordView(APIView):
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
 
+
 # ================= DEACTIVATE USER ================= #
+
 class DeactivateUserView(APIView):
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, user_id):
+
+        if not request.user.is_superuser:
+            check_subscription_write_access(
+                request.user.retailer
+            )
+
         try:
             target_user = User.objects.get(id=user_id)
 
         except User.DoesNotExist:
-            return Response({"error": "User not found"}, status=404)
+            return Response({
+                "error": "User not found"
+            }, status=404)
 
-        if not can_manage_user(request.user, target_user):
-            return Response({"error": "Permission denied"}, status=403)
+        if not can_manage_user(
+            request.user,
+            target_user
+        ):
+            return Response({
+                "error": "Permission denied"
+            }, status=403)
 
         if request.user == target_user:
-            return Response({"error": "You cannot deactivate yourself"}, status=400)
+            return Response({
+                "error": "You cannot deactivate yourself"
+            }, status=400)
 
         blacklist_user_sessions(target_user)
 
         target_user.is_active = False
-        target_user.save()
+        target_user.save(update_fields=["is_active"])
 
         create_audit_log(
             user=request.user,
@@ -1506,17 +1542,30 @@ class ReactivateUserView(APIView):
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, user_id):
+
+        if not request.user.is_superuser:
+            check_subscription_write_access(
+                request.user.retailer
+            )
+
         try:
             target_user = User.objects.get(id=user_id)
 
         except User.DoesNotExist:
-            return Response({"error": "User not found"}, status=404)
+            return Response({
+                "error": "User not found"
+            }, status=404)
 
-        if not can_manage_user(request.user, target_user):
-            return Response({"error": "Permission denied"}, status=403)
+        if not can_manage_user(
+            request.user,
+            target_user
+        ):
+            return Response({
+                "error": "Permission denied"
+            }, status=403)
 
         target_user.is_active = True
-        target_user.save()
+        target_user.save(update_fields=["is_active"])
 
         create_audit_log(
             user=request.user,
@@ -1544,23 +1593,41 @@ class DeleteUserView(APIView):
             request.user.is_superuser or
             request.user.role == "superadmin"
         ):
-            return Response({"error": "Only superadmin can delete users"}, status=403)
+            return Response({
+                "error": "Only superadmin can delete users"
+            }, status=403)
+
+        if not request.user.is_superuser:
+            check_subscription_write_access(
+                request.user.retailer
+            )
 
         try:
             target_user = User.objects.get(id=user_id)
 
         except User.DoesNotExist:
-            return Response({"error": "User not found"}, status=404)
+            return Response({
+                "error": "User not found"
+            }, status=404)
 
         if request.user == target_user:
-            return Response({"error": "You cannot delete yourself"}, status=400)
+            return Response({
+                "error": "You cannot delete yourself"
+            }, status=400)
 
         blacklist_user_sessions(target_user)
 
         username = target_user.username
+
         target_user.is_deleted = True
         target_user.is_active = False
-        target_user.save()
+
+        target_user.save(
+            update_fields=[
+                "is_deleted",
+                "is_active"
+            ]
+        )
 
         create_audit_log(
             user=request.user,
@@ -1578,23 +1645,39 @@ class DeleteUserView(APIView):
 
 
 # ================= BULK USER ACTION ================= #
+# ================= BULK USER ACTION ================= #
 class BulkUserActionView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+
+        if not request.user.is_superuser:
+            check_subscription_write_access(
+                request.user.retailer
+            )
+
         action = request.data.get("action")
         user_ids = request.data.get("user_ids", [])
 
         if not user_ids:
-            return Response({"error": "No users selected"}, status=400)
+            return Response(
+                {"error": "No users selected"},
+                status=400
+            )
 
-        users = User.objects.filter(id__in=user_ids).exclude(id=request.user.id)
+        users = User.objects.filter(
+            id__in=user_ids
+        ).exclude(
+            id=request.user.id
+        )
 
         if request.user.is_superuser:
             pass
 
         elif request.user.role == "superadmin":
-            users = users.filter(retailer=request.user.retailer)
+            users = users.filter(
+                retailer=request.user.retailer
+            )
 
         else:
             users = users.filter(
@@ -1603,55 +1686,94 @@ class BulkUserActionView(APIView):
             )
 
         if not users.exists():
-            return Response({"error": "No valid users found"}, status=400)
+            return Response(
+                {"error": "No valid users found"},
+                status=400
+            )
 
         affected_ids = []
 
-        # ================= TRANSACTION SAFETY =================
         with transaction.atomic():
 
             if action == "deactivate":
 
                 for user in users:
                     blacklist_user_sessions(user)
+
                     user.is_active = False
-                    user.save(update_fields=["is_active"])
+                    user.save(
+                        update_fields=["is_active"]
+                    )
+
                     affected_ids.append(user.id)
 
                 audit_action = "update"
-                audit_desc = f"Bulk deactivated users: {affected_ids}"
+                audit_desc = (
+                    f"Bulk deactivated users: {affected_ids}"
+                )
 
             elif action == "reactivate":
 
-                updated = users.update(is_active=True)
+                updated = users.update(
+                    is_active=True
+                )
 
-                affected_ids = list(users.values_list("id", flat=True))
+                affected_ids = list(
+                    users.values_list(
+                        "id",
+                        flat=True
+                    )
+                )
+
                 audit_action = "update"
-                audit_desc = f"Bulk reactivated {updated} users: {affected_ids}"
+                audit_desc = (
+                    f"Bulk reactivated {updated} users: "
+                    f"{affected_ids}"
+                )
 
             elif action == "delete":
 
-                if not (request.user.is_superuser or request.user.role == "superadmin"):
+                if not (
+                    request.user.is_superuser or
+                    request.user.role == "superadmin"
+                ):
                     return Response(
-                        {"error": "Only superadmin can delete users"},
+                        {
+                            "error":
+                            "Only superadmin can delete users"
+                        },
                         status=403
                     )
 
                 for user in users:
+
                     affected_ids.append({
                         "id": user.id,
                         "username": user.username
                     })
+
                     blacklist_user_sessions(user)
-                    user.delete()
+
+                    user.is_deleted = True
+                    user.is_active = False
+                    user.save(
+                        update_fields=[
+                            "is_deleted",
+                            "is_active"
+                        ]
+                    )
 
                 audit_action = "delete"
-                audit_desc = f"Bulk deleted users: {affected_ids}"
+                audit_desc = (
+                    f"Bulk deleted users: {affected_ids}"
+                )
 
             else:
-                return Response({"error": "Invalid action"}, status=400)
+                return Response(
+                    {"error": "Invalid action"},
+                    status=400
+                )
 
-            # ================= AUDIT LOG =================
             create_audit_log(
                 user=request.user,
                 action=audit_action,
@@ -1663,7 +1785,10 @@ class BulkUserActionView(APIView):
 
         return Response({
             "success": True,
-            "message": f"{action.capitalize()} completed successfully",
+            "message": (
+                f"{action.capitalize()} "
+                "completed successfully"
+            ),
             "affected_count": len(affected_ids)
         })
 
