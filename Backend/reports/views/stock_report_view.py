@@ -1,11 +1,15 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 
 from reports.services.stock_report_service import StockReportService
+from accounts.views import create_audit_log
 
 
 class StockReportView(APIView):
+
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
 
@@ -17,4 +21,20 @@ class StockReportView(APIView):
             branch_id=branch_id
         )
 
-        return Response(data, status=status.HTTP_200_OK)
+        create_audit_log(
+            user=request.user,
+            action="view",
+            model_name="StockReport",
+            object_id=retailer_id or branch_id,
+            description=(
+                f"Viewed Stock Report "
+                f"(Retailer: {retailer_id}, "
+                f"Branch: {branch_id})"
+            ),
+            request=request
+        )
+
+        return Response(
+            data,
+            status=status.HTTP_200_OK
+        )

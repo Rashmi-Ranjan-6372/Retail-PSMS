@@ -1,3 +1,5 @@
+from accounts.views import create_audit_log
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -5,6 +7,8 @@ from reports.services.sales_report_service import SalesReportService
 
 
 class SalesReportView(APIView):
+
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
 
@@ -14,6 +18,19 @@ class SalesReportView(APIView):
         data = SalesReportService.get_report(
             retailer_id=retailer_id,
             branch_id=branch_id
+        )
+
+        create_audit_log(
+            user=request.user,
+            action="view",
+            model_name="SalesReport",
+            object_id=retailer_id or branch_id,
+            description=(
+                f"Viewed Sales Report "
+                f"(Retailer: {retailer_id}, "
+                f"Branch: {branch_id})"
+            ),
+            request=request
         )
 
         return Response(data, status=status.HTTP_200_OK)

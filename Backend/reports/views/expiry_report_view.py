@@ -1,20 +1,43 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-
-from reports.services.expiry_report_service import ExpiryReportService
-
+from rest_framework.permissions import IsAuthenticated
+from reports.services.expiry_report_service import (ExpiryReportService)
+from accounts.views import create_audit_log
 
 class ExpiryReportView(APIView):
 
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
 
-        retailer_id = request.query_params.get("retailer")
-        branch_id = request.query_params.get("branch")
+        retailer_id = request.query_params.get(
+            "retailer"
+        )
+
+        branch_id = request.query_params.get(
+            "branch"
+        )
 
         data = ExpiryReportService.get_report(
             retailer_id=retailer_id,
             branch_id=branch_id
         )
 
-        return Response(data, status=status.HTTP_200_OK)
+        create_audit_log(
+            user=request.user,
+            action="view",
+            model_name="ExpiryReport",
+            object_id=branch_id or retailer_id,
+            description=(
+                f"Viewed Expiry Report "
+                f"Retailer:{retailer_id} "
+                f"Branch:{branch_id}"
+            ),
+            request=request
+        )
+
+        return Response(
+            data,
+            status=status.HTTP_200_OK
+        )
