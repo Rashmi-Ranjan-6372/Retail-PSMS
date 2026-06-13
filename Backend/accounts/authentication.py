@@ -6,13 +6,6 @@ import datetime
 
 
 class CustomJWTAuthentication(JWTAuthentication):
-    """
-    Custom JWT Authentication:
-    - Checks active user
-    - Checks soft deleted user
-    - Checks account lock
-    - Invalidates token after password change
-    """
 
     def get_user(self, validated_token):
         user = super().get_user(validated_token)

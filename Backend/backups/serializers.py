@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import BackupLog
+from .models import BackupLog, BackupSchedule
 
 # ============================================================
 #                      BACKUP SERIALIZERS   
@@ -103,3 +103,28 @@ class BackupHistorySerializer(serializers.ModelSerializer):
             "created_at",
         ]
 
+# ============================================================
+#                   BACKUP SCHEDULE SERIALIZERS
+# ============================================================
+class BackupScheduleSerializer(
+    serializers.ModelSerializer
+):
+
+    class Meta:
+
+        model = BackupSchedule
+
+        fields = [
+            "id",
+            "frequency",
+            "backup_time",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+
+        read_only_fields = [
+            "id",
+            "created_at",
+            "updated_at",
+        ]

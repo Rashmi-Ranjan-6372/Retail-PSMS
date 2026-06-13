@@ -1,5 +1,3 @@
-from urllib3 import request
-
 from config import settings
 from branches.models import Branch
 from rest_framework.views import APIView
@@ -35,7 +33,7 @@ from .serializers import (
 
 from .permissions import (IsAdmin, IsRetailerOwnerOrPlatformOwner)
 from .models import AuditLog, LoginLog, Retailer, UserSession, EmailOTP
-from subscriptions.utils import validate_branch_subscription, validate_user_subscription, check_subscription_write_access
+from subscriptions.utils import validate_user_subscription, check_subscription_write_access
 User = get_user_model()
 
 # =====================================================
@@ -1057,7 +1055,6 @@ class CreateStaffView(APIView):
                     "message": "Retailer not found"
                 }, status=status.HTTP_404_NOT_FOUND)
 
-            # Subscription validations
             check_subscription_write_access(retailer)
             validate_user_subscription(retailer)
 
@@ -1380,11 +1377,9 @@ class LogoutBranchView(APIView):
 
         user = request.user
 
-        # Django Superuser
         if user.is_superuser:
             pass
 
-        # Retailer SuperAdmin
         elif user.role == "superadmin":
 
             if user.retailer != branch.retailer:
@@ -1392,7 +1387,6 @@ class LogoutBranchView(APIView):
                     "error": "You can only logout users from your own retailer"
                 }, status=status.HTTP_403_FORBIDDEN)
 
-        # Admin
         elif user.role == "admin":
 
             if (
@@ -1442,8 +1436,6 @@ class LogoutBranchView(APIView):
         }, status=status.HTTP_200_OK)
 
 # ================= ADMIN RESET PASSWORD ================= #
-# ================= ADMIN RESET PASSWORD ================= #
-
 class AdminResetPasswordView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin]
 
@@ -1537,7 +1529,6 @@ class DeactivateUserView(APIView):
 
 
 # ================= REACTIVATE USER ================= #
-
 class ReactivateUserView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -1644,7 +1635,6 @@ class DeleteUserView(APIView):
         })
 
 
-# ================= BULK USER ACTION ================= #
 # ================= BULK USER ACTION ================= #
 class BulkUserActionView(APIView):
     permission_classes = [IsAuthenticated]
