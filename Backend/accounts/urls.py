@@ -3,6 +3,8 @@ from .views import *
 
 urlpatterns = [
     path("create-retailer/", CreateRetailerView.as_view()),
+    path("validate-password-token/<uuid:token>/",ValidatePasswordTokenView.as_view()),
+    path("set-password/",SetPasswordView.as_view()),
     path("assign/", AssignSubscriptionView.as_view()),
     path("retailers/list/", RetailerSubscriptionListView.as_view()),
     path("retailers/<int:retailer_id>/", UpdateRetailerView.as_view()),

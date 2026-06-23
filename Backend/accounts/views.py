@@ -18,6 +18,7 @@ from django.contrib.auth import authenticate
 from django.core.mail import send_mail
 import random
 from datetime import timedelta
+from accounts.models import PasswordSetupToken
 from .serializers import (
     AdminResetPasswordSerializer,
     LoginSerializer,
@@ -29,6 +30,7 @@ from .serializers import (
     ResendOTPSerializer,
     AssignSubscriptionSerializer,
     RetailerSerializer,
+    SetPasswordSerializer,
 )
 
 from .permissions import (IsAdmin, IsRetailerOwnerOrPlatformOwner)
@@ -150,10 +152,13 @@ class CreateRetailerView(APIView):
     def post(self, request):
 
         if not request.user.is_superuser:
-            return Response({
-                "success": False,
-                "message": "Only platform owner can create retailer"
-            }, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {
+                    "success": False,
+                    "message": "Only platform owner can create retailer"
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
 
         serializer = RetailerCreateSerializer(
             data=request.data,
@@ -163,7 +168,34 @@ class CreateRetailerView(APIView):
         if serializer.is_valid():
 
             with transaction.atomic():
+
                 data = serializer.save()
+
+                token_obj = PasswordSetupToken.objects.create(
+                    user=data["user"],
+                    expires_at=timezone.now() + timedelta(hours=24)
+                )
+
+                setup_link = (
+                    f"{settings.PASSWORD_SETUP_URL}/"
+                    f"{token_obj.token}"
+                )
+                send_mail(
+                    subject="Welcome to Pharmacy ERP",
+                    message=(
+                        f"Hello {data['retailer'].owner_name},\n\n"
+                        f"Your retailer account has been created successfully.\n\n"
+                        f"Username: {data['user'].username}\n\n"
+                        f"Set your password using the link below:\n\n"
+                        f"{setup_link}\n\n"
+                        f"This link will expire in 24 hours.\n\n"
+                        f"Regards,\n"
+                        f"Pharmacy ERP Team"
+                    ),
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[data["retailer"].email],
+                    fail_silently=False
+                )
 
             create_audit_log(
                 user=request.user,
@@ -174,29 +206,36 @@ class CreateRetailerView(APIView):
                 request=request
             )
 
-            return Response({
-                "success": True,
-                "message": "Retailer created successfully",
-                "retailer": {
-                            "id": data["retailer"].id,
-                            "name": data["retailer"].name,
-                            "email": data["retailer"].email,
-                        },
-                "branch": {
-                            "id": data["branch"].id,
-                            "name": data["branch"].name,
-                        },
-                "superadmin": {
-                                "id": data["user"].id,
-                                "username": data["user"].username,
-                                "role": data["user"].role,
-                            }
-            }, status=status.HTTP_201_CREATED)
+            return Response(
+                {
+                    "success": True,
+                    "message": "Retailer created successfully",
+                    "password_setup_sent": True,
+                    "retailer": {
+                        "id": data["retailer"].id,
+                        "name": data["retailer"].name,
+                        "email": data["retailer"].email,
+                    },
+                    "branch": {
+                        "id": data["branch"].id,
+                        "name": data["branch"].name,
+                    },
+                    "superadmin": {
+                        "id": data["user"].id,
+                        "username": data["user"].username,
+                        "role": data["user"].role,
+                    }
+                },
+                status=status.HTTP_201_CREATED
+            )
 
-        return Response({
-            "success": False,
-            "errors": serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {
+                "success": False,
+                "errors": serializer.errors
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
     
 # =====================================================
 #                 ASSIGN SUBSCRIPTION
@@ -257,7 +296,107 @@ class AssignSubscriptionView(APIView):
             },
             status=status.HTTP_201_CREATED
         )
+    
+# ======================================================================
+#                   SET PASSWORD BY THE SUPERADMIN
+# ======================================================================
+class SetPasswordView(APIView):
+    permission_classes = [AllowAny]
 
+    def post(self, request):
+        serializer = SetPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        token = serializer.validated_data["token"]
+
+        try:
+
+            token_obj = (
+                PasswordSetupToken.objects.get(token=token)
+            )
+
+        except PasswordSetupToken.DoesNotExist:
+
+            return Response(
+                {
+                    "success": False,
+                    "message": "Invalid token"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not token_obj.is_valid():
+
+            return Response(
+                {
+                    "success": False,
+                    "message":
+                    "Token expired or already used"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user = token_obj.user
+
+        user.set_password(
+            serializer.validated_data["password"]
+        )
+        user.save()
+        token_obj.is_used = True
+
+        token_obj.save(
+            update_fields=[
+                "is_used"
+            ]
+        )
+
+        create_audit_log(
+            user=user,
+            action="update",
+            model_name="User",
+            object_id=user.id,
+            description=(
+                "Password setup completed"
+            )
+        )
+
+        return Response(
+            {
+                "success": True,
+                "message":
+                "Password set successfully"
+            }
+        )
+
+# ================================================================
+#                       VALIDATE PASSWORD
+# ================================================================
+class ValidatePasswordTokenView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, token):
+
+        try:
+
+            token_obj = (
+                PasswordSetupToken.objects.get(token=token)
+            )
+
+        except PasswordSetupToken.DoesNotExist:
+
+            return Response(
+                {
+                    "valid": False
+                }
+            )
+
+        return Response(
+            {
+                "valid": token_obj.is_valid(),
+                "username":
+                token_obj.user.username
+            }
+        )
+    
 # =====================================================
 # RETAILER LIST WITH SUBSCRIPTION
 # =====================================================

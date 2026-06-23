@@ -3,7 +3,7 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 from branches.models import Branch
-
+import uuid
 class Retailer(models.Model):
     name = models.CharField(max_length=255)
     owner_name = models.CharField(max_length=255)
@@ -36,22 +36,8 @@ class Retailer(models.Model):
         ]
 
 class RetailerBranchAutoFillMixin(models.Model):
-    retailer = models.ForeignKey(
-        Retailer,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="%(class)s_set"
-    )
-
-    branch = models.ForeignKey(
-        Branch,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="%(class)s_set"
-    )
-
+    retailer = models.ForeignKey(Retailer,on_delete=models.CASCADE, null=True,blank=True, related_name="%(class)s_set")
+    branch = models.ForeignKey(Branch,on_delete=models.SET_NULL, null=True,blank=True, related_name="%(class)s_set")
     class Meta:
         abstract = True
 
@@ -66,6 +52,41 @@ class RetailerBranchAutoFillMixin(models.Model):
                 self.branch = self._current_user.branch
 
         super().save(*args, **kwargs)
+
+class PasswordSetupToken(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="password_setup_tokens")
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def is_valid(self):
+
+        return (
+            not self.is_used and
+            self.expires_at > timezone.now()
+        )
+
+    def __str__(self):
+
+        return (
+            f"{self.user.username} - "
+            f"{self.token}"
+        )
+
+    class Meta:
+
+        ordering = [
+            "-created_at"
+        ]
+
+        indexes = [
+            models.Index(fields=["user"]),
+            models.Index(fields=["token"]),
+            models.Index(fields=["is_used"]),
+            models.Index(fields=["expires_at"]),
+            models.Index(fields=["user","is_used"]),
+        ]
 
 
 class User(AbstractUser):

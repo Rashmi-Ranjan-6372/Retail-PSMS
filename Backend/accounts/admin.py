@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import Retailer, User, LoginLog, UserSession, AuditLog, EmailOTP
+from .models import Retailer, User, LoginLog, UserSession, AuditLog, EmailOTP, PasswordSetupToken
 
 
 @admin.register(Retailer)
@@ -10,7 +10,14 @@ class RetailerAdmin(admin.ModelAdmin):
     list_filter = ("is_active", "created_at", "is_deleted")
     ordering = ("-created_at",)
 
-
+@admin.register(PasswordSetupToken)
+class PasswordSetupTokenAdmin(admin.ModelAdmin):
+    list_display = ("id","user","token","is_used","expires_at","created_at",)
+    list_filter = ("is_used","created_at","expires_at",)
+    search_fields = ("user__username","user__email","token",)
+    readonly_fields = ("token","created_at",)
+    ordering = ("-created_at",)
+    autocomplete_fields = ("user",)
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
     list_display = ("id", "username", "email", "role", "retailer", "branch", "is_active", "is_deleted", "created_by", "created_at")

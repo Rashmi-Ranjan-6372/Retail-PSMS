@@ -181,3 +181,8 @@ EMAIL_HOST_USER = "rashmiranjan6372@gmail.com"
 EMAIL_HOST_PASSWORD = "lscazuhoyiqywqmz"
 
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+
+PASSWORD_SETUP_URL = os.getenv(
+    "PASSWORD_SETUP_URL",
+    "http://localhost:3000/set-password"
+)

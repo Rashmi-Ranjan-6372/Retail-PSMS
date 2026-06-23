@@ -21,14 +21,9 @@ class RetailerCreateSerializer(serializers.Serializer):
     email = serializers.EmailField()
     address = serializers.CharField(required=False, allow_blank=True)
     gst_number = serializers.CharField(required=False, allow_blank=True)
-    license_number = serializers.CharField(required=False, allow_blank=True)
+    license_number = serializers.CharField(required=False,allow_blank=True)
     branch_name = serializers.CharField(max_length=255)
     username = serializers.CharField(max_length=150)
-    password = serializers.CharField(write_only=True, min_length=8)
-
-    # ======================================
-    # EMAIL VALIDATION
-    # ======================================
 
     def validate_email(self, value):
 
@@ -50,10 +45,6 @@ class RetailerCreateSerializer(serializers.Serializer):
 
         return value
 
-    # ======================================
-    # MOBILE VALIDATION
-    # ======================================
-
     def validate_mobile(self, value):
 
         if Retailer.objects.filter(
@@ -65,10 +56,6 @@ class RetailerCreateSerializer(serializers.Serializer):
             )
 
         return value
-
-    # ======================================
-    # USERNAME VALIDATION
-    # ======================================
 
     def validate_username(self, value):
 
@@ -82,33 +69,21 @@ class RetailerCreateSerializer(serializers.Serializer):
 
         return value
 
-    # ======================================
-    # CREATE RETAILER
-    # ======================================
-
     @transaction.atomic
     def create(self, validated_data):
 
         request = self.context.get("request")
-
-        # ==========================
-        # CREATE RETAILER
-        # ==========================
 
         retailer = Retailer.objects.create(
             name=validated_data["retailer_name"],
             owner_name=validated_data["owner_name"],
             mobile=validated_data["mobile"],
             email=validated_data["email"],
-            address=validated_data.get("address", ""),
-            gst_number=validated_data.get("gst_number", ""),
-            license_number=validated_data.get("license_number", ""),
+            address=validated_data.get("address",""),
+            gst_number=validated_data.get("gst_number",""),
+            license_number=validated_data.get("license_number",""),
             created_by=request.user
         )
-
-        # ==========================
-        # DEFAULT BRANCH
-        # ==========================
 
         branch = Branch.objects.create(
             retailer=retailer,
@@ -116,14 +91,9 @@ class RetailerCreateSerializer(serializers.Serializer):
             created_by=request.user
         )
 
-        # ==========================
-        # SUPERADMIN USER
-        # ==========================
-
-        superadmin = User.objects.create_user(
+        superadmin = User.objects.create(
             username=validated_data["username"],
             email=validated_data["email"],
-            password=validated_data["password"],
             role="superadmin",
             retailer=retailer,
             branch=branch,
@@ -132,11 +102,34 @@ class RetailerCreateSerializer(serializers.Serializer):
             is_staff=True
         )
 
+        superadmin.set_unusable_password()
+        superadmin.save(
+            update_fields=["password"]
+        )
+
         return {
             "retailer": retailer,
             "branch": branch,
             "user": superadmin
         }
+# ===========================================================
+#                       SETPASSWORD
+class SetPasswordSerializer(serializers.Serializer):
+    token = serializers.UUIDField()
+    password = serializers.CharField(min_length=8)
+    confirm_password = serializers.CharField()
+
+    def validate(self, attrs):
+
+        if (
+            attrs["password"] !=
+            attrs["confirm_password"]
+        ):
+            raise serializers.ValidationError(
+                "Passwords do not match"
+            )
+
+        return attrs
 
 # =========================================================
 #               SUBSCRIPTION SERIALIZERS
@@ -484,21 +477,12 @@ class CreateStaffSerializer(
 
         user = User.objects.create_user(
             username=validated_data["username"],
-
             email=validated_data["email"],
-
             password=validated_data["password"],
-
-            phone=validated_data.get(
-                "phone"
-            ),
-
+            phone=validated_data.get("phone"),
             role=role,
-
             retailer=retailer,
-
             branch=branch,
-
             is_active=True,
         )
 
