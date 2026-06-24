@@ -11,4 +11,5 @@ urlpatterns = [
     path('api/settings/', include('settings.urls')),
     path('api/backups/', include('backups.urls')),
     path('api/subscriptions/', include('subscriptions.urls')),
+    path('api/supports/', include('support.urls')),
 ]

@@ -185,7 +185,7 @@ class CreateRetailerView(APIView):
                     message=(
                         f"Hello {data['retailer'].owner_name},\n\n"
                         f"Your retailer account has been created successfully.\n\n"
-                        f"Username: {data['user'].username}\n\n"
+                        f"Username : {data['user'].username}\n"
                         f"Set your password using the link below:\n\n"
                         f"{setup_link}\n\n"
                         f"This link will expire in 24 hours.\n\n"

@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'settings',
     'backups',
     'subscriptions',
+    'support'
 ]
 
 # ---------------- MIDDLEWARE ---------------- #

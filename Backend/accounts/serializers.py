@@ -21,24 +21,17 @@ class RetailerCreateSerializer(serializers.Serializer):
     email = serializers.EmailField()
     address = serializers.CharField(required=False, allow_blank=True)
     gst_number = serializers.CharField(required=False, allow_blank=True)
-    license_number = serializers.CharField(required=False,allow_blank=True)
+    license_number = serializers.CharField(required=False, allow_blank=True)
     branch_name = serializers.CharField(max_length=255)
-    username = serializers.CharField(max_length=150)
 
     def validate_email(self, value):
 
-        if Retailer.objects.filter(
-            email=value
-        ).exists():
-
+        if Retailer.objects.filter(email=value).exists():
             raise serializers.ValidationError(
                 "Retailer email already exists."
             )
 
-        if User.objects.filter(
-            email=value
-        ).exists():
-
+        if User.objects.filter(email=value).exists():
             raise serializers.ValidationError(
                 "User email already exists."
             )
@@ -47,24 +40,9 @@ class RetailerCreateSerializer(serializers.Serializer):
 
     def validate_mobile(self, value):
 
-        if Retailer.objects.filter(
-            mobile=value
-        ).exists():
-
+        if Retailer.objects.filter(mobile=value).exists():
             raise serializers.ValidationError(
                 "Mobile number already exists."
-            )
-
-        return value
-
-    def validate_username(self, value):
-
-        if User.objects.filter(
-            username=value
-        ).exists():
-
-            raise serializers.ValidationError(
-                "Username already exists."
             )
 
         return value
@@ -79,9 +57,9 @@ class RetailerCreateSerializer(serializers.Serializer):
             owner_name=validated_data["owner_name"],
             mobile=validated_data["mobile"],
             email=validated_data["email"],
-            address=validated_data.get("address",""),
-            gst_number=validated_data.get("gst_number",""),
-            license_number=validated_data.get("license_number",""),
+            address=validated_data.get("address", ""),
+            gst_number=validated_data.get("gst_number", ""),
+            license_number=validated_data.get("license_number", ""),
             created_by=request.user
         )
 
@@ -91,9 +69,32 @@ class RetailerCreateSerializer(serializers.Serializer):
             created_by=request.user
         )
 
+        first_word = (
+            validated_data["retailer_name"]
+            .split()[0]
+            .replace(" ", "")
+            .upper()
+        )
+
+        last_four = validated_data["mobile"][-4:]
+
+        base_username = f"{first_word}{last_four}"
+
+        username = base_username
+        counter = 1
+
+        while User.objects.filter(
+            username=username
+        ).exists():
+            username = (
+                f"{base_username}{counter}"
+            )
+            counter += 1
+
         superadmin = User.objects.create(
-            username=validated_data["username"],
+            username=username,
             email=validated_data["email"],
+            phone=validated_data["mobile"],
             role="superadmin",
             retailer=retailer,
             branch=branch,
@@ -103,6 +104,7 @@ class RetailerCreateSerializer(serializers.Serializer):
         )
 
         superadmin.set_unusable_password()
+
         superadmin.save(
             update_fields=["password"]
         )
@@ -112,8 +114,10 @@ class RetailerCreateSerializer(serializers.Serializer):
             "branch": branch,
             "user": superadmin
         }
+    
 # ===========================================================
 #                       SETPASSWORD
+# ===========================================================
 class SetPasswordSerializer(serializers.Serializer):
     token = serializers.UUIDField()
     password = serializers.CharField(min_length=8)
