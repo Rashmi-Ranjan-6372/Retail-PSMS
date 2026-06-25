@@ -102,42 +102,21 @@ class User(AbstractUser):
     phone = models.CharField(max_length=15, blank=True, null=True)
     address = models.TextField(blank=True, null=True)
     profile_picture = models.ImageField(upload_to="profiles/", blank=True, null=True)
-    employee_id = models.CharField(max_length=50, unique=True, null=True, blank=True)
+    employee_id = models.CharField(max_length=50,unique=True,null=True,blank=True)
     joining_date = models.DateField(null=True, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
-
-    license_number = models.CharField(max_length=100, blank=True, null=True)
-    license_expiry = models.DateField(null=True, blank=True)
-
-    retailer = models.ForeignKey(
-        Retailer,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="users"
-    )
-
-    branch = models.ForeignKey(
-        Branch,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="users"
-    )
-    password_changed_at = models.DateTimeField(null=True, blank=True)
-    last_login_ip = models.GenericIPAddressField(null=True, blank=True)
+    license_number = models.CharField(max_length=100,blank=True,null=True)
+    license_expiry = models.DateField(null=True,blank=True)
+    retailer = models.ForeignKey(Retailer,on_delete=models.CASCADE,null=True,blank=True,related_name="users")
+    branch = models.ForeignKey(Branch,on_delete=models.SET_NULL,null=True,blank=True,related_name="users")
+    password_changed_at = models.DateTimeField(null=True,blank=True)
+    last_login_ip = models.GenericIPAddressField(null=True,blank=True)
     failed_login_attempts = models.PositiveIntegerField(default=0)
-    account_locked_until = models.DateTimeField(null=True, blank=True)
+    account_locked_until = models.DateTimeField(null=True,blank=True)
     is_two_factor_enabled = models.BooleanField(default=False)
-    otp_secret = models.CharField(max_length=255, blank=True, null=True)
+    otp_secret = models.CharField(max_length=255,blank=True,null=True)
     is_deleted = models.BooleanField(default=False)
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="created_users"
-    )
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.SET_NULL,null=True,blank=True,related_name="created_users")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -156,32 +135,54 @@ class User(AbstractUser):
             self.account_locked_until > timezone.now()
         )
 
+    @property
     def is_platform_owner(self):
-        return self.is_active and self.is_superuser
+        return (
+            self.is_active and
+            self.is_superuser
+        )
 
-
+    @property
     def is_retailer_owner(self):
-        return self.is_active and self.role == "superadmin"
+        return (
+            self.is_active and
+            self.role == "superadmin"
+        )
 
+    @property
+    def is_admin_user(self):
+        return (
+            self.is_active and
+            self.role == "admin"
+        )
 
-    def is_admin(self):
-        return self.is_active and self.role == "admin"
+    @property
+    def is_store_manager_user(self):
+        return (
+            self.is_active and
+            self.role == "store_manager"
+        )
 
+    @property
+    def is_pharmacist_user(self):
+        return (
+            self.is_active and
+            self.role == "pharmacist"
+        )
 
-    def is_store_manager(self):
-        return self.is_active and self.role == "store_manager"
+    @property
+    def is_cashier_user(self):
+        return (
+            self.is_active and
+            self.role == "cashier"
+        )
 
-
-    def is_pharmacist(self):
-        return self.is_active and self.role == "pharmacist"
-
-
-    def is_cashier(self):
-        return self.is_active and self.role == "cashier"
-
-
+    @property
     def is_staff_member(self):
-        return self.is_active and self.role == "staff"
+        return (
+            self.is_active and
+            self.role == "staff"
+        )
 
     def __str__(self):
         return f"{self.username} ({self.role})"
