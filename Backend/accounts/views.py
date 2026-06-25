@@ -36,6 +36,7 @@ from .serializers import (
 from .permissions import (IsAdmin, IsRetailerOwnerOrPlatformOwner)
 from .models import AuditLog, LoginLog, Retailer, UserSession, EmailOTP
 from subscriptions.utils import validate_user_subscription, check_subscription_write_access
+from subscriptions.models import SubscriptionPlan
 User = get_user_model()
 
 # =====================================================
@@ -180,15 +181,67 @@ class CreateRetailerView(APIView):
                     f"{settings.PASSWORD_SETUP_URL}/"
                     f"{token_obj.token}"
                 )
+
+                current_plan = data["subscription"].plan
+
+                available_plans = (
+                    SubscriptionPlan.objects
+                    .filter(is_active=True)
+                    .exclude(id=current_plan.id)
+                )
+
+                upgrade_plans = ""
+
+                for plan in available_plans:
+
+                    upgrade_plans += (
+                        f"\n{plan.name}\n"
+                        f"Monthly Price : ₹{plan.monthly_price}\n"
+                        f"Yearly Price : ₹{plan.yearly_price}\n"
+                        f"Users Allowed : {plan.max_users}\n"
+                        f"Branches Allowed : {plan.max_branches}\n"
+                        f"Products Allowed : {plan.max_products}\n"
+                    )
+
                 send_mail(
                     subject="Welcome to Pharmacy ERP",
                     message=(
                         f"Hello {data['retailer'].owner_name},\n\n"
+
                         f"Your retailer account has been created successfully.\n\n"
-                        f"Username : {data['user'].username}\n"
+
+                        f"Username : {data['user'].username}\n\n"
+
+                        f"CURRENT SUBSCRIPTION DETAILS\n"
+                        f"============================\n"
+                        f"Plan Name : {current_plan.name}\n"
+                        f"Plan Type : {current_plan.plan_type.title()}\n"
+                        f"Monthly Price : ₹{current_plan.monthly_price}\n"
+                        f"Yearly Price : ₹{current_plan.yearly_price}\n"
+                        f"Max Users : {current_plan.max_users}\n"
+                        f"Max Branches : {current_plan.max_branches}\n"
+                        f"Max Products : {current_plan.max_products}\n\n"
+
+                        f"SUBSCRIPTION INFORMATION\n"
+                        f"========================\n"
+                        f"Start Date : {data['subscription'].start_date}\n"
+                        f"Expiry Date : {data['subscription'].expiry_date}\n"
+                        f"Status : {data['subscription'].status}\n"
+                        f"Billing Cycle : {data['subscription'].billing_cycle.title()}\n\n"
+
                         f"Set your password using the link below:\n\n"
                         f"{setup_link}\n\n"
+
                         f"This link will expire in 24 hours.\n\n"
+
+                        f"AVAILABLE UPGRADE PLANS\n"
+                        f"=======================\n"
+                        f"{upgrade_plans}\n"
+
+                        f"For subscription upgrades, renewals, "
+                        f"or technical support, please contact "
+                        f"the Platform Support Team.\n\n"
+
                         f"Regards,\n"
                         f"Pharmacy ERP Team"
                     ),
@@ -202,14 +255,34 @@ class CreateRetailerView(APIView):
                 action="create",
                 model_name="Retailer",
                 object_id=data["retailer"].id,
-                description=f"Created retailer {data['retailer'].name}",
+                description=(
+                    f"Created retailer "
+                    f"{data['retailer'].name}"
+                ),
+                request=request
+            )
+
+            create_audit_log(
+                user=request.user,
+                action="create",
+                model_name="RetailerSubscription",
+                object_id=data["subscription"].id,
+                description=(
+                    f"Assigned "
+                    f"{data['subscription'].plan.name} "
+                    f"plan to "
+                    f"{data['retailer'].name}"
+                ),
                 request=request
             )
 
             return Response(
                 {
                     "success": True,
-                    "message": "Retailer created successfully",
+                    "message": (
+                        "Retailer, Branch, Superadmin "
+                        "and Subscription created successfully"
+                    ),
                     "password_setup_sent": True,
                     "retailer": {
                         "id": data["retailer"].id,
@@ -224,6 +297,14 @@ class CreateRetailerView(APIView):
                         "id": data["user"].id,
                         "username": data["user"].username,
                         "role": data["user"].role,
+                    },
+                    "subscription": {
+                        "id": data["subscription"].id,
+                        "plan": data["subscription"].plan.name,
+                        "billing_cycle": data["subscription"].billing_cycle,
+                        "start_date": data["subscription"].start_date,
+                        "expiry_date": data["subscription"].expiry_date,
+                        "status": data["subscription"].status,
                     }
                 },
                 status=status.HTTP_201_CREATED
@@ -1218,13 +1299,8 @@ class CreateStaffView(APIView):
         # ==========================================
         elif request.user.role == "superadmin":
 
-            check_subscription_write_access(
-                request.user.retailer
-            )
-
-            validate_user_subscription(
-                request.user.retailer
-            )
+            check_subscription_write_access(request.user.retailer)
+            validate_user_subscription(request.user.retailer)
 
             branch_id = request.data.get("branch")
 

@@ -13,15 +13,16 @@ class SubscriptionPlan(models.Model):
     )
 
     name = models.CharField(max_length=50, unique=True)
-    plan_type = models.CharField(max_length=20, choices=PLAN_TYPES)
-    monthly_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    yearly_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    plan_type = models.CharField(max_length=20,choices=PLAN_TYPES)
+    monthly_price = models.DecimalField(max_digits=10,decimal_places=2,default=0)
+    yearly_price = models.DecimalField(max_digits=10,decimal_places=2,default=0)
     max_users = models.PositiveIntegerField()
     max_branches = models.PositiveIntegerField()
     max_products = models.PositiveIntegerField(default=1000)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
 
     def __str__(self):
         return self.name
@@ -38,11 +39,17 @@ class RetailerSubscription(models.Model):
         ("suspended", "Suspended"),
     )
 
-    retailer = models.OneToOneField(Retailer, on_delete=models.CASCADE, related_name="subscription")
-    plan = models.ForeignKey(SubscriptionPlan, on_delete=models.PROTECT)
+    BILLING_CYCLE_CHOICES = (
+        ("monthly", "Monthly"),
+        ("yearly", "Yearly"),
+    )
+
+    retailer = models.OneToOneField(Retailer,on_delete=models.CASCADE,related_name="subscription")
+    plan = models.ForeignKey(SubscriptionPlan,on_delete=models.PROTECT)
+    billing_cycle = models.CharField(max_length=10,choices=BILLING_CYCLE_CHOICES,default="monthly")
     start_date = models.DateField()
     expiry_date = models.DateField()
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
+    status = models.CharField(max_length=20,choices=STATUS_CHOICES,default="active")
     auto_renew = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -50,8 +57,19 @@ class RetailerSubscription(models.Model):
     def is_expired(self):
         return self.expiry_date < timezone.now().date()
 
+    @property
+    def amount(self):
+        if self.billing_cycle == "yearly":
+            return self.plan.yearly_price
+
+        return self.plan.monthly_price
+
     def __str__(self):
-        return f"{self.retailer.name} - {self.plan.name}"
+        return (
+            f"{self.retailer.name} - "
+            f"{self.plan.name} "
+            f"({self.billing_cycle})"
+        )
 
     class Meta:
         ordering = ["-created_at"]
@@ -61,6 +79,7 @@ class RetailerSubscription(models.Model):
             models.Index(fields=["plan"]),
             models.Index(fields=["status"]),
             models.Index(fields=["expiry_date"]),
+            models.Index(fields=["billing_cycle"]),
         ]
 
 

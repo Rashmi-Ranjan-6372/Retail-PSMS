@@ -1,20 +1,17 @@
-from rest_framework import serializers
-from .models import User
-from django.contrib.auth import authenticate
-from django.utils.timezone import now
-from django.contrib.auth.password_validation import validate_password
-
-from rest_framework import serializers
-from django.contrib.auth import get_user_model
-from branches.models import Branch
-from .models import Retailer, User, EmailOTP
-from django.db import transaction
-from django.utils import timezone
 from datetime import timedelta
-from subscriptions.models import SubscriptionPlan, RetailerSubscription
+from django.db import transaction
+from rest_framework import serializers
+from django.contrib.auth import authenticate
+from accounts.models import Retailer, User
+from branches.models import Branch
+from subscriptions.models import (
+    SubscriptionPlan,
+    RetailerSubscription
+)
 
-User = get_user_model()
+
 class RetailerCreateSerializer(serializers.Serializer):
+
     retailer_name = serializers.CharField(max_length=255)
     owner_name = serializers.CharField(max_length=255)
     mobile = serializers.CharField(max_length=15)
@@ -23,6 +20,14 @@ class RetailerCreateSerializer(serializers.Serializer):
     gst_number = serializers.CharField(required=False, allow_blank=True)
     license_number = serializers.CharField(required=False, allow_blank=True)
     branch_name = serializers.CharField(max_length=255)
+
+    plan_id = serializers.IntegerField()
+
+    billing_cycle = serializers.ChoiceField(
+        choices=["monthly", "yearly"]
+    )
+
+    start_date = serializers.DateField()
 
     def validate_email(self, value):
 
@@ -43,6 +48,19 @@ class RetailerCreateSerializer(serializers.Serializer):
         if Retailer.objects.filter(mobile=value).exists():
             raise serializers.ValidationError(
                 "Mobile number already exists."
+            )
+
+        return value
+
+    def validate_plan_id(self, value):
+
+        if not SubscriptionPlan.objects.filter(
+            id=value,
+            is_active=True
+        ).exists():
+
+            raise serializers.ValidationError(
+                "Invalid subscription plan."
             )
 
         return value
@@ -72,7 +90,6 @@ class RetailerCreateSerializer(serializers.Serializer):
         first_word = (
             validated_data["retailer_name"]
             .split()[0]
-            .replace(" ", "")
             .upper()
         )
 
@@ -86,9 +103,8 @@ class RetailerCreateSerializer(serializers.Serializer):
         while User.objects.filter(
             username=username
         ).exists():
-            username = (
-                f"{base_username}{counter}"
-            )
+
+            username = f"{base_username}{counter}"
             counter += 1
 
         superadmin = User.objects.create(
@@ -104,15 +120,35 @@ class RetailerCreateSerializer(serializers.Serializer):
         )
 
         superadmin.set_unusable_password()
+        superadmin.save(update_fields=["password"])
 
-        superadmin.save(
-            update_fields=["password"]
+        plan = SubscriptionPlan.objects.get(
+            id=validated_data["plan_id"]
+        )
+
+        billing_cycle = validated_data["billing_cycle"]
+
+        start_date = validated_data["start_date"]
+
+        if billing_cycle == "yearly":
+            expiry_date = start_date + timedelta(days=365)
+        else:
+            expiry_date = start_date + timedelta(days=30)
+
+        subscription = RetailerSubscription.objects.create(
+            retailer=retailer,
+            plan=plan,
+            billing_cycle=billing_cycle,
+            start_date=start_date,
+            expiry_date=expiry_date,
+            status="active"
         )
 
         return {
             "retailer": retailer,
             "branch": branch,
-            "user": superadmin
+            "user": superadmin,
+            "subscription": subscription
         }
     
 # ===========================================================
