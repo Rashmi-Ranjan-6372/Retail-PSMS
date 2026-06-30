@@ -1,371 +1,247 @@
+import React, { useMemo, useState, useEffect } from "react";
 import {
   Box,
-  VStack,
-  Text,
-  Collapse,
   Flex,
   Icon,
+  Text,
+  VStack,
+  Collapse,
   Image,
-  Divider,
+  useColorModeValue,
 } from "@chakra-ui/react";
 
-import {
-  FaTachometerAlt,
-  FaBoxes,
-  FaCapsules,
-  FaIndustry,
-  FaTruck,
-  FaUserFriends,
-  FaDollarSign,
-  FaWarehouse,
-  FaUndo,
-  FaClock,
-  FaMoneyCheckAlt,
-  FaFileInvoice,
-  FaFileInvoiceDollar,
-  FaBook,
-  FaUserTie,
-  FaCog,
-  FaCalendarCheck,
-  FaMapMarkedAlt,
-  FaChevronDown,
-  FaChevronUp,
-} from "react-icons/fa";
-
-import { FaChartColumn } from "react-icons/fa6";
-
+import { FaChevronDown, FaChevronUp } from "react-icons/fa";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useState } from "react";
+import { getSidebarByRole } from "../config/navigation";
+import useAuth from "../hooks/useAuth";
 
-const sidebarStructure = [
-  {
-    label: "Dashboard",
-    icon: FaTachometerAlt,
-    path: "/dashboard",
-  },
+/*
+|--------------------------------------------------------------------------
+| Recursive Menu Component
+|--------------------------------------------------------------------------
+*/
 
-  {
-    label: "Masters",
-    icon: FaBoxes,
-    items: [
-      {
-        label: "Products",
-        icon: FaCapsules,
-        path: "/masters/products",
-      },
-      {
-        label: "Categories",
-        icon: FaBoxes,
-        path: "/masters/categories",
-      },
-      {
-        label: "Manufacturers",
-        icon: FaIndustry,
-        path: "/masters/manufacturers",
-      },
-      {
-        label: "Suppliers",
-        icon: FaTruck,
-        path: "/masters/suppliers",
-      },
-      {
-        label: "Customers",
-        icon: FaUserFriends,
-        path: "/masters/customers",
-      },
-      {
-        label: "Sales Offers",
-        icon: FaDollarSign,
-        path: "/masters/sales-offers",
-      },
-    ],
-  },
+const hasActiveChild = (menu, pathname) => {
+  if (!menu.children) return false;
 
-  {
-    label: "Inventory",
-    icon: FaWarehouse,
-    items: [
-      {
-        label: "Stock Transactions",
-        icon: FaBoxes,
-        path: "/inventory/stock-transactions",
-      },
-      {
-        label: "Stock Batches",
-        icon: FaBoxes,
-        path: "/inventory/stock-batches",
-      },
-      {
-        label: "Stock Adjustments",
-        icon: FaUndo,
-        path: "/inventory/stock-adjustments",
-      },
-      {
-        label: "Stock Transfers",
-        icon: FaUndo,
-        path: "/inventory/stock-transfers",
-      },
-      {
-        label: "Expiry Damages",
-        icon: FaClock,
-        path: "/inventory/expiry-damages",
-      },
-    ],
-  },
+  for (const child of menu.children) {
+    if (child.path === pathname) return true;
+    if (child.children && hasActiveChild(child, pathname)) return true;
+  }
 
-  {
-    label: "Purchases",
-    icon: FaTruck,
-    items: [
-      {
-        label: "Purchases",
-        icon: FaFileInvoice,
-        path: "/purchases",
-      },
-      {
-        label: "Purchase Returns",
-        icon: FaUndo,
-        path: "/purchase-returns",
-      },
-      {
-        label: "Payments",
-        icon: FaMoneyCheckAlt,
-        path: "/payments",
-      },
-    ],
-  },
+  return false;
+};
 
-  {
-    label: "Sales",
-    icon: FaDollarSign,
-    items: [
-      {
-        label: "Sales",
-        icon: FaFileInvoiceDollar,
-        path: "/sales",
-      },
-      {
-        label: "Sales Returns",
-        icon: FaUndo,
-        path: "/sales-returns",
-      },
-      {
-        label: "Receipts",
-        icon: FaMoneyCheckAlt,
-        path: "/receipts",
-      },
-    ],
-  },
+const isMenuActive = (menu, pathname) => {
+  if (menu.path === pathname) return true;
+  if (menu.children) return hasActiveChild(menu, pathname);
+  return false;
+};
 
-  {
-    label: "Reports",
-    icon: FaChartColumn,
-    items: [
-      {
-        label: "Sales Report",
-        icon: FaFileInvoice,
-        path: "/reports/sales",
-      },
-      {
-        label: "Purchase Report",
-        icon: FaTruck,
-        path: "/reports/purchases",
-      },
-      {
-        label: "Stock Report",
-        icon: FaWarehouse,
-        path: "/reports/stock",
-      },
-      {
-        label: "Profit & Loss",
-        icon: FaDollarSign,
-        path: "/reports/profit-loss",
-      },
-    ],
-  },
+const getDefaultOpenMenus = (menus, pathname) => {
+  let opened = [];
 
-  {
-    label: "Branch Management",
-    icon: FaMapMarkedAlt,
-    items: [
-      {
-        label: "Branches",
-        icon: FaMapMarkedAlt,
-        path: "/branches",
-      },
-    ],
-  },
+  menus.forEach((menu) => {
+    if (menu.children) {
+      if (hasActiveChild(menu, pathname)) {
+        opened.push(menu.id);
+      }
 
-  {
-    label: "User Management",
-    icon: FaUserFriends,
-    items: [
-      {
-        label: "Users",
-        icon: FaUserFriends,
-        path: "/users",
-      },
-      {
-        label: "User Sessions",
-        icon: FaClock,
-        path: "/users/sessions",
-      },
-      {
-        label: "Login Logs",
-        icon: FaClock,
-        path: "/users/login-logs",
-      },
-      {
-        label: "Audit Logs",
-        icon: FaBook,
-        path: "/users/audit-logs",
-      },
-    ],
-  },
+      opened = [
+        ...opened,
+        ...getDefaultOpenMenus(menu.children, pathname),
+      ];
+    }
+  });
 
-  {
-    label: "Settings",
-    icon: FaCog,
-    items: [
-      {
-        label: "General Settings",
-        icon: FaCog,
-        path: "/settings/general",
-      },
-      {
-        label: "Financial Years",
-        icon: FaCalendarCheck,
-        path: "/settings/financial-years",
-      },
-    ],
-  },
-];
+  return opened;
+};
 
-const Sidebar = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
+/*
+|--------------------------------------------------------------------------
+| Menu Item
+|--------------------------------------------------------------------------
+*/
 
-  const [openMenu, setOpenMenu] = useState("Masters");
+const MenuItem = ({
+  item,
+  level = 0,
+  navigate,
+  pathname,
+  openedMenus,
+  setOpenedMenus,
+}) => {
+  const hasChildren = item.children && item.children.length > 0;
+  const isOpen = openedMenus.includes(item.id);
+  const isActive = isMenuActive(item, pathname);
 
-  const toggleMenu = (label) => {
-    setOpenMenu(openMenu === label ? null : label);
+  const textColor = useColorModeValue("gray.700", "gray.100");
+  const hoverColor = useColorModeValue("gray.100", "gray.700");
+  const activeColor = "blue.600";
+
+  const toggleMenu = () => {
+    if (!hasChildren) return;
+
+    setOpenedMenus((prev) =>
+      isOpen
+        ? prev.filter((id) => id !== item.id)
+        : [...prev, item.id]
+    );
   };
 
   return (
+    <Box>
+      <Flex
+        align="center"
+        justify="space-between"
+        pl={`${level * 20 + 12}px`}
+        pr="12px"
+        py="12px"
+        cursor="pointer"
+        borderRadius="12px"
+        transition="0.2s"
+        bg={isActive ? activeColor : "transparent"}
+        color={isActive ? "white" : textColor}
+        _hover={{
+          bg: isActive ? activeColor : hoverColor,
+        }}
+        onClick={() => {
+          if (hasChildren) toggleMenu();
+          else navigate(item.path);
+        }}
+      >
+        <Flex align="center" gap={3}>
+          {/* Active Indicator */}
+          <Box
+            w="4px"
+            h="24px"
+            borderRadius="full"
+            bg={isActive ? "blue.400" : "transparent"}
+          />
+
+          {item.icon && <Icon as={item.icon} fontSize="18px" />}
+
+          <Text fontSize="sm" fontWeight="600">
+            {item.label}
+          </Text>
+        </Flex>
+
+        {hasChildren && (
+          <Icon
+            as={isOpen ? FaChevronUp : FaChevronDown}
+            fontSize="13px"
+          />
+        )}
+      </Flex>
+
+      {hasChildren && (
+        <Collapse in={isOpen}>
+          <VStack align="stretch" spacing={1} mt={1}>
+            {item.children.map((child) => (
+              <MenuItem
+                key={child.id}
+                item={child}
+                level={level + 1}
+                navigate={navigate}
+                pathname={pathname}
+                openedMenus={openedMenus}
+                setOpenedMenus={setOpenedMenus}
+              />
+            ))}
+          </VStack>
+        </Collapse>
+      )}
+    </Box>
+  );
+};
+
+/*
+|--------------------------------------------------------------------------
+| Sidebar Component
+|--------------------------------------------------------------------------
+*/
+
+const Sidebar = () => {
+  const { role } = useAuth(); // ✅ dynamic role
+
+  const navigate = useNavigate();
+  const location = useLocation();
+  const pathname = location.pathname;
+
+  const bgColor = useColorModeValue("white", "gray.900");
+  const borderColor = useColorModeValue("gray.200", "gray.700");
+
+  // ✅ FIX: role-safe sidebar generation
+  const sidebarMenus = useMemo(() => {
+    if (!role) return [];
+    return getSidebarByRole(role);
+  }, [role]);
+
+  // Auto open active menus
+  const defaultOpened = useMemo(() => {
+    return getDefaultOpenMenus(sidebarMenus, pathname);
+  }, [sidebarMenus, pathname]);
+
+  const [openedMenus, setOpenedMenus] = useState(defaultOpened);
+
+  useEffect(() => {
+    setOpenedMenus(defaultOpened);
+  }, [defaultOpened]);
+
+  return (
     <Box
-      w="270px"
+      w="280px"
       h="100vh"
-      bg="white"
+      bg={bgColor}
       borderRight="1px solid"
-      borderColor="gray.200"
+      borderColor={borderColor}
       boxShadow="sm"
       position="sticky"
       top="0"
+      overflow="hidden"
     >
-      {/* Sticky Logo */}
-      <Box position="sticky" top="0" zIndex="100" bg="white">
-        <Flex justify="center" align="center" py={6}>
+      {/* Logo */}
+      <Box
+        position="sticky"
+        top="0"
+        bg={bgColor}
+        zIndex="100"
+        borderBottom="1px solid"
+        borderColor="gray.100"
+      >
+        <Flex justify="center" align="center" h="90px" px={5}>
           <Image
             src="/logo.png"
             alt="Logo"
-            w="160px"
-            h="auto"
+            w="170px"
             objectFit="contain"
+            draggable={false}
           />
         </Flex>
       </Box>
 
-      {/* Scrollable Menu */}
-      <Box h="calc(100vh - 110px)" overflowY="auto" p={3}>
+      {/* Menu */}
+      <Box h="calc(100vh - 90px)" overflowY="auto" px={3} py={4}>
         <VStack align="stretch" spacing={2}>
-          {sidebarStructure.map((menu, index) => {
-            const isOpen = openMenu === menu.label;
-
-            if (menu.items) {
-              return (
-                <Box key={index}>
-                  <Flex
-                    align="center"
-                    justify="space-between"
-                    p={3}
-                    borderRadius="xl"
-                    cursor="pointer"
-                    color="gray.700"
-                    _hover={{
-                      bg: "gray.100",
-                    }}
-                    onClick={() => toggleMenu(menu.label)}
-                  >
-                    <Flex align="center" gap={3}>
-                      <Icon as={menu.icon} boxSize={5} />
-                      <Text fontWeight="500">{menu.label}</Text>
-                    </Flex>
-
-                    <Icon as={isOpen ? FaChevronUp : FaChevronDown} />
-                  </Flex>
-
-                  <Collapse in={isOpen}>
-                    <VStack align="stretch" pl={5} mt={1} spacing={1}>
-                      {menu.items.map((subMenu, subIndex) => (
-                        <Flex
-                          key={subIndex}
-                          align="center"
-                          gap={3}
-                          p={3}
-                          borderRadius="xl"
-                          cursor="pointer"
-                          bg={
-                            location.pathname === subMenu.path
-                              ? "blue.600"
-                              : "transparent"
-                          }
-                          color={
-                            location.pathname === subMenu.path
-                              ? "white"
-                              : "gray.600"
-                          }
-                          _hover={{
-                            bg:
-                              location.pathname === subMenu.path
-                                ? "blue.600"
-                                : "gray.100",
-                          }}
-                          onClick={() => navigate(subMenu.path)}
-                        >
-                          <Icon as={subMenu.icon} />
-                          <Text fontSize="sm" fontWeight="500">
-                            {subMenu.label}
-                          </Text>
-                        </Flex>
-                      ))}
-                    </VStack>
-                  </Collapse>
-                </Box>
-              );
-            }
-
-            return (
-              <Flex
-                key={index}
-                align="center"
-                gap={3}
-                p={3}
-                borderRadius="xl"
-                cursor="pointer"
-                bg={
-                  location.pathname === menu.path ? "blue.600" : "transparent"
-                }
-                color={location.pathname === menu.path ? "white" : "gray.700"}
-                _hover={{
-                  bg: location.pathname === menu.path ? "blue.600" : "gray.100",
-                }}
-                onClick={() => navigate(menu.path)}
-              >
-                <Icon as={menu.icon} boxSize={5} />
-                <Text fontWeight="500">{menu.label}</Text>
-              </Flex>
-            );
-          })}
+          {sidebarMenus.length > 0 ? (
+            sidebarMenus.map((menu) => (
+              <MenuItem
+                key={menu.id}
+                item={menu}
+                level={0}
+                navigate={navigate}
+                pathname={pathname}
+                openedMenus={openedMenus}
+                setOpenedMenus={setOpenedMenus}
+              />
+            ))
+          ) : (
+            <Flex justify="center" align="center" py={10}>
+              <Text fontSize="sm" color="gray.500">
+                No Menu Available
+              </Text>
+            </Flex>
+          )}
         </VStack>
       </Box>
     </Box>

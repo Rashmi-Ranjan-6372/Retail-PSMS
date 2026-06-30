@@ -1,0 +1,11 @@
+export const APP_NAME = "Retail Pharmacy SaaS ERP";
+export const COMPANY_NAME = "Bariflo Labs";
+export const DEFAULT_LANGUAGE = "en";
+export const TOKEN_KEY = "access_token";
+export const REFRESH_TOKEN_KEY = "refresh_token";
+export const USER_KEY = "user";
+export const DEFAULT_THEME = "light";
+export const SIDEBAR_WIDTH = "280px";
+export const MAX_ACTIVE_DEVICES = 3;
+export const OTP_LENGTH = 6;
+export const OTP_EXPIRY = 300;
