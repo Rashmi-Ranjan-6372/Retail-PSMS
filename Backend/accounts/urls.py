@@ -14,6 +14,7 @@ urlpatterns = [
     path("retailers/filter/", RetailerFilterView.as_view()),
     path('login/', LoginView.as_view()),
     path('refresh-token/', CustomTokenRefreshView.as_view()),
+    path("verify-otp/", VerifyOTPView.as_view()),
     path('resend-otp/', ResendOTPView.as_view()),
     path('logout/', LogoutView.as_view()),
     path('logout-all/', LogoutAllDevicesView.as_view()),

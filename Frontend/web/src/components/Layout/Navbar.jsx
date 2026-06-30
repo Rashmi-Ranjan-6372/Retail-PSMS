@@ -18,7 +18,7 @@ import {
 import { FaBell, FaSearch } from "react-icons/fa";
 
 import { useState } from "react";
-import useAuth from "../hooks/useAuth";
+import useAuth from "../../hooks/useAuth";
 
 const Navbar = () => {
   const { logout } = useAuth();

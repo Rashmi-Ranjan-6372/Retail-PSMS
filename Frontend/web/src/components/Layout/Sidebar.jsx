@@ -12,8 +12,8 @@ import {
 
 import { FaChevronDown, FaChevronUp } from "react-icons/fa";
 import { useNavigate, useLocation } from "react-router-dom";
-import { getSidebarByRole } from "../config/navigation";
-import useAuth from "../hooks/useAuth";
+import { getSidebarByRole } from "../../config/navigation";
+import useAuth from "../../hooks/useAuth";
 
 /*
 |--------------------------------------------------------------------------

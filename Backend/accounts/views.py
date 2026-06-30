@@ -851,18 +851,11 @@ class LoginView(APIView):
         # EMAIL OTP FOR SUPERADMIN & ADMIN
         # =====================================================
 
-        if user.role in ["superadmin", "admin"]:
+        if user.is_superuser or user.role in ["superadmin", "admin"]:
 
-            otp = str(
-                random.randint(
-                    100000,
-                    999999
-                )
-            )
+            otp = str(random.randint(100000,999999))
 
-            EmailOTP.objects.filter(
-                user=user
-            ).delete()
+            EmailOTP.objects.filter(user=user).delete()
 
             EmailOTP.objects.create(
                 user=user,
@@ -979,12 +972,9 @@ class VerifyOTPView(APIView):
 
     def post(self, request):
 
-        serializer = VerifyOTPSerializer(
-            data=request.data
-        )
+        serializer = VerifyOTPSerializer(data=request.data)
 
         if not serializer.is_valid():
-
             return Response(
                 {
                     "success": False,
@@ -994,30 +984,29 @@ class VerifyOTPView(APIView):
             )
 
         user = serializer.validated_data["user"]
-        otp = serializer.validated_data["otp"]
+        entered_otp = serializer.validated_data["otp"].strip()
 
-        try:
-
-            otp_obj = EmailOTP.objects.get(
+        otp_obj = (
+            EmailOTP.objects
+            .filter(
                 user=user,
-                otp=otp,
                 is_verified=False
             )
+            .order_by("-created_at")
+            .first()
+        )
 
-        except EmailOTP.DoesNotExist:
-
+        if not otp_obj:
             return Response(
                 {
                     "success": False,
-                    "message": "Invalid OTP"
+                    "message": "No OTP found. Please request a new OTP."
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         if otp_obj.expires_at < timezone.now():
-
             otp_obj.delete()
-
             return Response(
                 {
                     "success": False,
@@ -1026,7 +1015,17 @@ class VerifyOTPView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        otp_obj.delete()
+        if otp_obj.otp.strip() != entered_otp:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Invalid OTP"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        otp_obj.is_verified = True
+        otp_obj.save(update_fields=["is_verified"])
 
         ip = get_client_ip(request)
         user_agent = get_user_agent(request)
@@ -1092,6 +1091,8 @@ class VerifyOTPView(APIView):
             description=f"OTP verified and login completed from {device_id}",
             request=request
         )
+
+        otp_obj.delete()
 
         return Response(
             {
