@@ -9,33 +9,26 @@ import {
   Image,
   useColorModeValue,
 } from "@chakra-ui/react";
-
 import { FaChevronDown, FaChevronUp } from "react-icons/fa";
 import { useNavigate, useLocation } from "react-router-dom";
 import { getSidebarByRole } from "../../config/navigation";
 import useAuth from "../../hooks/useAuth";
 
-/*
-|--------------------------------------------------------------------------
-| Recursive Menu Component
-|--------------------------------------------------------------------------
-*/
-
 const hasActiveChild = (menu, pathname) => {
   if (!menu.children) return false;
 
-  for (const child of menu.children) {
-    if (child.path === pathname) return true;
-    if (child.children && hasActiveChild(child, pathname)) return true;
-  }
-
-  return false;
+  return menu.children.some(
+    (child) =>
+      child.path === pathname ||
+      (child.children && hasActiveChild(child, pathname))
+  );
 };
 
 const isMenuActive = (menu, pathname) => {
-  if (menu.path === pathname) return true;
-  if (menu.children) return hasActiveChild(menu, pathname);
-  return false;
+  return (
+    menu.path === pathname ||
+    (menu.children && hasActiveChild(menu, pathname))
+  );
 };
 
 const getDefaultOpenMenus = (menus, pathname) => {
@@ -57,27 +50,22 @@ const getDefaultOpenMenus = (menus, pathname) => {
   return opened;
 };
 
-/*
-|--------------------------------------------------------------------------
-| Menu Item
-|--------------------------------------------------------------------------
-*/
-
 const MenuItem = ({
   item,
-  level = 0,
-  navigate,
+  level,
   pathname,
+  navigate,
   openedMenus,
   setOpenedMenus,
 }) => {
-  const hasChildren = item.children && item.children.length > 0;
+  const hasChildren = item.children?.length > 0;
+
   const isOpen = openedMenus.includes(item.id);
+
   const isActive = isMenuActive(item, pathname);
 
   const textColor = useColorModeValue("gray.700", "gray.100");
   const hoverColor = useColorModeValue("gray.100", "gray.700");
-  const activeColor = "blue.600";
 
   const toggleMenu = () => {
     if (!hasChildren) return;
@@ -98,12 +86,12 @@ const MenuItem = ({
         pr="12px"
         py="12px"
         cursor="pointer"
-        borderRadius="12px"
-        transition="0.2s"
-        bg={isActive ? activeColor : "transparent"}
+        borderRadius="10px"
+        transition=".2s"
+        bg={isActive ? "blue.600" : "transparent"}
         color={isActive ? "white" : textColor}
         _hover={{
-          bg: isActive ? activeColor : hoverColor,
+          bg: isActive ? "blue.600" : hoverColor,
         }}
         onClick={() => {
           if (hasChildren) toggleMenu();
@@ -111,17 +99,17 @@ const MenuItem = ({
         }}
       >
         <Flex align="center" gap={3}>
-          {/* Active Indicator */}
-          <Box
-            w="4px"
-            h="24px"
-            borderRadius="full"
-            bg={isActive ? "blue.400" : "transparent"}
-          />
+          {item.icon && (
+            <Icon
+              as={item.icon}
+              boxSize={4}
+            />
+          )}
 
-          {item.icon && <Icon as={item.icon} fontSize="18px" />}
-
-          <Text fontSize="sm" fontWeight="600">
+          <Text
+            fontSize="sm"
+            fontWeight="600"
+          >
             {item.label}
           </Text>
         </Flex>
@@ -129,21 +117,29 @@ const MenuItem = ({
         {hasChildren && (
           <Icon
             as={isOpen ? FaChevronUp : FaChevronDown}
-            fontSize="13px"
+            fontSize="12px"
           />
         )}
       </Flex>
 
       {hasChildren && (
         <Collapse in={isOpen}>
-          <VStack align="stretch" spacing={1} mt={1}>
-            {item.children.map((child) => (
+          <VStack
+            spacing={1}
+            mt={1}
+            align="stretch"
+          >
+            {item.children.map((child, index) => (
               <MenuItem
-                key={child.id}
+                key={
+                  child.id ??
+                  child.path ??
+                  `${item.id}-${index}`
+                }
                 item={child}
                 level={level + 1}
-                navigate={navigate}
                 pathname={pathname}
+                navigate={navigate}
                 openedMenus={openedMenus}
                 setOpenedMenus={setOpenedMenus}
               />
@@ -155,32 +151,27 @@ const MenuItem = ({
   );
 };
 
-/*
-|--------------------------------------------------------------------------
-| Sidebar Component
-|--------------------------------------------------------------------------
-*/
-
 const Sidebar = () => {
-  const { role } = useAuth(); // ✅ dynamic role
-
+  const { role, user } = useAuth();
+  
   const navigate = useNavigate();
-  const location = useLocation();
-  const pathname = location.pathname;
 
-  const bgColor = useColorModeValue("white", "gray.900");
-  const borderColor = useColorModeValue("gray.200", "gray.700");
+  const { pathname } = useLocation();
 
-  // ✅ FIX: role-safe sidebar generation
+  const bg = useColorModeValue("white", "gray.900");
+
+  const border = useColorModeValue("gray.200", "gray.700");
+
   const sidebarMenus = useMemo(() => {
     if (!role) return [];
+
     return getSidebarByRole(role);
   }, [role]);
 
-  // Auto open active menus
-  const defaultOpened = useMemo(() => {
-    return getDefaultOpenMenus(sidebarMenus, pathname);
-  }, [sidebarMenus, pathname]);
+  const defaultOpened = useMemo(
+    () => getDefaultOpenMenus(sidebarMenus, pathname),
+    [sidebarMenus, pathname]
+  );
 
   const [openedMenus, setOpenedMenus] = useState(defaultOpened);
 
@@ -192,56 +183,52 @@ const Sidebar = () => {
     <Box
       w="280px"
       h="100vh"
-      bg={bgColor}
+      bg={bg}
       borderRight="1px solid"
-      borderColor={borderColor}
-      boxShadow="sm"
+      borderColor={border}
       position="sticky"
-      top="0"
+      top={0}
       overflow="hidden"
     >
-      {/* Logo */}
-      <Box
-        position="sticky"
-        top="0"
-        bg={bgColor}
-        zIndex="100"
+      <Flex
+        h="90px"
+        justify="center"
+        align="center"
         borderBottom="1px solid"
-        borderColor="gray.100"
+        borderColor={border}
       >
-        <Flex justify="center" align="center" h="90px" px={5}>
-          <Image
-            src="/logo.png"
-            alt="Logo"
-            w="170px"
-            objectFit="contain"
-            draggable={false}
-          />
-        </Flex>
-      </Box>
+        <Image
+          src="/logo.png"
+          w="170px"
+          objectFit="contain"
+        />
+      </Flex>
 
-      {/* Menu */}
-      <Box h="calc(100vh - 90px)" overflowY="auto" px={3} py={4}>
-        <VStack align="stretch" spacing={2}>
-          {sidebarMenus.length > 0 ? (
-            sidebarMenus.map((menu) => (
-              <MenuItem
-                key={menu.id}
-                item={menu}
-                level={0}
-                navigate={navigate}
-                pathname={pathname}
-                openedMenus={openedMenus}
-                setOpenedMenus={setOpenedMenus}
-              />
-            ))
-          ) : (
-            <Flex justify="center" align="center" py={10}>
-              <Text fontSize="sm" color="gray.500">
-                No Menu Available
-              </Text>
-            </Flex>
-          )}
+      <Box
+        h="calc(100vh - 90px)"
+        overflowY="auto"
+        px={3}
+        py={4}
+      >
+        <VStack
+          align="stretch"
+          spacing={2}
+        >
+          {sidebarMenus.map((menu, index) => (
+            <MenuItem
+              key={
+                menu.id ??
+                menu.path ??
+                `menu-${index}`
+              }
+              item={menu}
+              level={0}
+              pathname={pathname}
+              navigate={navigate}
+              openedMenus={openedMenus}
+              setOpenedMenus={setOpenedMenus}
+            />
+          ))}
         </VStack>
       </Box>
     </Box>

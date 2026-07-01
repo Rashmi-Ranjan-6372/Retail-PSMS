@@ -91,6 +91,7 @@ class PasswordSetupToken(models.Model):
 
 class User(AbstractUser):
     ROLE_CHOICES = (
+        ("platform_owner", "Platform Owner"),
         ("superadmin", "Super Admin"),
         ("admin", "Admin"),
         ("pharmacist", "Pharmacist"),
@@ -121,6 +122,9 @@ class User(AbstractUser):
     updated_at = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
+        if self.is_superuser:
+            self.role = "platform_owner"
+
         if self.pk:
             old_user = User.objects.filter(pk=self.pk).first()
 
@@ -131,61 +135,61 @@ class User(AbstractUser):
 
     def is_account_locked(self):
         return (
-            self.account_locked_until and
-            self.account_locked_until > timezone.now()
+            self.account_locked_until
+            and self.account_locked_until > timezone.now()
         )
 
     @property
     def is_platform_owner(self):
         return (
-            self.is_active and
-            self.is_superuser
+            self.is_active
+            and self.role == "platform_owner"
         )
 
     @property
-    def is_retailer_owner(self):
+    def is_super_admin_user(self):
         return (
-            self.is_active and
-            self.role == "superadmin"
+            self.is_active
+            and self.role == "super_admin"
         )
 
     @property
     def is_admin_user(self):
         return (
-            self.is_active and
-            self.role == "admin"
+            self.is_active
+            and self.role == "admin"
         )
 
     @property
     def is_store_manager_user(self):
         return (
-            self.is_active and
-            self.role == "store_manager"
+            self.is_active
+            and self.role == "store_manager"
         )
 
     @property
     def is_pharmacist_user(self):
         return (
-            self.is_active and
-            self.role == "pharmacist"
+            self.is_active
+            and self.role == "pharmacist"
         )
 
     @property
     def is_cashier_user(self):
         return (
-            self.is_active and
-            self.role == "cashier"
+            self.is_active
+            and self.role == "cashier"
         )
 
     @property
     def is_staff_member(self):
         return (
-            self.is_active and
-            self.role == "staff"
+            self.is_active
+            and self.role == "staff"
         )
 
     def __str__(self):
-        return f"{self.username} ({self.role})"
+        return f"{self.username} ({self.get_role_display()})"
 
     class Meta:
         ordering = ["-created_at"]

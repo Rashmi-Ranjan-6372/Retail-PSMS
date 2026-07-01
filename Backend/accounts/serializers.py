@@ -662,20 +662,23 @@ class VerifyOTPSerializer(serializers.Serializer):
 # ================= RESEND OTP ================= #
 
 class ResendOTPSerializer(serializers.Serializer):
-
     user_id = serializers.IntegerField()
 
-    def validate_user_id(self, value):
+    def validate(self, attrs):
+        user_id = attrs.get("user_id")
 
-        if not User.objects.filter(
-            id=value
-        ).exists():
-
+        try:
+            user = User.objects.get(
+                id=user_id,
+                is_active=True
+            )
+        except User.DoesNotExist:
             raise serializers.ValidationError(
-                "User not found"
+                "User not found."
             )
 
-        return value
+        attrs["user"] = user
+        return attrs
     
 
 # ================= ADMIN RESET PASSWORD ================= #
