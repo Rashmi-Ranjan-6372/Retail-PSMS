@@ -153,7 +153,8 @@ const MenuItem = ({
 
 const Sidebar = () => {
   const { role, user } = useAuth();
-  
+  console.log(user);
+  console.log(role);
   const navigate = useNavigate();
 
   const { pathname } = useLocation();

@@ -325,25 +325,24 @@ class RetailerSerializer(serializers.ModelSerializer):
 # ================= USER SERIALIZER ================= #
 
 class UserSerializer(serializers.ModelSerializer):
+    role = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-
         fields = [
-            'id',
-            'username',
-            'email',
-            'role',
-            'phone',
-            'retailer',
-            'branch',
+            "id",
+            "username",
+            "email",
+            "phone",
+            "role",
+            "retailer",
+            "branch",
         ]
 
-        read_only_fields = [
-            'id',
-            'retailer',
-            'branch',
-        ]
+    def get_role(self, obj):
+        if obj.is_superuser:
+            return "platform_owner"
+        return obj.role
 
 
 # ================= CREATE STAFF ================= #
