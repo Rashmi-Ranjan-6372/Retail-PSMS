@@ -636,11 +636,7 @@ class LoginSerializer(serializers.Serializer):
 class VerifyOTPSerializer(serializers.Serializer):
 
     user_id = serializers.IntegerField()
-
-    otp = serializers.CharField(
-        max_length=6,
-        min_length=6
-    )
+    otp = serializers.CharField(max_length=6,min_length=6)
 
     def validate(self, data):
 
@@ -685,10 +681,7 @@ class ResendOTPSerializer(serializers.Serializer):
 
 class AdminResetPasswordSerializer(serializers.Serializer):
     username = serializers.CharField()
-
-    new_password = serializers.CharField(
-        write_only=True
-    )
+    new_password = serializers.CharField(write_only=True)
 
     def validate(self, data):
         request = self.context.get('request')

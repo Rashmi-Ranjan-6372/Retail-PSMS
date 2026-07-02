@@ -1,0 +1,404 @@
+/* ===================================================
+   OTP CONTAINER
+=================================================== */
+
+.otp-container{
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    padding:20px;
+    position:relative;
+    overflow:hidden;
+    font-family:Inter,Arial,sans-serif;
+    background:
+        linear-gradient(rgba(37,99,235,.05) 1px,transparent 1px),
+        linear-gradient(90deg,rgba(37,99,235,.05) 1px,transparent 1px),
+        linear-gradient(135deg,#F8FAFC 0%,#EEF6FF 45%,#E0F2FE 100%);
+    background-size:
+        60px 60px,
+        60px 60px,
+        100% 100%;
+}
+
+/* ===================================================
+   FLOATING BLOBS
+=================================================== */
+
+.otp-container::before,
+.otp-container::after{
+    content:"";
+    position:absolute;
+    border-radius:50%;
+    filter:blur(90px);
+    z-index:0;
+    animation:floatBlob 12s ease-in-out infinite;
+}
+
+.otp-container::before{
+    width:340px;
+    height:340px;
+    background:rgba(37,99,235,.18);
+    top:-120px;
+    left:-120px;
+}
+
+.otp-container::after{
+    width:320px;
+    height:320px;
+    background:rgba(14,165,233,.18);
+    bottom:-120px;
+    right:-120px;
+    animation-delay:4s;
+}
+
+@keyframes floatBlob{
+
+    0%{
+        transform:translate(0,0);
+    }
+
+    50%{
+        transform:translate(35px,25px);
+    }
+
+    100%{
+        transform:translate(0,0);
+    }
+}
+
+/* ===================================================
+   PHARMACY BACKGROUND
+=================================================== */
+
+.pharmacy-bg{
+    position:absolute;
+    inset:0;
+    overflow:hidden;
+    pointer-events:none;
+    z-index:1;
+}
+
+.bg-icon{
+    position:absolute;
+    width:80px;
+    opacity:.07;
+    filter:
+        grayscale(100%)
+        brightness(.8);
+    animation:floatIcon 20s ease-in-out infinite;
+    user-select:none;
+}
+
+/* First Row */
+
+.icon1{
+    top:8%;
+    left:8%;
+    width:70px;
+    animation-delay:0s;
+}
+
+/* Top Right */
+.icon2{
+    top:14%;
+    right:8%;
+    width:90px;
+    animation-delay:2s;
+}
+
+/* Left Center */
+.icon3{
+    top:40%;
+    left:5%;
+    width:75px;
+    animation-delay:5s;
+}
+
+/* Right Center */
+.icon4{
+    top:48%;
+    right:4%;
+    width:82px;
+    animation-delay:8s;
+}
+
+/* Bottom Left */
+.icon5{
+    bottom:10%;
+    left:10%;
+    width:88px;
+    animation-delay:10s;
+}
+
+/* Bottom Right */
+.icon6{
+    bottom:8%;
+    right:8%;
+    width:75px;
+    animation-delay:13s;
+}
+
+/* Bottom Center */
+.icon7{
+    bottom:4%;
+    left:45%;
+    width:90px;
+    animation-delay:16s;
+}
+
+.icon8{
+    top:5%;
+    left:45%;
+    width:85px;
+    animation-delay:20s;
+}
+
+.icon9{
+    top:30%;
+    left:25%;
+    width:80px;
+    animation-delay:22s;
+}
+
+.icon10{
+    top:25%;
+    right:25%;
+    width:90px;
+    animation-delay:24s;
+}
+
+.icon11{
+    bottom:22%;
+    left:30%;
+    width:82px;
+    animation-delay:26s;
+}
+
+.icon12{
+    bottom:20%;
+    right:28%;
+    width:78px;
+    animation-delay:28s;
+}
+
+
+@keyframes floatIcon{
+
+    0%{
+        transform:
+            translateY(0)
+            rotate(0deg)
+            scale(1);
+    }
+
+    25%{
+        transform:
+            translateY(-18px)
+            rotate(6deg)
+            scale(1.04);
+    }
+
+    50%{
+        transform:
+            translateY(10px)
+            rotate(-6deg)
+            scale(.97);
+    }
+
+    75%{
+        transform:
+            translateY(-12px)
+            rotate(4deg)
+            scale(1.03);
+    }
+
+    100%{
+        transform:
+            translateY(0)
+            rotate(0deg)
+            scale(1);
+    }
+}
+
+/* ===================================================
+   OTP CARD
+=================================================== */
+
+.otp-card{
+    position:relative;
+    z-index:2;
+    width:100%;
+    max-width:430px;
+    padding:35px;
+    background:rgba(255,255,255,.92);
+    backdrop-filter:blur(18px);
+    border:1px solid rgba(255,255,255,.6);
+    border-radius:18px;
+    box-shadow:
+        0 12px 35px rgba(0,0,0,.08),
+        0 0 30px rgba(37,99,235,.08);
+
+    transition:.3s;
+}
+
+.otp-card:hover{
+    transform:translateY(-3px);
+    box-shadow:
+        0 20px 45px rgba(0,0,0,.10),
+        0 0 40px rgba(37,99,235,.12);
+}
+
+/* ===================================================
+   TEXT
+=================================================== */
+
+.otp-title{
+    text-align:center;
+    color:#1E293B;
+    margin-bottom:10px;
+    font-size:28px;
+    font-weight:700;
+}
+
+.otp-subtitle{
+    text-align:center;
+    color:#64748B;
+    margin-bottom:20px;
+    font-size:14px;
+}
+
+.otp-user{
+    text-align:center;
+    margin-bottom:20px;
+    color:#334155;
+    font-weight:600;
+}
+
+/* ===================================================
+   OTP INPUTS
+=================================================== */
+
+.otp-input-container{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    margin-bottom:25px;
+}
+
+.otp-input{
+    width:55px;
+    height:60px;
+    border:1.5px solid #CBD5E1;
+    border-radius:10px;
+    text-align:center;
+    font-size:26px;
+    font-weight:700;
+    outline:none;
+    transition:.25s;
+}
+
+.otp-input:hover{
+    border-color:#60A5FA;
+}
+
+.otp-input:focus{
+    border-color:#2563EB;
+    transform:scale(1.08);
+    box-shadow:
+        0 0 0 4px rgba(37,99,235,.15);
+}
+
+/* ===================================================
+   BUTTONS
+=================================================== */
+
+.otp-button{
+    width:100%;
+    padding:14px;
+    border:none;
+    border-radius:8px;
+    background:linear-gradient(
+        135deg,
+        #2563EB,
+        #3B82F6
+    );
+    color:#fff;
+    font-size:15px;
+    font-weight:700;
+    cursor:pointer;
+    transition:.3s;
+    box-shadow:
+        0 6px 18px rgba(37,99,235,.25);
+    margin-bottom:15px;
+}
+
+.otp-button:hover:not(:disabled){
+    transform:translateY(-2px);
+    background:linear-gradient(
+        135deg,
+        #1D4ED8,
+        #2563EB
+    );
+}
+
+.otp-button:disabled{
+    opacity:.65;
+    cursor:not-allowed;
+}
+
+.otp-resend{
+    width:100%;
+    padding:14px;
+    margin-bottom:12px;
+    border-radius:8px;
+    border:1px solid #2563EB;
+    background:#fff;
+    color:#2563EB;
+    font-weight:700;
+    cursor:pointer;
+    transition:.3s;
+}
+
+.otp-resend:hover{
+    background:#EFF6FF;
+}
+
+.otp-back{
+    width:100%;
+    padding:14px;
+    border:none;
+    border-radius:8px;
+    background:#E2E8F0;
+    font-weight:700;
+    cursor:pointer;
+    transition:.3s;
+}
+
+.otp-back:hover{
+    background:#CBD5E1;
+}
+
+/* ===================================================
+   ALERTS
+=================================================== */
+
+.otp-error{
+    padding:12px;
+    margin-bottom:16px;
+    border-radius:8px;
+    background:#FEF2F2;
+    border:1px solid #FECACA;
+    color:#DC2626;
+    text-align:center;
+}
+
+.otp-success{
+    padding:12px;
+    margin-bottom:16px;
+    border-radius:8px;
+    background:#DCFCE7;
+    border:1px solid #BBF7D0;
+    color:#15803D;
+    text-align:center;
+}
