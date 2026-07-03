@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Flex,
   Input,
@@ -17,94 +18,112 @@ import {
 
 import { FaBell, FaSearch } from "react-icons/fa";
 
-import { useState } from "react";
 import useAuth from "../../hooks/useAuth";
 
+import "../../styles/Layout/navbar.css";
+
 const Navbar = () => {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
 
   const [selectedBranch, setSelectedBranch] = useState("main");
 
   return (
-    <Flex
-      h="70px"
-      bg="white"
-      px={6}
-      align="center"
-      justify="space-between"
-      borderBottom="1px solid"
-      borderColor="gray.200"
-      boxShadow="sm"
-      position="sticky"
-      top="0"
-      zIndex="sticky"
-      backdropFilter="blur(10px)"
-    >
-      {/* Search */}
-      <Box w="400px">
+    <Flex className="navbar">
+      {/* =========================
+          SEARCH
+      ========================= */}
+
+      <Box className="navbar-search">
         <InputGroup>
-          <InputLeftElement>
-            <FaSearch color="gray" />
+          <InputLeftElement pointerEvents="none">
+            <FaSearch className="navbar-search-icon" />
           </InputLeftElement>
 
-          <Input placeholder="Search..." bg="gray.50" borderRadius="xl" />
+          <Input
+            className="navbar-input"
+            placeholder="Search anything..."
+          />
         </InputGroup>
       </Box>
 
-      {/* Right Side */}
+      {/* =========================
+          RIGHT SIDE
+      ========================= */}
+
       <HStack spacing={4}>
         {/* Branch Selector */}
-        <Box minW="220px">
+
+        <Box className="navbar-branch">
           <Select
+            className="navbar-select"
             value={selectedBranch}
-            onChange={(e) => setSelectedBranch(e.target.value)}
-            borderRadius="xl"
-            bg="gray.50"
+            onChange={(e) =>
+              setSelectedBranch(e.target.value)
+            }
           >
             <option value="main">Main Branch</option>
 
-            <option value="bbsr">Bhubaneswar Branch</option>
+            <option value="bbsr">
+              Bhubaneswar Branch
+            </option>
 
-            <option value="ctc">Cuttack Branch</option>
+            <option value="ctc">
+              Cuttack Branch
+            </option>
 
-            <option value="puri">Puri Branch</option>
+            <option value="puri">
+              Puri Branch
+            </option>
 
-            <option value="berhampur">Berhampur Branch</option>
+            <option value="berhampur">
+              Berhampur Branch
+            </option>
           </Select>
         </Box>
 
         {/* Notification */}
+
         <IconButton
+          className="navbar-bell"
           icon={<FaBell />}
+          aria-label="Notifications"
           variant="ghost"
-          aria-label="notification"
-          size="lg"
         />
 
-        {/* User Menu */}
+        {/* User */}
+
         <Menu>
           <MenuButton>
-            <HStack spacing={3}>
-              <Avatar size="sm" name="Admin User" />
+            <HStack
+              spacing={3}
+              className="navbar-user"
+            >
+              <Avatar
+                size="sm"
+                name={user?.name || "Admin"}
+              />
 
-              <Box textAlign="left">
-                <Text fontSize="sm" fontWeight="bold">
-                  Admin
+              <Box>
+                <Text className="navbar-name">
+                  {user?.name || "Admin"}
                 </Text>
 
-                <Text fontSize="xs" color="gray.500">
-                  Super Admin
+                <Text className="navbar-role">
+                  {user?.role || "Super Admin"}
                 </Text>
               </Box>
             </HStack>
           </MenuButton>
 
-          <MenuList>
+          <MenuList className="navbar-menu">
             <MenuItem>Profile</MenuItem>
 
             <MenuItem>Settings</MenuItem>
 
-            <MenuItem color="red.500" onClick={logout}>
+            <MenuItem
+              color="red.500"
+              onClick={logout}
+            >
               Logout
             </MenuItem>
           </MenuList>

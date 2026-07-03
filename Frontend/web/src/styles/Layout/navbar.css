@@ -1,0 +1,235 @@
+/* ===================================================
+   NAVBAR
+=================================================== */
+
+.navbar {
+    height: 70px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    padding: 0 24px;
+
+    background: rgba(255, 255, 255, .94);
+
+    backdrop-filter: blur(18px);
+
+    border-bottom: 1px solid rgba(226, 232, 240, .9);
+
+    box-shadow:
+        0 8px 24px rgba(15, 23, 42, .05);
+
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+
+/* ===================================================
+   SEARCH
+=================================================== */
+
+.navbar-search {
+    width: 380px;
+}
+
+.navbar-search-icon {
+    color: #94A3B8;
+    font-size: 15px;
+}
+
+.navbar-input {
+    height: 46px !important;
+
+    border-radius: 14px !important;
+
+    border: 1.5px solid #E2E8F0 !important;
+
+    background: #F8FAFC !important;
+
+    transition: .25s !important;
+
+    font-size: 14px;
+}
+
+.navbar-input:hover {
+    border-color: #60A5FA !important;
+}
+
+.navbar-input:focus,
+.navbar-input[data-focus] {
+    border-color: #2563EB !important;
+
+    background: white !important;
+
+    box-shadow:
+        0 0 0 4px rgba(37, 99, 235, .12) !important;
+}
+
+/* ===================================================
+   BRANCH SELECT
+=================================================== */
+
+.navbar-branch {
+    min-width: 220px;
+}
+
+.navbar-select {
+    height: 46px !important;
+
+    border-radius: 14px !important;
+
+    border: 1.5px solid #E2E8F0 !important;
+
+    background: #F8FAFC !important;
+
+    font-size: 14px;
+
+    transition: .25s !important;
+}
+
+.navbar-select:hover {
+    border-color: #60A5FA !important;
+}
+
+.navbar-select:focus,
+.navbar-select[data-focus] {
+    border-color: #2563EB !important;
+
+    box-shadow:
+        0 0 0 4px rgba(37,99,235,.12) !important;
+}
+
+/* ===================================================
+   NOTIFICATION BUTTON
+=================================================== */
+
+.navbar-bell {
+    width: 46px !important;
+    height: 46px !important;
+
+    border-radius: 14px !important;
+
+    background: #F8FAFC !important;
+
+    border: 1px solid #E2E8F0 !important;
+
+    transition: .25s !important;
+}
+
+.navbar-bell:hover {
+    background: #EFF6FF !important;
+
+    color: #2563EB !important;
+
+    border-color: #BFDBFE !important;
+
+    transform: translateY(-2px);
+}
+
+/* ===================================================
+   USER
+=================================================== */
+
+.navbar-user {
+    padding: 6px 10px;
+
+    border-radius: 14px;
+
+    cursor: pointer;
+
+    transition: .25s;
+}
+
+.navbar-user:hover {
+    background: #F8FAFC;
+}
+
+.navbar-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: #1E293B;
+}
+
+.navbar-role {
+    font-size: 12px;
+    color: #64748B;
+}
+
+/* ===================================================
+   MENU
+=================================================== */
+
+.navbar-menu {
+    border-radius: 14px !important;
+
+    overflow: hidden;
+
+    border: 1px solid #E2E8F0 !important;
+
+    box-shadow:
+        0 12px 30px rgba(15,23,42,.08) !important;
+}
+
+.navbar-menu .chakra-menu__menuitem {
+    font-size: 14px;
+
+    transition: .2s;
+}
+
+.navbar-menu .chakra-menu__menuitem:hover {
+    background: #EFF6FF !important;
+
+    color: #2563EB !important;
+}
+
+/* ===================================================
+   AVATAR
+=================================================== */
+
+.navbar .chakra-avatar {
+    border: 2px solid #DBEAFE;
+
+    transition: .25s;
+}
+
+.navbar-user:hover .chakra-avatar {
+    border-color: #2563EB;
+
+    transform: scale(1.05);
+}
+
+/* ===================================================
+   RESPONSIVE
+=================================================== */
+
+@media (max-width: 1024px) {
+
+    .navbar-search {
+        width: 260px;
+    }
+
+    .navbar-branch {
+        min-width: 170px;
+    }
+}
+
+@media (max-width: 768px) {
+
+    .navbar {
+        padding: 0 14px;
+    }
+
+    .navbar-search {
+        display: none;
+    }
+
+    .navbar-branch {
+        min-width: 140px;
+    }
+
+    .navbar-name,
+    .navbar-role {
+        display: none;
+    }
+}
+

@@ -4,24 +4,24 @@ import Sidebar from "./Sidebar";
 
 const Layout = ({ children }) => {
   return (
-    <Flex minH="100vh" bg="gray.50" gap={3}>
+    <Flex h="100vh" overflow="hidden">
       {/* Sidebar */}
-      <Box w="260px" bg="white">
+      <Box w="290px" flexShrink={0}>
         <Sidebar />
       </Box>
 
-      {/* Main Content */}
-      <Box flex="1" display="flex" flexDirection="column">
+      {/* Right Side */}
+      <Flex flex="1" direction="column" overflow="hidden">
         {/* Navbar */}
-        <Box position="sticky" top="0" zIndex="10" bg="white">
+        <Box flexShrink={0}>
           <Navbar />
         </Box>
 
-        {/* Page Content */}
-        <Box flex="1" p={5} bg="gray.50">
+        {/* Scrollable Content */}
+        <Box flex="1" overflowY="auto" bg="gray.50" p={5}>
           {children}
         </Box>
-      </Box>
+      </Flex>
     </Flex>
   );
 };
