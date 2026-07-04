@@ -1,44 +1,47 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
-
+import { Box, Button, FormControl, Input, Text } from "@chakra-ui/react";
 import { loginUser } from "../../api/authAPI";
 import useAuth from "../../hooks/useAuth";
-
-import Capsule from "../../assets/pharmacy-icons/capsule-medicine.svg";
-import MedicineCross from "../../assets/pharmacy-icons/medical-cross.svg";
-import Hospital from "../../assets/pharmacy-icons/hospital.svg";
-import Pill from "../../assets/pharmacy-icons/pill.svg";
-import Prescription from "../../assets/pharmacy-icons/prescription.svg";
-import Stethoscope from "../../assets/pharmacy-icons/stethoscope.svg";
-import Syringe from "../../assets/pharmacy-icons/syringe-medical.svg";
-import Doctor from "../../assets/pharmacy-icons/doctor-man.svg";
-import Monitor from "../../assets/pharmacy-icons/health-monitor.svg";
-import HospitalLocation from "../../assets/pharmacy-icons/hospital-location.svg";
-import PatientBed from "../../assets/pharmacy-icons/patient-bed.svg";
-import Temperature from "../../assets/pharmacy-icons/temperature.svg";
-
-import "../../styles/auth/Login.css";
+import Loader from "../../components/common/Loader";
+import Background from "../../components/common/Background";
+import { pageContainer } from "../../styles/common/layout";
+import { glassCard } from "../../styles/common/cards";
+import {
+  form,
+  formGroup,
+  textInput,
+  floatingLabel,
+  floatingLabelActive,
+  inputAction,
+  errorAlert,
+} from "../../styles/common/forms";
+import { primaryButton } from "../../styles/common/buttons";
+import { heading2, subtitle } from "../../styles/common/typography";
 
 const Login = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  const [form, setForm] = useState({
+  const [formData, setFormData] = useState({
     username: "",
     password: "",
   });
 
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState("");
 
+  const [showPassword, setShowPassword] = useState(false);
+
+  const [loading, setLoading] = useState(false);
+
+  const [error, setError] = useState("");
+
   const handleChange = (e) => {
-    setForm({
-      ...form,
+    setFormData((prev) => ({
+      ...prev,
       [e.target.name]: e.target.value,
-    });
+    }));
   };
 
   const handleSubmit = async (e) => {
@@ -46,7 +49,7 @@ const Login = () => {
 
     setError("");
 
-    if (!form.username || !form.password) {
+    if (!formData.username || !formData.password) {
       setError("Please enter username and password");
       return;
     }
@@ -54,13 +57,13 @@ const Login = () => {
     try {
       setLoading(true);
 
-      const res = await loginUser(form);
+      const res = await loginUser(formData);
 
       if (res.data.otp_required) {
         navigate("/verify-otp", {
           state: {
             user_id: res.data.user_id,
-            username: form.username,
+            username: formData.username,
           },
         });
         return;
@@ -85,82 +88,95 @@ const Login = () => {
   };
 
   return (
-    <div className="login-container">
-        <div className="pharmacy-bg">
-            <img src={Capsule} className="bg-icon icon1" alt="" />
-            <img src={MedicineCross} className="bg-icon icon2" alt="" />
-            <img src={Hospital} className="bg-icon icon3" alt="" />
-            <img src={Pill} className="bg-icon icon4" alt="" />
-            <img src={Prescription} className="bg-icon icon5" alt="" />
-            <img src={Stethoscope} className="bg-icon icon6" alt="" />
-            <img src={Syringe} className="bg-icon icon7" alt="" />
-            <img src={Doctor} className="bg-icon icon8" alt="" />
-            <img src={Monitor} className="bg-icon icon9" alt="" />
-            <img src={HospitalLocation} className="bg-icon icon10" alt="" />
-            <img src={PatientBed} className="bg-icon icon11" alt="" />
-            <img src={Temperature} className="bg-icon icon12" alt="" />
-        </div>
-      <div className="login-card">
-        <h2 className="login-title">🔐 Welcome Back</h2>
+    <Box sx={pageContainer}>
+      <Background />
 
-        <p className="login-subtitle">Login to continue</p>
+      <Box sx={glassCard}>
+        <Text sx={heading2} textAlign="center" mb="5px">
+          🔐 Welcome Back
+        </Text>
 
-        {error && <div className="login-error">{error}</div>}
+        <Text sx={subtitle} textAlign="center" mb="28px">
+          Login to continue
+        </Text>
 
-        <form onSubmit={handleSubmit}>
-          <div className="login-field">
-            <input
-              className="login-input"
+        {error && <Box sx={errorAlert}>{error}</Box>}
+
+        <Box as="form" sx={form} onSubmit={handleSubmit}>
+          <FormControl sx={formGroup}>
+            <Input
+              sx={textInput}
               type="text"
               name="username"
-              value={form.username}
+              value={formData.username}
               onChange={handleChange}
               onFocus={() => setFocusedField("username")}
               onBlur={() => setFocusedField("")}
             />
 
-            <label
-              className={`login-label ${
-                focusedField === "username" || form.username ? "active" : ""
-              }`}
+            <Text
+              as="label"
+              sx={{
+                ...floatingLabel,
+                ...(focusedField === "username" || formData.username
+                  ? floatingLabelActive
+                  : {}),
+              }}
             >
               Username
-            </label>
-          </div>
-
-          <div className="login-field">
-            <input
-              className="login-input"
+            </Text>
+          </FormControl>
+          <FormControl sx={formGroup}>
+            <Input
+              sx={textInput}
               type={showPassword ? "text" : "password"}
               name="password"
-              value={form.password}
+              value={formData.password}
               onChange={handleChange}
               onFocus={() => setFocusedField("password")}
               onBlur={() => setFocusedField("")}
             />
 
-            <label
-              className={`login-label ${
-                focusedField === "password" || form.password ? "active" : ""
-              }`}
+            <Text
+              as="label"
+              sx={{
+                ...floatingLabel,
+                ...(focusedField === "password" || formData.password
+                  ? floatingLabelActive
+                  : {}),
+              }}
             >
               Password
-            </label>
+            </Text>
 
-            <span
-              className="password-toggle"
+            <Box
+              sx={inputAction}
               onClick={() => setShowPassword(!showPassword)}
             >
               {showPassword ? <FaEyeSlash /> : <FaEye />}
-            </span>
-          </div>
+            </Box>
+          </FormControl>
 
-          <button className="login-button" type="submit" disabled={loading}>
-            {loading ? "Logging in..." : "Login"}
-          </button>
-        </form>
-      </div>
-    </div>
+          <Button type="submit" sx={primaryButton} disabled={loading}>
+            {loading ? (
+              <Box
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                gap="10px"
+              >
+                <Loader size="18px" />
+                <Text color="white" fontSize="15px" fontWeight="600">
+                  Logging in...
+                </Text>
+              </Box>
+            ) : (
+              "Login"
+            )}
+          </Button>
+        </Box>
+      </Box>
+    </Box>
   );
 };
 
