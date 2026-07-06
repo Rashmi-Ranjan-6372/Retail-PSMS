@@ -18,12 +18,10 @@ import { pageContainer } from "../../styles/common/layout";
 import { glassCard } from "../../styles/common/cards";
 
 import {
-  errorAlert,
-  successAlert,
   pinContainer,
   pinInput,
 } from "../../styles/common/forms";
-
+import { errorAlert, successAlert } from "../../styles/common/alerts";
 import { primaryButton, secondaryButton } from "../../styles/common/buttons";
 import { heading2, subtitle } from "../../styles/common/typography";
 

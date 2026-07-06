@@ -15,10 +15,8 @@ import {
   floatingLabel,
   floatingLabelActive,
   inputAction,
-  errorAlert,
-  successAlert,
 } from "../../styles/common/forms";
-
+import { errorAlert, successAlert } from "../../styles/common/alerts";
 import { primaryButton, ghostFullButton } from "../../styles/common/buttons";
 
 import { heading2, subtitle } from "../../styles/common/typography";

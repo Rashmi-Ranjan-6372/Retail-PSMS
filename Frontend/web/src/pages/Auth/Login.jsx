@@ -16,8 +16,8 @@ import {
   floatingLabel,
   floatingLabelActive,
   inputAction,
-  errorAlert,
 } from "../../styles/common/forms";
+import { errorAlert } from "../../styles/common/alerts";
 import { primaryButton } from "../../styles/common/buttons";
 import { heading2, subtitle, link } from "../../styles/common/typography";
 
