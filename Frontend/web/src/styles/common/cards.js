@@ -1,6 +1,16 @@
-import { colors } from "./colors";
+import { colors, shadows } from "./colors";
+import transitions from "./transitions";
+
+export const cardBase = {
+  bg: colors.white,
+  borderRadius: "12px",
+  border: `1px solid ${colors.borderLight}`,
+  boxShadow: shadows.card,
+  transition: transitions.normal,
+};
 
 export const glassCard = {
+  ...cardBase,
   position: "relative",
   zIndex: 2,
   width: "100%",
@@ -10,72 +20,117 @@ export const glassCard = {
   backdropFilter: "blur(18px)",
   border: `1px solid ${colors.glassBorder}`,
   borderRadius: "18px",
-  boxShadow:
-    "0 12px 35px rgba(0,0,0,.08), 0 0 30px rgba(37,99,235,.08)",
-  transition: ".3s",
+  boxShadow: shadows.glass,
+
   _hover: {
     transform: "translateY(-3px)",
-    boxShadow:
-      "0 20px 45px rgba(0,0,0,.10), 0 0 40px rgba(37,99,235,.12)",
+    boxShadow: shadows.modal,
   },
 };
 
 export const smallCard = {
-  bg: colors.white,
-  borderRadius: "12px",
-  border: `1px solid ${colors.borderLight}`,
+  ...cardBase,
   p: "20px",
-  boxShadow: "0 2px 8px rgba(0,0,0,.06)",
-  transition: ".25s",
+
   _hover: {
     transform: "translateY(-2px)",
-    boxShadow: "0 8px 18px rgba(0,0,0,.10)",
+    boxShadow: shadows.cardHover,
   },
 };
 
 export const dashboardCard = {
-  bg: colors.white,
+  ...cardBase,
   borderRadius: "16px",
-  border: `1px solid ${colors.borderLight}`,
   p: "24px",
-  boxShadow: "0 4px 12px rgba(0,0,0,.06)",
-  transition: ".25s",
+
   _hover: {
     transform: "translateY(-3px)",
-    boxShadow: "0 10px 24px rgba(0,0,0,.10)",
+    boxShadow: shadows.cardHover,
   },
 };
 
 export const modalCard = {
-  bg: colors.white,
-  borderRadius: "16px",
+  ...cardBase,
   p: "30px",
-  boxShadow: "0 20px 45px rgba(0,0,0,.18)",
-  border: `1px solid ${colors.borderLight}`,
+  borderRadius: "16px",
+  boxShadow: shadows.modal,
 };
 
 export const sidebarCard = {
-  bg: colors.white,
-  borderRadius: "12px",
+  ...cardBase,
   p: "18px",
-  border: `1px solid ${colors.borderLight}`,
-  boxShadow: "0 2px 8px rgba(0,0,0,.05)",
 };
 
 export const profileCard = {
-  bg: colors.white,
-  borderRadius: "20px",
+  ...cardBase,
   p: "30px",
+  borderRadius: "20px",
   textAlign: "center",
-  border: `1px solid ${colors.borderLight}`,
-  boxShadow: "0 8px 20px rgba(0,0,0,.08)",
+};
+
+export const tableCard = {
+  ...cardBase,
+  overflow: "hidden",
+};
+
+export const statsCard = {
+  ...cardBase,
+  p: "20px",
+  borderRadius: "14px",
+
+  _hover: {
+    transform: "translateY(-2px)",
+    boxShadow: shadows.cardHover,
+  },
+};
+
+export const clickableCard = {
+  ...cardBase,
+  p: "20px",
+  cursor: "pointer",
+
+  _hover: {
+    transform: "translateY(-2px)",
+    borderColor: colors.primary,
+    boxShadow: shadows.primary,
+  },
+};
+
+export const formCard = {
+  ...cardBase,
+  p: "24px",
+};
+
+export const filterCard = {
+  ...cardBase,
+  p: "18px",
+  mb: "20px",
+};
+
+export const loginCard = {
+  ...glassCard,
+};
+
+export const emptyStateCard = {
+  ...cardBase,
+  p: "40px",
+  textAlign: "center",
+  color: colors.textMuted,
 };
 
 export default {
-    glassCard,
-    smallCard,
-    dashboardCard,
-    modalCard,
-    sidebarCard,
-    profileCard
+  cardBase,
+  glassCard,
+  smallCard,
+  dashboardCard,
+  modalCard,
+  sidebarCard,
+  profileCard,
+  tableCard,
+  statsCard,
+  clickableCard,
+  formCard,
+  filterCard,
+  loginCard,
+  emptyStateCard,
 };

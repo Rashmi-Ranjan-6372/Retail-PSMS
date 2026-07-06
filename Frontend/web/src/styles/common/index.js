@@ -7,3 +7,7 @@ export * from "./layout";
 export * from "./typography";
 export * from "./loader";
 export * from "./background";
+export * from "./spacing";
+export * from "./transitions";
+export * from "./icons";
+export * from "./alerts";

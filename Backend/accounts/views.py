@@ -1,3 +1,5 @@
+import uuid
+
 from config import settings
 from branches.models import Branch
 from rest_framework.views import APIView
@@ -31,6 +33,7 @@ from .serializers import (
     AssignSubscriptionSerializer,
     RetailerSerializer,
     SetPasswordSerializer,
+    ForgotPasswordSerializer
 )
 
 from .permissions import (IsAdmin, IsRetailerOwnerOrPlatformOwner)
@@ -476,6 +479,66 @@ class ValidatePasswordTokenView(APIView):
                 "username":
                 token_obj.user.username
             }
+        )
+    
+class ForgotPasswordView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = ForgotPasswordSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(
+                {
+                    "success": False,
+                    "errors": serializer.errors,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        email = serializer.validated_data["email"]
+
+        user = User.objects.get(email=email)
+
+        PasswordSetupToken.objects.filter(
+            user=user,
+            is_used=False,
+        ).update(
+            is_used=True,
+        )
+
+        password_token = PasswordSetupToken.objects.create(
+            user=user,
+            expires_at=timezone.now() + timedelta(hours=1),
+        )
+
+        reset_link = (
+            f"http://localhost:5173/reset-password/"
+            f"{user.id}/{password_token.token}"
+        )
+
+        send_mail(
+            subject="Reset Your Password",
+            message=(
+                f"Hello {user.first_name or user.username},\n\n"
+                "We received a request to reset your password.\n\n"
+                f"Click the link below to reset your password:\n\n"
+                f"{reset_link}\n\n"
+                "This link will expire in 1 hour.\n\n"
+                "If you did not request a password reset, "
+                "please ignore this email."
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
+
+        return Response(
+            {
+                "success": True,
+                "message": "Password reset link has been sent to your registered email.",
+            },
+            status=status.HTTP_200_OK,
         )
     
 # =====================================================

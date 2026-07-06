@@ -1,4 +1,5 @@
 import { floatBlob, floatIcon } from "./animations";
+import { colors } from "./colors";
 
 export const pageBackground = {
   position: "absolute",
@@ -9,7 +10,7 @@ export const pageBackground = {
 };
 
 export const backgroundIcon = {
-  position: "absolute", 
+  position: "absolute",
   opacity: 0.07,
   filter:
     "invert(33%) sepia(91%) saturate(1050%) hue-rotate(200deg) brightness(105%)",
@@ -37,7 +38,7 @@ export const blobOne = {
   height: "340px",
   borderRadius: "50%",
   filter: "blur(80px)",
-  background: "rgba(37,99,235,.18)",
+  background: `${colors.primary}30`, 
   top: "-120px",
   left: "-120px",
   animation: `${floatBlob} 12s ease-in-out infinite`,
@@ -49,7 +50,7 @@ export const blobTwo = {
   height: "300px",
   borderRadius: "50%",
   filter: "blur(80px)",
-  background: "rgba(14,165,233,.18)",
+  background: `${colors.secondary}30`, 
   bottom: "-120px",
   right: "-120px",
   animation: `${floatBlob} 12s ease-in-out infinite`,

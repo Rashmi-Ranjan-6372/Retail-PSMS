@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
-import { Box, Button, FormControl, Input, Text } from "@chakra-ui/react";
+import { Box, Button, FormControl, Input, Text, Link } from "@chakra-ui/react";
 import { loginUser } from "../../api/authAPI";
 import useAuth from "../../hooks/useAuth";
 import Loader from "../../components/common/Loader";
 import Background from "../../components/common/Background";
-import { pageContainer } from "../../styles/common/layout";
+import { pageContainer, linkContainer } from "../../styles/common/layout";
 import { glassCard } from "../../styles/common/cards";
+
 import {
   form,
   formGroup,
@@ -18,7 +19,7 @@ import {
   errorAlert,
 } from "../../styles/common/forms";
 import { primaryButton } from "../../styles/common/buttons";
-import { heading2, subtitle } from "../../styles/common/typography";
+import { heading2, subtitle, link } from "../../styles/common/typography";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -30,11 +31,8 @@ const Login = () => {
   });
 
   const [focusedField, setFocusedField] = useState("");
-
   const [showPassword, setShowPassword] = useState(false);
-
   const [loading, setLoading] = useState(false);
-
   const [error, setError] = useState("");
 
   const handleChange = (e) => {
@@ -103,6 +101,7 @@ const Login = () => {
         {error && <Box sx={errorAlert}>{error}</Box>}
 
         <Box as="form" sx={form} onSubmit={handleSubmit}>
+          {/* Username */}
           <FormControl sx={formGroup}>
             <Input
               sx={textInput}
@@ -126,6 +125,8 @@ const Login = () => {
               Username
             </Text>
           </FormControl>
+
+          {/* Password */}
           <FormControl sx={formGroup}>
             <Input
               sx={textInput}
@@ -157,7 +158,15 @@ const Login = () => {
             </Box>
           </FormControl>
 
-          <Button type="submit" sx={primaryButton} disabled={loading}>
+          {/* Forgot Password */}
+          <Box sx={linkContainer}>
+            <Link sx={link} onClick={() => navigate("/forgot-password")}>
+              Forgot Password?
+            </Link>
+          </Box>
+
+          {/* Login Button */}
+          <Button type="submit" sx={primaryButton} isDisabled={loading}>
             {loading ? (
               <Box
                 display="flex"
@@ -166,6 +175,7 @@ const Login = () => {
                 gap="10px"
               >
                 <Loader size="18px" />
+
                 <Text color="white" fontSize="15px" fontWeight="600">
                   Logging in...
                 </Text>

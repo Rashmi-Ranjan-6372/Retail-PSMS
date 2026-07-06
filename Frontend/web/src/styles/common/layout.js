@@ -1,4 +1,5 @@
 import { floatBlob, floatIcon } from "./animations";
+import { colors } from "./colors";
 
 export const pageContainer = {
   minH: "100vh",
@@ -83,9 +84,37 @@ export const center = {
   alignItems: "center",
 };
 
+export const row = {
+  display: "flex",
+  alignItems: "center",
+};
+
+export const column = {
+  display: "flex",
+  flexDirection: "column",
+};
+
+export const rowCenter = {
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+};
+
 export const rowBetween = {
   display: "flex",
   justifyContent: "space-between",
+  alignItems: "center",
+};
+
+export const rowAround = {
+  display: "flex",
+  justifyContent: "space-around",
+  alignItems: "center",
+};
+
+export const rowEvenly = {
+  display: "flex",
+  justifyContent: "space-evenly",
   alignItems: "center",
 };
 
@@ -96,14 +125,321 @@ export const columnCenter = {
   alignItems: "center",
 };
 
+export const contentContainer = {
+  width: "100%",
+  maxW: "1280px",
+  mx: "auto",
+  px: "24px",
+};
+
+export const fluidContainer = {
+  width: "100%",
+  px: "24px",
+};
+
+export const sectionContainer = {
+  py: "24px",
+};
+
+export const pageContent = {
+  flex: 1,
+  overflowY: "auto",
+  p: "24px",
+};
+
+export const gridTwo = {
+  display: "grid",
+  gridTemplateColumns: {
+    base: "1fr",
+    md: "repeat(2,1fr)",
+  },
+  gap: "24px",
+};
+
+export const gridThree = {
+  display: "grid",
+  gridTemplateColumns: {
+    base: "1fr",
+    md: "repeat(2,1fr)",
+    lg: "repeat(3,1fr)",
+  },
+  gap: "24px",
+};
+
+export const gridFour = {
+  display: "grid",
+  gridTemplateColumns: {
+    base: "1fr",
+    md: "repeat(2,1fr)",
+    xl: "repeat(4,1fr)",
+  },
+  gap: "24px",
+};
+
+export const sidebarContainer = {
+  display: "flex",
+  flexDirection: "column",
+  minH: "100vh",
+  w: "260px",
+  bg: colors.white,
+  borderRight: `1px solid ${colors.borderLight}`,
+  boxShadow: `0 2px 10px ${colors.shadow}`,
+};
+
+export const sidebarHeader = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  py: "20px",
+  borderBottom: `1px solid ${colors.borderLight}`,
+};
+
+export const sidebarContent = {
+  flex: 1,
+  overflowY: "auto",
+  py: "10px",
+};
+
+export const pageHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  mb: "24px",
+};
+
+export const stickyHeader = {
+  position: "sticky",
+  top: 0,
+  zIndex: 100,
+  bg: colors.white,
+  borderBottom: `1px solid ${colors.borderLight}`,
+  px: "24px",
+  py: "16px",
+};
+
+export const scrollContainer = {
+  overflowY: "auto",
+};
+
+export const fullHeight = {
+  minH: "100vh",
+};
+
+export const fullWidth = {
+  width: "100%",
+};
+
+export const linkContainer = {
+  display: "flex",
+  justifyContent: "flex-end",
+  alignItems: "center",
+  mt: "-8px",
+  mb: "20px",
+};
+
+export const flexCenter = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+export const flexBetween = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+};
+
+export const flexGap = {
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+};
+
+export const textCenter = {
+  textAlign: "center",
+};
+
+export const pageWrapper = {
+  minH: "100vh",
+  bg: colors.background,
+};
+
+export const cardContainer = {
+  width: "100%",
+  maxW: "1200px",
+  mx: "auto",
+};
+
+export const flexColumn = {
+  display: "flex",
+  flexDirection: "column",
+};
+
+export const flexWrap = {
+  display: "flex",
+  flexWrap: "wrap",
+};
+
+export const flexStart = {
+  display: "flex",
+  justifyContent: "flex-start",
+  alignItems: "center",
+};
+
+export const flexEnd = {
+  display: "flex",
+  justifyContent: "flex-end",
+  alignItems: "center",
+};
+
+export const flexAround = {
+  display: "flex",
+  justifyContent: "space-around",
+  alignItems: "center",
+};
+
+export const flexEvenly = {
+  display: "flex",
+  justifyContent: "space-evenly",
+  alignItems: "center",
+};
+
+export const stack = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "16px",
+};
+
+export const horizontalStack = {
+  display: "flex",
+  alignItems: "center",
+  gap: "16px",
+};
+
+export const sectionGap = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "24px",
+};
+
+export const dividerSpace = {
+  my: "24px",
+};
+
+export const responsiveContainer = {
+  width: "100%",
+  maxW: {
+    base: "100%",
+    md: "720px",
+    lg: "960px",
+    xl: "1280px",
+  },
+  mx: "auto",
+  px: "24px",
+};
+
+export const responsiveGrid = {
+  display: "grid",
+  gridTemplateColumns: {
+    base: "1fr",
+    md: "repeat(2,1fr)",
+    lg: "repeat(3,1fr)",
+    xl: "repeat(4,1fr)",
+  },
+  gap: "24px",
+};
+
+export const dashboardLayout = {
+  display: "grid",
+  gridTemplateColumns: {
+    base: "1fr",
+    lg: "260px 1fr",
+  },
+  minH: "100vh",
+};
+
+export const centeredContent = {
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  minH: "100vh",
+};
+
+export const stickyFooter = {
+  mt: "auto",
+};
+
+export const overflowHidden = {
+  overflow: "hidden",
+};
+
+export const overflowAuto = {
+  overflow: "auto",
+};
+
+export const relative = {
+  position: "relative",
+};
+
+export const absoluteFill = {
+  position: "absolute",
+  inset: 0,
+};
+
 export default {
-    pageContainer,
-    blobOne,
-    blobTwo,
-    pharmacyBackground,
-    backgroundIcon,
-    iconPositions,
-    center,
-    rowBetween,
-    columnCenter,
+  pageContainer,
+  blobOne,
+  blobTwo,
+  pharmacyBackground,
+  backgroundIcon,
+  iconPositions,
+  center,
+  row,
+  column,
+  rowCenter,
+  rowBetween,
+  rowAround,
+  rowEvenly,
+  columnCenter,
+  contentContainer,
+  fluidContainer,
+  sectionContainer,
+  pageContent,
+  gridTwo,
+  gridThree,
+  gridFour,
+  sidebarContainer,
+  sidebarHeader,
+  sidebarContent,
+  pageHeader,
+  stickyHeader,
+  scrollContainer,
+  fullHeight,
+  fullWidth,
+  linkContainer,
+  flexCenter,
+  flexBetween,
+  flexGap,
+  textCenter,
+  pageWrapper,
+  cardContainer,
+  flexColumn,
+  flexWrap,
+  flexStart,
+  flexEnd,
+  flexAround,
+  flexEvenly,
+  stack,
+  horizontalStack,
+  sectionGap,
+  dividerSpace,
+  responsiveContainer,
+  responsiveGrid,
+  dashboardLayout,
+  centeredContent,
+  stickyFooter,
+  overflowHidden,
+  overflowAuto,
+  relative,
+  absoluteFill,
 };
