@@ -56,7 +56,7 @@ export const pharmacyBackground = {
 export const backgroundIcon = {
   position: "absolute",
   width: "80px",
-  opacity: 0.07,
+  opacity: 0.07,                                                                                                                               
   filter:
     "invert(33%) sepia(91%) saturate(1050%) hue-rotate(200deg) brightness(105%)",
   animation: `${floatIcon} 20s ease-in-out infinite`,
@@ -386,6 +386,209 @@ export const absoluteFill = {
   inset: 0,
 };
 
+/* ===========================================
+   COMMON WRAPPERS
+=========================================== */
+
+export const appContainer = {
+  width: "100%",
+  minH: "100vh",
+  bg: colors.background,
+};
+
+export const contentWrapper = {
+  width: "100%",
+  maxW: "1440px",
+  mx: "auto",
+  px: {
+    base: "16px",
+    md: "24px",
+    lg: "32px",
+  },
+};
+
+export const section = {
+  py: "24px",
+};
+
+export const cardGrid = {
+  display: "grid",
+  gridTemplateColumns: {
+    base: "1fr",
+    md: "repeat(2,1fr)",
+    lg: "repeat(3,1fr)",
+  },
+  gap: "20px",
+};
+
+export const formContainer = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "18px",
+};
+
+export const formRow = {
+  display: "grid",
+  gridTemplateColumns: {
+    base: "1fr",
+    md: "repeat(2,1fr)",
+  },
+  gap: "20px",
+};
+
+export const actionContainer = {
+  display: "flex",
+  justifyContent: "flex-end",
+  alignItems: "center",
+  gap: "12px",
+  mt: "24px",
+};
+
+export const pageSection = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "24px",
+};
+
+export const tableWrapper = {
+  overflowX: "auto",
+  borderRadius: "12px",
+};
+
+export const emptyState = {
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "center",
+  alignItems: "center",
+  py: "60px",
+  gap: "12px",
+};
+
+export const modalContent = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "20px",
+};
+
+export const drawerContent = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "18px",
+};
+
+export const stickyTop = {
+  position: "sticky",
+  top: 0,
+  zIndex: 100,
+};
+
+export const stickyBottom = {
+  position: "sticky",
+  bottom: 0,
+  zIndex: 100,
+};
+
+export const scrollY = {
+  overflowY: "auto",
+};
+
+export const scrollX = {
+  overflowX: "auto",
+};
+
+export const fullScreenCenter = {
+  minH: "100vh",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+};
+
+export const fullScreenColumn = {
+  minH: "100vh",
+  display: "flex",
+  flexDirection: "column",
+};
+
+export const grow = {
+  flex: 1,
+};
+
+export const shrink = {
+  flexShrink: 0,
+};
+
+export const relativeContainer = {
+  position: "relative",
+};
+
+export const absoluteCenter = {
+  position: "absolute",
+  top: "50%",
+  left: "50%",
+  transform: "translate(-50%, -50%)",
+};
+
+export const absoluteTopRight = {
+  position: "absolute",
+  top: "16px",
+  right: "16px",
+};
+
+export const absoluteTopLeft = {
+  position: "absolute",
+  top: "16px",
+  left: "16px",
+};
+
+export const absoluteBottomRight = {
+  position: "absolute",
+  bottom: "16px",
+  right: "16px",
+};
+
+export const absoluteBottomLeft = {
+  position: "absolute",
+  bottom: "16px",
+  left: "16px",
+};
+
+export const sidebarItem = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  py: "13px",
+  pr: "14px",
+  cursor: "pointer",
+  transition: "all .25s ease",
+};
+
+export const sidebarItemContent = {
+  display: "flex",
+  alignItems: "center",
+  gap: "12px",
+};
+
+export const sidebarSubMenu = {
+  mt: "4px",
+};
+
+export const sidebarLogoContainer = {
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+};
+
+export const sidebarLogo = {
+  w: "120px",
+  h: "auto",
+  objectFit: "contain",
+};
+
+export const sidebarChevron = {
+  fontSize: "12px",
+  transition: ".25s",
+};
+
 export default {
   pageContainer,
   blobOne,
@@ -442,4 +645,36 @@ export default {
   overflowAuto,
   relative,
   absoluteFill,
+  appContainer,
+  contentWrapper,
+  section,
+  cardGrid,
+  formContainer,
+  formRow,
+  actionContainer,
+  pageSection,
+  tableWrapper,
+  emptyState,
+  modalContent,
+  drawerContent,
+  stickyTop,
+  stickyBottom,
+  scrollY,
+  scrollX,
+  fullScreenCenter,
+  fullScreenColumn,
+  grow,
+  shrink,
+  relativeContainer,
+  absoluteCenter,
+  absoluteTopRight,
+  absoluteTopLeft,
+  absoluteBottomRight,
+  absoluteBottomLeft,
+  sidebarItem,
+  sidebarItemContent,
+  sidebarSubMenu,
+  sidebarLogoContainer,
+  sidebarLogo,
+  sidebarChevron,
 };

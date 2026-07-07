@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-
 import {
   Box,
   Button,
@@ -9,21 +8,26 @@ import {
   Input,
   Text,
 } from "@chakra-ui/react";
-
 import { verifyOTP, resendOTP } from "../../api/authAPI";
 import useAuth from "../../hooks/useAuth";
 import Loader from "../../components/common/Loader";
 import Background from "../../components/common/Background";
 import { pageContainer } from "../../styles/common/layout";
 import { glassCard } from "../../styles/common/cards";
-
-import {
-  pinContainer,
-  pinInput,
-} from "../../styles/common/forms";
+import { form, pinContainer, pinInput } from "../../styles/common/forms";
 import { errorAlert, successAlert } from "../../styles/common/alerts";
-import { primaryButton, secondaryButton } from "../../styles/common/buttons";
-import { heading2, subtitle } from "../../styles/common/typography";
+import {
+  primaryButton,
+  secondaryButton,
+  ghostFullButton,
+} from "../../styles/common/buttons";
+import { buttonLoader } from "../../styles/common/loader";
+import {
+  pageTitle,
+  pageSubtitle,
+  whiteButtonText,
+  body,
+} from "../../styles/common/typography";
 
 const VerifyOTP = () => {
   const navigate = useNavigate();
@@ -56,7 +60,6 @@ const VerifyOTP = () => {
     if (!/^\d?$/.test(value)) return;
 
     const updatedOTP = [...otp];
-
     updatedOTP[index] = value;
 
     setOtp(updatedOTP);
@@ -83,7 +86,6 @@ const VerifyOTP = () => {
     if (!pasted) return;
 
     const values = pasted.split("");
-
     const updatedOTP = [...otp];
 
     values.forEach((digit, i) => {
@@ -172,19 +174,23 @@ const VerifyOTP = () => {
       <Background />
 
       <Box sx={glassCard}>
-        <Text sx={heading2} textAlign="center" mb="8px">
-          Email Verification
-        </Text>
+        <Text sx={pageTitle}>Email Verification</Text>
 
-        <Text sx={subtitle} textAlign="center" mb="30px">
+        <Text sx={pageSubtitle}>
           Enter the 6-digit OTP sent to your registered email.
         </Text>
+
+        {username && (
+          <Text sx={body} textAlign="center" mb={6}>
+            User: <strong>{username}</strong>
+          </Text>
+        )}
 
         {error && <Box sx={errorAlert}>{error}</Box>}
 
         {message && <Box sx={successAlert}>{message}</Box>}
 
-        <Box as="form" onSubmit={handleVerify}>
+        <Box as="form" sx={form} onSubmit={handleVerify}>
           <HStack sx={pinContainer}>
             {otp.map((digit, index) => (
               <FormControl key={index}>
@@ -203,11 +209,11 @@ const VerifyOTP = () => {
             ))}
           </HStack>
 
-          <Button type="submit" sx={primaryButton} disabled={loading} mt={2}>
+          <Button type="submit" sx={primaryButton} isDisabled={loading} mt={2}>
             {loading ? (
-              <Box display="flex" alignItems="center" gap="10px">
-                <Loader size={18} />
-                <Text color="white">Verifying...</Text>
+              <Box sx={buttonLoader}>
+                <Loader size="18px" />
+                <Text sx={whiteButtonText}>Verifying...</Text>
               </Box>
             ) : (
               "Verify OTP"
@@ -219,11 +225,11 @@ const VerifyOTP = () => {
           sx={secondaryButton}
           mt={4}
           onClick={handleResend}
-          disabled={resending}
+          isDisabled={resending}
         >
           {resending ? (
-            <Box display="flex" alignItems="center" gap="10px">
-              <Loader size={18} />
+            <Box sx={buttonLoader}>
+              <Loader size="18px" />
               <Text>Sending...</Text>
             </Box>
           ) : (
@@ -232,9 +238,8 @@ const VerifyOTP = () => {
         </Button>
 
         <Button
-          variant="ghost"
-          mt={3}
-          width="100%"
+          type="button"
+          sx={ghostFullButton}
           onClick={() => navigate("/login")}
         >
           Back to Login

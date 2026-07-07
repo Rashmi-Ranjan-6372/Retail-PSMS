@@ -7,7 +7,6 @@ import Loader from "../../components/common/Loader";
 import Background from "../../components/common/Background";
 import { pageContainer } from "../../styles/common/layout";
 import { glassCard } from "../../styles/common/cards";
-
 import {
   form,
   formGroup,
@@ -18,8 +17,12 @@ import {
 } from "../../styles/common/forms";
 import { errorAlert, successAlert } from "../../styles/common/alerts";
 import { primaryButton, ghostFullButton } from "../../styles/common/buttons";
-
-import { heading2, subtitle } from "../../styles/common/typography";
+import { buttonLoader } from "../../styles/common/loader";
+import {
+  pageTitle,
+  pageSubtitle,
+  whiteButtonText,
+} from "../../styles/common/typography";
 
 const ResetPassword = () => {
   const navigate = useNavigate();
@@ -31,10 +34,12 @@ const ResetPassword = () => {
   });
 
   const [focusedField, setFocusedField] = useState("");
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [loading, setLoading] = useState(false);
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -98,19 +103,17 @@ const ResetPassword = () => {
       <Background />
 
       <Box sx={glassCard}>
-        <Text sx={heading2} textAlign="center" mb="6px">
-          🔒 Reset Password
-        </Text>
+        <Text sx={pageTitle}>🔒 Reset Password</Text>
 
-        <Text sx={subtitle} textAlign="center" mb="28px">
-          Enter your new password.
-        </Text>
+        <Text sx={pageSubtitle}>Enter your new password.</Text>
 
         {error && <Box sx={errorAlert}>{error}</Box>}
 
         {success && <Box sx={successAlert}>{success}</Box>}
 
         <Box as="form" sx={form} onSubmit={handleSubmit}>
+          {/* New Password */}
+
           <FormControl sx={formGroup}>
             <Input
               sx={textInput}
@@ -141,6 +144,8 @@ const ResetPassword = () => {
               {showPassword ? <FaEyeSlash /> : <FaEye />}
             </Box>
           </FormControl>
+
+          {/* Confirm Password */}
 
           <FormControl sx={formGroup}>
             <Input
@@ -174,24 +179,21 @@ const ResetPassword = () => {
             </Box>
           </FormControl>
 
+          {/* Submit */}
+
           <Button type="submit" sx={primaryButton} isDisabled={loading}>
             {loading ? (
-              <Box
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
-                gap="10px"
-              >
+              <Box sx={buttonLoader}>
                 <Loader size="18px" />
 
-                <Text color="white" fontSize="15px" fontWeight="600">
-                  Resetting Password...
-                </Text>
+                <Text sx={whiteButtonText}>Resetting Password...</Text>
               </Box>
             ) : (
               "Reset Password"
             )}
           </Button>
+
+          {/* Back */}
 
           <Button
             type="button"

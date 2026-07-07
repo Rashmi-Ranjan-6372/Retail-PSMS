@@ -9,19 +9,16 @@ import {
   Image,
   useColorModeValue,
 } from "@chakra-ui/react";
-
 import { FaChevronDown, FaChevronUp } from "react-icons/fa";
 import { useNavigate, useLocation } from "react-router-dom";
-
 import { getSidebarByRole } from "../../config/navigation";
 import useAuth from "../../hooks/useAuth";
 import DefaultLogo from "../../assets/pharmacy-icons/pharmacy-logo.svg";
-
-import "../../styles/Layout/sidebar.css";
-
-/* ===================================================
-   HELPER FUNCTIONS
-=================================================== */
+import layout from "../../styles/common/layout";
+import typography from "../../styles/common/typography";
+import icons from "../../styles/common/icons";
+import { colors, shadows } from "../../styles/common/colors";
+import transitions from "../../styles/common/transitions";
 
 const hasActiveChild = (menu, pathname) => {
   if (!menu.children) return false;
@@ -29,14 +26,13 @@ const hasActiveChild = (menu, pathname) => {
   return menu.children.some(
     (child) =>
       child.path === pathname ||
-      (child.children && hasActiveChild(child, pathname))
+      (child.children && hasActiveChild(child, pathname)),
   );
 };
 
 const isMenuActive = (menu, pathname) => {
   return (
-    menu.path === pathname ||
-    (menu.children && hasActiveChild(menu, pathname))
+    menu.path === pathname || (menu.children && hasActiveChild(menu, pathname))
   );
 };
 
@@ -49,19 +45,12 @@ const getDefaultOpenMenus = (menus, pathname) => {
         opened.push(menu.id);
       }
 
-      opened = [
-        ...opened,
-        ...getDefaultOpenMenus(menu.children, pathname),
-      ];
+      opened = [...opened, ...getDefaultOpenMenus(menu.children, pathname)];
     }
   });
 
   return opened;
 };
-
-/* ===================================================
-   MENU ITEM
-=================================================== */
 
 const MenuItem = ({
   item,
@@ -77,7 +66,7 @@ const MenuItem = ({
 
   const isActive = isMenuActive(item, pathname);
 
-  const textColor = useColorModeValue("gray.700", "gray.100");
+  const textColor = useColorModeValue(colors.textPrimary, colors.white);
 
   const toggleMenu = () => {
     if (!hasChildren) return;
@@ -92,13 +81,16 @@ const MenuItem = ({
   return (
     <Box>
       <Flex
-        className={`sidebar-item ${isActive ? "active" : ""}`}
-        align="center"
-        justify="space-between"
+        sx={layout.sidebarItem}
+        className={isActive ? "sidebar-item active" : "sidebar-item"}
         pl={`${level * 20 + 14}px`}
-        pr="14px"
-        py="13px"
-        color={isActive ? "white" : textColor}
+        color={isActive ? colors.white : textColor}
+        borderRadius="10px"
+        transition={transitions.normal}
+        cursor="pointer"
+        _hover={{
+          bg: isActive ? colors.primary : colors.backgroundSecondary,
+        }}
         onClick={() => {
           if (hasChildren) {
             toggleMenu();
@@ -107,19 +99,18 @@ const MenuItem = ({
           }
         }}
       >
-        <Flex align="center" gap={3}>
+        <Flex sx={layout.sidebarItemContent}>
           {item.icon && (
             <Icon
               as={item.icon}
-              boxSize={5}
-              className="sidebar-icon"
-              color={isActive ? "white" : "blue.500"}
+              {...icons.sidebarIcon}
+              color={isActive ? colors.white : colors.primary}
             />
           )}
 
           <Text
-            fontSize="14px"
-            fontWeight="600"
+            {...typography.sidebarLabel}
+            color={isActive ? colors.white : colors.textPrimary}
             letterSpacing=".2px"
           >
             {item.label}
@@ -129,8 +120,8 @@ const MenuItem = ({
         {hasChildren && (
           <Icon
             as={isOpen ? FaChevronUp : FaChevronDown}
-            fontSize="12px"
-            transition=".25s"
+            sx={layout.sidebarChevron}
+            color={isActive ? colors.white : colors.textSecondary}
             transform={isOpen ? "rotate(180deg)" : "rotate(0deg)"}
           />
         )}
@@ -138,18 +129,10 @@ const MenuItem = ({
 
       {hasChildren && (
         <Collapse in={isOpen} animateOpacity>
-          <VStack
-            align="stretch"
-            spacing={1}
-            mt={1}
-          >
+          <VStack align="stretch" spacing={1} sx={layout.sidebarSubMenu}>
             {item.children.map((child, index) => (
               <MenuItem
-                key={
-                  child.id ??
-                  child.path ??
-                  `${item.id}-${index}`
-                }
+                key={child.id ?? child.path ?? `${item.id}-${index}`}
                 item={child}
                 level={level + 1}
                 pathname={pathname}
@@ -182,7 +165,7 @@ const Sidebar = () => {
 
   const defaultOpened = useMemo(
     () => getDefaultOpenMenus(sidebarMenus, pathname),
-    [sidebarMenus, pathname]
+    [sidebarMenus, pathname],
   );
 
   const [openedMenus, setOpenedMenus] = useState(defaultOpened);
@@ -192,23 +175,40 @@ const Sidebar = () => {
   }, [defaultOpened]);
 
   const logoSrc =
-    user?.company_logo ||
-    user?.logo ||
-    user?.organization?.logo ||
-    DefaultLogo;
+    user?.company_logo || user?.logo || user?.organization?.logo || DefaultLogo;
 
   return (
-    <Box className="sidebar">
+    <Box
+      sx={{
+        ...layout.sidebarContainer,
+        position: "sticky",
+        top: 0,
+        overflow: "hidden",
+      }}
+    >
       {/* =========================
           HEADER
       ========================= */}
 
-      <Flex className="sidebar-header">
-        <Box className="sidebar-logo">
+      <Flex
+        sx={{
+          ...layout.sidebarHeader,
+          minH: "80px",
+        }}
+      >
+        <Box
+          display="flex"
+          justifyContent="center"
+          alignItems="center"
+          w="100%"
+        >
           <Image
             src={logoSrc}
             alt="Company Logo"
             fallbackSrc={DefaultLogo}
+            maxH="56px"
+            maxW="170px"
+            objectFit="contain"
           />
         </Box>
       </Flex>
@@ -217,7 +217,12 @@ const Sidebar = () => {
           MENU
       ========================= */}
 
-      <Box className="sidebar-menu">
+      <Box
+        sx={{
+          ...layout.sidebarContent,
+          px: 3,
+        }}
+      >
         <VStack align="stretch" spacing={2}>
           {sidebarMenus.map((menu, index) => (
             <MenuItem

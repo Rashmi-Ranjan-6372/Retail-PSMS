@@ -1,14 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
-import { Box, Button, FormControl, Input, Text, Link } from "@chakra-ui/react";
+import { Box, Button, FormControl, Input, Link, Text } from "@chakra-ui/react";
 import { loginUser } from "../../api/authAPI";
 import useAuth from "../../hooks/useAuth";
 import Loader from "../../components/common/Loader";
 import Background from "../../components/common/Background";
 import { pageContainer, linkContainer } from "../../styles/common/layout";
 import { glassCard } from "../../styles/common/cards";
-
 import {
   form,
   formGroup,
@@ -19,7 +18,13 @@ import {
 } from "../../styles/common/forms";
 import { errorAlert } from "../../styles/common/alerts";
 import { primaryButton } from "../../styles/common/buttons";
-import { heading2, subtitle, link } from "../../styles/common/typography";
+import { buttonLoader } from "../../styles/common/loader";
+import {
+  pageTitle,
+  pageSubtitle,
+  whiteButtonText,
+  link,
+} from "../../styles/common/typography";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -90,16 +95,15 @@ const Login = () => {
       <Background />
 
       <Box sx={glassCard}>
-        <Text sx={heading2} textAlign="center" mb="5px">
-          🔐 Welcome Back
-        </Text>
+        {/* Heading */}
+        <Text sx={pageTitle}>🔐 Welcome Back</Text>
 
-        <Text sx={subtitle} textAlign="center" mb="28px">
-          Login to continue
-        </Text>
+        <Text sx={pageSubtitle}>Login to continue</Text>
 
+        {/* Error Message */}
         {error && <Box sx={errorAlert}>{error}</Box>}
 
+        {/* Login Form */}
         <Box as="form" sx={form} onSubmit={handleSubmit}>
           {/* Username */}
           <FormControl sx={formGroup}>
@@ -168,17 +172,10 @@ const Login = () => {
           {/* Login Button */}
           <Button type="submit" sx={primaryButton} isDisabled={loading}>
             {loading ? (
-              <Box
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
-                gap="10px"
-              >
+              <Box sx={buttonLoader}>
                 <Loader size="18px" />
 
-                <Text color="white" fontSize="15px" fontWeight="600">
-                  Logging in...
-                </Text>
+                <Text sx={whiteButtonText}>Logging in...</Text>
               </Box>
             ) : (
               "Login"

@@ -6,7 +6,6 @@ import Loader from "../../components/common/Loader";
 import Background from "../../components/common/Background";
 import { pageContainer } from "../../styles/common/layout";
 import { glassCard } from "../../styles/common/cards";
-
 import {
   form,
   formGroup,
@@ -16,7 +15,12 @@ import {
 } from "../../styles/common/forms";
 import { errorAlert, successAlert } from "../../styles/common/alerts";
 import { primaryButton, ghostFullButton } from "../../styles/common/buttons";
-import { heading2, subtitle } from "../../styles/common/typography";
+import { buttonLoader } from "../../styles/common/loader";
+import {
+  pageTitle,
+  pageSubtitle,
+  whiteButtonText,
+} from "../../styles/common/typography";
 
 const ForgotPassword = () => {
   const navigate = useNavigate();
@@ -68,18 +72,19 @@ const ForgotPassword = () => {
       <Background />
 
       <Box sx={glassCard}>
-        <Text sx={heading2} textAlign="center" mb="6px">
-          Forgot Password
-        </Text>
+        {/* Heading */}
+        <Text sx={pageTitle}>Forgot Password</Text>
 
-        <Text sx={subtitle} textAlign="center" mb="28px">
+        <Text sx={pageSubtitle}>
           Enter your registered email address to receive a password reset link.
         </Text>
 
+        {/* Alerts */}
         {error && <Box sx={errorAlert}>{error}</Box>}
 
         {message && <Box sx={successAlert}>{message}</Box>}
 
+        {/* Form */}
         <Box as="form" sx={form} onSubmit={handleSubmit}>
           <FormControl sx={formGroup}>
             <Input
@@ -104,17 +109,10 @@ const ForgotPassword = () => {
 
           <Button type="submit" sx={primaryButton} isDisabled={loading}>
             {loading ? (
-              <Box
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
-                gap="10px"
-              >
+              <Box sx={buttonLoader}>
                 <Loader size="18px" />
 
-                <Text color="white" fontSize="15px" fontWeight="600">
-                  Sending...
-                </Text>
+                <Text sx={whiteButtonText}>Sending...</Text>
               </Box>
             ) : (
               "Send Reset Link"
