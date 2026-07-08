@@ -1,4 +1,4 @@
-import { colors } from "./colors";
+import { colors } from "../common/colors";
 
 export const spinner = {
   color: colors.primary,

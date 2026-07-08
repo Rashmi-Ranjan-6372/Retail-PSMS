@@ -1,6 +1,8 @@
 import { useState } from "react";
 import {
   Flex,
+  Box,
+  HStack,
   Input,
   InputGroup,
   InputLeftElement,
@@ -10,118 +12,113 @@ import {
   MenuButton,
   MenuList,
   MenuItem,
-  HStack,
   Text,
-  Box,
   Select,
+  Badge,
 } from "@chakra-ui/react";
-
-import { FaBell, FaSearch } from "react-icons/fa";
+import { FaBell, FaSearch, FaUser, FaCog, FaSignOutAlt } from "react-icons/fa";
 
 import useAuth from "../../hooks/useAuth";
-
-import "../../styles/Layout/navbar.css";
+import navbar from "../../styles/components/navbar";
+import notificationBadge from "../../styles/common/badges";
 
 const Navbar = () => {
   const { logout, user } = useAuth();
 
   const [selectedBranch, setSelectedBranch] = useState("main");
 
-  return (
-    <Flex className="navbar">
-      {/* =========================
-          SEARCH
-      ========================= */}
+  const isSuperAdmin = user?.role === "superadmin";
 
-      <Box className="navbar-search">
+  return (
+    <Flex sx={navbar.navbarWrapper}>
+      <Box sx={navbar.searchWrapper}>
         <InputGroup>
           <InputLeftElement pointerEvents="none">
-            <FaSearch className="navbar-search-icon" />
+            <FaSearch style={navbar.searchIcon} />
           </InputLeftElement>
 
           <Input
-            className="navbar-input"
-            placeholder="Search anything..."
+            sx={navbar.searchInput}
+            placeholder="Search products, invoices, customers..."
           />
         </InputGroup>
       </Box>
 
-      {/* =========================
-          RIGHT SIDE
-      ========================= */}
+      <HStack sx={navbar.rightSection}>
+        {isSuperAdmin && (
+          <Box sx={navbar.branchWrapper}>
+            <Select
+              sx={navbar.branchSelect}
+              value={selectedBranch}
+              onChange={(e) => setSelectedBranch(e.target.value)}
+            >
+              <option value="main">Main Branch</option>
+              <option value="bbsr">Bhubaneswar Branch</option>
+              <option value="ctc">Cuttack Branch</option>
+              <option value="puri">Puri Branch</option>
+              <option value="berhampur">Berhampur Branch</option>
+            </Select>
+          </Box>
+        )}
 
-      <HStack spacing={4}>
-        {/* Branch Selector */}
+        <Box sx={navbar.notificationWrapper}>
+          <IconButton
+            icon={<FaBell />}
+            aria-label="Notifications"
+            variant="ghost"
+            sx={navbar.notificationButton}
+          />
 
-        <Box className="navbar-branch">
-          <Select
-            className="navbar-select"
-            value={selectedBranch}
-            onChange={(e) =>
-              setSelectedBranch(e.target.value)
-            }
-          >
-            <option value="main">Main Branch</option>
-
-            <option value="bbsr">
-              Bhubaneswar Branch
-            </option>
-
-            <option value="ctc">
-              Cuttack Branch
-            </option>
-
-            <option value="puri">
-              Puri Branch
-            </option>
-
-            <option value="berhampur">
-              Berhampur Branch
-            </option>
-          </Select>
+          <Badge sx={navbar.notificationBadge}>
+            5
+          </Badge>
         </Box>
-
-        {/* Notification */}
-
-        <IconButton
-          className="navbar-bell"
-          icon={<FaBell />}
-          aria-label="Notifications"
-          variant="ghost"
-        />
-
-        {/* User */}
 
         <Menu>
           <MenuButton>
-            <HStack
-              spacing={3}
-              className="navbar-user"
-            >
+            <HStack sx={navbar.userButton}>
               <Avatar
                 size="sm"
                 name={user?.name || "Admin"}
+                src={user?.profile_image}
               />
 
-              <Box>
-                <Text className="navbar-name">
-                  {user?.name || "Admin"}
-                </Text>
+              <Box sx={navbar.userInfo}>
+                <Text sx={navbar.userName}>{user?.name || "Admin"}</Text>
 
-                <Text className="navbar-role">
-                  {user?.role || "Super Admin"}
-                </Text>
+                <Text sx={navbar.userRole}>{user?.role || "Super Admin"}</Text>
               </Box>
             </HStack>
           </MenuButton>
 
-          <MenuList className="navbar-menu">
-            <MenuItem>Profile</MenuItem>
+          <MenuList sx={navbar.menuList}>
+            <Box sx={navbar.profileCard}>
+              <Avatar
+                size="md"
+                name={user?.name || "Admin"}
+                src={user?.profile_image}
+                mx="auto"
+                mb={3}
+              />
 
-            <MenuItem>Settings</MenuItem>
+              <Text sx={navbar.userName}>{user?.name || "Admin"}</Text>
+
+              <Text sx={navbar.userRole}>
+                {user?.email || "admin@example.com"}
+              </Text>
+            </Box>
+
+            <MenuItem sx={navbar.menuItem} icon={<FaUser />}>
+              Profile
+            </MenuItem>
+
+            <MenuItem sx={navbar.menuItem} icon={<FaCog />}>
+              Settings
+            </MenuItem>
 
             <MenuItem
-              color="red.500"
+              sx={navbar.logoutItem}
+              icon={<FaSignOutAlt />}
               onClick={logout}
             >
               Logout

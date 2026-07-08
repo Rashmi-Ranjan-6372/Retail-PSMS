@@ -17,7 +17,7 @@ import {
 } from "../../styles/common/forms";
 import { errorAlert, successAlert } from "../../styles/common/alerts";
 import { primaryButton, ghostFullButton } from "../../styles/common/buttons";
-import { buttonLoader } from "../../styles/common/loader";
+import { buttonLoader } from "../../styles/components/loader";
 import {
   pageTitle,
   pageSubtitle,

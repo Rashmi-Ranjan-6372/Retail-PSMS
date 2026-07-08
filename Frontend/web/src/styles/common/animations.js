@@ -45,6 +45,20 @@ export const bounce = keyframes`
   50% {transform: translateY(-8px);}
 `;
 
+export const logoFloat = keyframes`
+  0% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-5px);
+  }
+
+  100% {
+    transform: translateY(0);
+  }
+`;
+
 export default {
     floatBlob,
     floatIcon,
@@ -53,5 +67,6 @@ export default {
     scaleIn,
     spin,
     pulse,
-    bounce
+    bounce,
+    logoFloat,
 };

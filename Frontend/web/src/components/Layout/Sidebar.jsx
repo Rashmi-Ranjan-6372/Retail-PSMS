@@ -14,11 +14,8 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { getSidebarByRole } from "../../config/navigation";
 import useAuth from "../../hooks/useAuth";
 import DefaultLogo from "../../assets/pharmacy-icons/pharmacy-logo.svg";
-import layout from "../../styles/common/layout";
-import typography from "../../styles/common/typography";
-import icons from "../../styles/common/icons";
-import { colors, shadows } from "../../styles/common/colors";
-import transitions from "../../styles/common/transitions";
+import sidebar from "../../styles/components/sidebar";
+import { colors } from "../../styles/common/colors";
 
 const hasActiveChild = (menu, pathname) => {
   if (!menu.children) return false;
@@ -70,27 +67,23 @@ const MenuItem = ({
 
   const toggleMenu = () => {
     if (!hasChildren) return;
-
-    if (isOpen) {
-      setOpenedMenus([]);
-    } else {
-      setOpenedMenus([item.id]);
-    }
+    setOpenedMenus(isOpen ? [] : [item.id]);
   };
 
   return (
     <Box>
       <Flex
-        sx={layout.sidebarItem}
-        className={isActive ? "sidebar-item active" : "sidebar-item"}
-        pl={`${level * 20 + 14}px`}
-        color={isActive ? colors.white : textColor}
-        borderRadius="10px"
-        transition={transitions.normal}
-        cursor="pointer"
-        _hover={{
-          bg: isActive ? colors.primary : colors.backgroundSecondary,
+        sx={{
+          ...sidebar.sidebarItem,
+          ...(isActive ? sidebar.sidebarActive : sidebar.sidebarInactive),
         }}
+        _hover={{
+          ...sidebar.sidebarHover,
+          ...(isActive && {
+            bg: colors.primary,
+          }),
+        }}
+        pl={`${level === 0 ? 15 : level * 20 + 14}px`}
         onClick={() => {
           if (hasChildren) {
             toggleMenu();
@@ -99,19 +92,22 @@ const MenuItem = ({
           }
         }}
       >
-        <Flex sx={layout.sidebarItemContent}>
+        <Flex sx={sidebar.sidebarItemContent}>
           {item.icon && (
             <Icon
               as={item.icon}
-              {...icons.sidebarIcon}
-              color={isActive ? colors.white : colors.primary}
+              sx={{
+                ...sidebar.sidebarIcon,
+                color: isActive ? colors.white : colors.primary,
+              }}
             />
           )}
 
           <Text
-            {...typography.sidebarLabel}
-            color={isActive ? colors.white : colors.textPrimary}
-            letterSpacing=".2px"
+            sx={{
+              ...sidebar.sidebarItemText,
+              color: isActive ? colors.white : colors.textPrimary,
+            }}
           >
             {item.label}
           </Text>
@@ -120,16 +116,15 @@ const MenuItem = ({
         {hasChildren && (
           <Icon
             as={isOpen ? FaChevronUp : FaChevronDown}
-            sx={layout.sidebarChevron}
+            sx={sidebar.sidebarChevron}
             color={isActive ? colors.white : colors.textSecondary}
-            transform={isOpen ? "rotate(180deg)" : "rotate(0deg)"}
           />
         )}
       </Flex>
 
       {hasChildren && (
         <Collapse in={isOpen} animateOpacity>
-          <VStack align="stretch" spacing={1} sx={layout.sidebarSubMenu}>
+          <VStack align="stretch" spacing={1} sx={sidebar.sidebarSubMenu}>
             {item.children.map((child, index) => (
               <MenuItem
                 key={child.id ?? child.path ?? `${item.id}-${index}`}
@@ -147,10 +142,6 @@ const MenuItem = ({
     </Box>
   );
 };
-
-/* ===================================================
-   SIDEBAR COMPONENT
-=================================================== */
 
 const Sidebar = () => {
   const { role, user } = useAuth();
@@ -178,52 +169,20 @@ const Sidebar = () => {
     user?.company_logo || user?.logo || user?.organization?.logo || DefaultLogo;
 
   return (
-    <Box
-      sx={{
-        ...layout.sidebarContainer,
-        position: "sticky",
-        top: 0,
-        overflow: "hidden",
-      }}
-    >
-      {/* =========================
-          HEADER
-      ========================= */}
-
-      <Flex
-        sx={{
-          ...layout.sidebarHeader,
-          minH: "80px",
-        }}
-      >
-        <Box
-          display="flex"
-          justifyContent="center"
-          alignItems="center"
-          w="100%"
-        >
+    <Box sx={sidebar.sidebarWrapper}>
+      <Flex sx={sidebar.sidebarHeader}>
+        <Box sx={sidebar.sidebarLogoWrapper}>
           <Image
             src={logoSrc}
             alt="Company Logo"
             fallbackSrc={DefaultLogo}
-            maxH="56px"
-            maxW="170px"
-            objectFit="contain"
+            sx={sidebar.sidebarLogoImage}
           />
         </Box>
       </Flex>
 
-      {/* =========================
-          MENU
-      ========================= */}
-
-      <Box
-        sx={{
-          ...layout.sidebarContent,
-          px: 3,
-        }}
-      >
-        <VStack align="stretch" spacing={2}>
+      <Box sx={sidebar.sidebarMenuWrapper}>
+        <VStack align="stretch" spacing={2} sx={sidebar.sidebarMenu}>
           {sidebarMenus.map((menu, index) => (
             <MenuItem
               key={menu.id ?? menu.path ?? `menu-${index}`}

@@ -21,7 +21,7 @@ import {
   secondaryButton,
   ghostFullButton,
 } from "../../styles/common/buttons";
-import { buttonLoader } from "../../styles/common/loader";
+import { buttonLoader } from "../../styles/components/loader";
 import {
   pageTitle,
   pageSubtitle,

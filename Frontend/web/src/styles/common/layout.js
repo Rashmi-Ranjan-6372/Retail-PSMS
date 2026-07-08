@@ -176,30 +176,6 @@ export const gridFour = {
   gap: "24px",
 };
 
-export const sidebarContainer = {
-  display: "flex",
-  flexDirection: "column",
-  minH: "100vh",
-  w: "260px",
-  bg: colors.white,
-  borderRight: `1px solid ${colors.borderLight}`,
-  boxShadow: `0 2px 10px ${colors.shadow}`,
-};
-
-export const sidebarHeader = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  py: "20px",
-  borderBottom: `1px solid ${colors.borderLight}`,
-};
-
-export const sidebarContent = {
-  flex: 1,
-  overflowY: "auto",
-  py: "10px",
-};
-
 export const pageHeader = {
   display: "flex",
   justifyContent: "space-between",
@@ -386,10 +362,6 @@ export const absoluteFill = {
   inset: 0,
 };
 
-/* ===========================================
-   COMMON WRAPPERS
-=========================================== */
-
 export const appContainer = {
   width: "100%",
   minH: "100vh",
@@ -552,43 +524,6 @@ export const absoluteBottomLeft = {
   left: "16px",
 };
 
-export const sidebarItem = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  py: "13px",
-  pr: "14px",
-  cursor: "pointer",
-  transition: "all .25s ease",
-};
-
-export const sidebarItemContent = {
-  display: "flex",
-  alignItems: "center",
-  gap: "12px",
-};
-
-export const sidebarSubMenu = {
-  mt: "4px",
-};
-
-export const sidebarLogoContainer = {
-  display: "flex",
-  justifyContent: "center",
-  alignItems: "center",
-};
-
-export const sidebarLogo = {
-  w: "120px",
-  h: "auto",
-  objectFit: "contain",
-};
-
-export const sidebarChevron = {
-  fontSize: "12px",
-  transition: ".25s",
-};
-
 export default {
   pageContainer,
   blobOne,
@@ -611,9 +546,6 @@ export default {
   gridTwo,
   gridThree,
   gridFour,
-  sidebarContainer,
-  sidebarHeader,
-  sidebarContent,
   pageHeader,
   stickyHeader,
   scrollContainer,
@@ -671,10 +603,4 @@ export default {
   absoluteTopLeft,
   absoluteBottomRight,
   absoluteBottomLeft,
-  sidebarItem,
-  sidebarItemContent,
-  sidebarSubMenu,
-  sidebarLogoContainer,
-  sidebarLogo,
-  sidebarChevron,
 };
