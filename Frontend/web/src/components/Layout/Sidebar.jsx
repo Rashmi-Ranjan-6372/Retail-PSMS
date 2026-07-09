@@ -81,7 +81,7 @@ const MenuItem = ({
           ...sidebar.sidebarItem,
           ...(isActive ? sidebar.sidebarActive : sidebar.sidebarInactive),
         }}
-        _hover={sidebar.sidebarHover}
+        _hover={isActive ? undefined : sidebar.sidebarHover}
         pl={`${level === 0 ? 15 : level * 20 + 14}px`}
         onClick={() => {
           if (hasChildren) {
@@ -115,8 +115,10 @@ const MenuItem = ({
         {hasChildren && (
           <Icon
             as={isOpen ? FaChevronUp : FaChevronDown}
-            sx={sidebar.sidebarChevron}
-            color={isActive ? colors.primary : colors.textSecondary}
+            sx={{
+              ...sidebar.sidebarChevron,
+              color: isActive ? colors.white : colors.textSecondary,
+            }}
           />
         )}
       </Flex>

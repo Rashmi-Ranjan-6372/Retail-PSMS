@@ -157,6 +157,15 @@ export const sidebarActive = {
   WebkitBackdropFilter: "blur(18px)",
   transition: transitions.menu,
   zIndex: 20,
+
+  _hover: {
+    bg: colors.primary,
+    color: colors.white,
+    transform: "translateX(4px)",
+    boxShadow: shadows.primary,
+    backdropFilter: "blur(18px)",
+    WebkitBackdropFilter: "blur(18px)",
+  },
 };
 
 export const sidebarInactive = {
