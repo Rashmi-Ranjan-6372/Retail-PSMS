@@ -3,8 +3,7 @@ import transitions from "../common/transitions";
 
 export const dashboardWrapper = {
   w: "100%",
-  minH: "calc(100vh - 70px)",
-  bg: colors.backgroundLight,
+  minH: "100%",
   p: 6,
 };
 

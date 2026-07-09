@@ -20,17 +20,21 @@ import { colors } from "../../styles/common/colors";
 const hasActiveChild = (menu, pathname) => {
   if (!menu.children) return false;
 
-  return menu.children.some(
-    (child) =>
-      child.path === pathname ||
-      (child.children && hasActiveChild(child, pathname)),
-  );
+  return menu.children.some((child) => {
+    if (child.path) {
+      return pathname === child.path;
+    }
+
+    return child.children && hasActiveChild(child, pathname);
+  });
 };
 
 const isMenuActive = (menu, pathname) => {
-  return (
-    menu.path === pathname || (menu.children && hasActiveChild(menu, pathname))
-  );
+  if (menu.path) {
+    return pathname === menu.path;
+  }
+
+  return hasActiveChild(menu, pathname);
 };
 
 const getDefaultOpenMenus = (menus, pathname) => {
@@ -77,12 +81,7 @@ const MenuItem = ({
           ...sidebar.sidebarItem,
           ...(isActive ? sidebar.sidebarActive : sidebar.sidebarInactive),
         }}
-        _hover={{
-          ...sidebar.sidebarHover,
-          ...(isActive && {
-            bg: colors.primary,
-          }),
-        }}
+        _hover={sidebar.sidebarHover}
         pl={`${level === 0 ? 15 : level * 20 + 14}px`}
         onClick={() => {
           if (hasChildren) {
@@ -117,7 +116,7 @@ const MenuItem = ({
           <Icon
             as={isOpen ? FaChevronUp : FaChevronDown}
             sx={sidebar.sidebarChevron}
-            color={isActive ? colors.white : colors.textSecondary}
+            color={isActive ? colors.primary : colors.textSecondary}
           />
         )}
       </Flex>

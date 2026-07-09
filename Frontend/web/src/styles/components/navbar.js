@@ -5,14 +5,20 @@ export const navbarWrapper = {
   position: "sticky",
   top: 0,
   zIndex: 1000,
+
   h: "72px",
   px: "24px",
+
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  bg: colors.white,
-  borderBottom: borders.light,
-  boxShadow: shadows.card,
+
+  bg: colors.glassMedium,
+  backdropFilter: "blur(24px)",
+  WebkitBackdropFilter: "blur(24px)",
+
+  borderBottom: borders.glass,
+  boxShadow: shadows.glass,
 };
 
 export const searchWrapper = {
@@ -21,11 +27,18 @@ export const searchWrapper = {
 
 export const searchInput = {
   h: "44px",
-  bg: colors.background,
-  border: borders.light,
+
+  bg: colors.glassMedium,
+  backdropFilter: "blur(12px)",
+  WebkitBackdropFilter: "blur(12px)",
+
+  border: borders.glass,
+
   borderRadius: "12px",
+
   fontSize: "14px",
   color: colors.textPrimary,
+
   transition: transitions.normal,
 
   _placeholder: {
@@ -33,11 +46,13 @@ export const searchInput = {
   },
 
   _hover: {
-    borderColor: colors.primaryLight,
+    bg: colors.glassLight,
+    borderColor: colors.primary,
+    boxShadow: shadows.glass,
   },
 
   _focusVisible: {
-    bg: colors.white,
+    bg: colors.glass,
     borderColor: colors.primary,
     boxShadow: shadows.inputFocus,
   },
@@ -58,21 +73,32 @@ export const branchWrapper = {
 
 export const branchSelect = {
   h: "44px",
-  bg: colors.white,
-  border: borders.light,
+  bg: colors.glassMedium,
+  backdropFilter: "blur(12px)",
+  WebkitBackdropFilter: "blur(12px)",
+  border: borders.glass,
   borderRadius: "12px",
   fontSize: "14px",
   color: colors.textPrimary,
   transition: transitions.normal,
 
   _hover: {
+    bg: colors.glassLight,
     borderColor: colors.primary,
   },
 
   _focusVisible: {
+    bg: colors.glass,
     borderColor: colors.primary,
     boxShadow: shadows.inputFocus,
   },
+};
+
+export const notificationWrapper = {
+  position: "relative",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 export const notificationButton = {
@@ -80,16 +106,17 @@ export const notificationButton = {
   h: "46px",
   minW: "46px",
   borderRadius: "12px",
-  bg: colors.white,
-  border: borders.light,
+  bg: colors.glassMedium,
+  backdropFilter: "blur(14px)",
+  WebkitBackdropFilter: "blur(14px)",
+  border: borders.glass,
   color: colors.textSecondary,
   transition: transitions.normal,
-
-  _hover: {
-    bg: colors.backgroundSecondary,
+    _hover: {
+    bg: colors.glassHover,
     color: colors.primary,
     transform: "translateY(-2px)",
-    boxShadow: shadows.hover,
+    boxShadow: shadows.primary,
   },
 };
 
@@ -99,9 +126,11 @@ export const userButton = {
   py: "8px",
   borderRadius: "14px",
   transition: transitions.normal,
-
   _hover: {
-    bg: colors.backgroundSecondary,
+    bg: colors.glassHover,
+    backdropFilter: "blur(16px)",
+    WebkitBackdropFilter: "blur(16px)",
+    boxShadow: shadows.glass,
   },
 };
 
@@ -128,10 +157,13 @@ export const userRole = {
 };
 
 export const menuList = {
-  minW: "220px",
-  border: borders.light,
-  borderRadius: "14px",
-  boxShadow: shadows.dropdown,
+  minW: "240px",
+  bg: colors.glass,
+  backdropFilter: "blur(24px)",
+  WebkitBackdropFilter: "blur(24px)",
+  border: borders.glass,
+  borderRadius: "18px",
+  boxShadow: shadows.glass,
   py: "8px",
   overflow: "hidden",
 };
@@ -141,22 +173,19 @@ export const menuItem = {
   color: colors.textPrimary,
   py: "10px",
   px: "16px",
-  transition: transitions.fast,
-
+  transition: transitions.normal,
   _hover: {
-    bg: colors.backgroundSecondary,
+    bg: colors.glassHover,
     color: colors.primary,
   },
-
   _focus: {
-    bg: colors.backgroundSecondary,
+    bg: colors.glassHover,
   },
 };
 
 export const logoutItem = {
   ...menuItem,
   color: colors.danger,
-
   _hover: {
     bg: colors.dangerBg,
     color: colors.dangerDark,
@@ -164,15 +193,7 @@ export const logoutItem = {
 };
 
 export const divider = {
-  borderColor: colors.borderLight,
-};
-
-
-export const notificationWrapper = {
-  position: "relative",
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
+  borderColor: colors.glassBorder,
 };
 
 export const mobileMenuButton = {
@@ -183,11 +204,12 @@ export const mobileMenuButton = {
   w: "44px",
   h: "44px",
   borderRadius: "12px",
-  bg: colors.background,
-  border: borders.light,
-
+  bg: colors.glassMedium,
+  backdropFilter: "blur(14px)",
+  WebkitBackdropFilter: "blur(14px)",
+  border: borders.glass,
   _hover: {
-    bg: colors.backgroundSecondary,
+    bg: colors.glassHover,
     color: colors.primary,
   },
 };
@@ -210,9 +232,11 @@ export const title = {
 };
 
 export const profileCard = {
-  p: "16px",
-  bg: gradients.background,
-  borderBottom: borders.light,
+  p: "18px",
+  bg: colors.glassLight,
+  backdropFilter: "blur(20px)",
+  WebkitBackdropFilter: "blur(20px)",
+  borderBottom: borders.glass,
 };
 
 export default {

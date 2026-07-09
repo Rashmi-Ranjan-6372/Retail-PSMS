@@ -34,27 +34,26 @@ export const iconPositions = {
 
 export const blobOne = {
   position: "absolute",
-  width: "340px",
-  height: "340px",
+  width: "500px",
+  height: "500px",
   borderRadius: "50%",
-  filter: "blur(80px)",
-  background: `${colors.primary}30`, 
-  top: "-120px",
-  left: "-120px",
-  animation: `${floatBlob} 12s ease-in-out infinite`,
+  filter: "blur(120px)",
+  background: `${colors.primary}18`,
+  top: "-180px",
+  left: "-180px",
+  animation: `${floatBlob} 24s ease-in-out infinite`,
 };
 
 export const blobTwo = {
   position: "absolute",
-  width: "300px",
-  height: "300px",
+  width: "420px",
+  height: "420px",
   borderRadius: "50%",
-  filter: "blur(80px)",
-  background: `${colors.secondary}30`, 
-  bottom: "-120px",
-  right: "-120px",
-  animation: `${floatBlob} 12s ease-in-out infinite`,
-  animationDelay: "4s",
+  filter: "blur(120px)",
+  background: `${colors.secondary}18`,
+  bottom: "-180px",
+  right: "-180px",
+  animation: `${floatBlob} 26s ease-in-out infinite`,
 };
 
 export default {
