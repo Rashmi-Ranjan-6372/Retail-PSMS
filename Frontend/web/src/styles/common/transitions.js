@@ -1,16 +1,24 @@
+// src/styles/common/transitions.js
+
 export const transitions = {
+  // Basic
   fast: ".2s ease",
   normal: ".25s ease",
   slow: ".35s ease",
+
   ease: "ease",
   linear: "linear",
   easeIn: "ease-in",
   easeOut: "ease-out",
   easeInOut: "ease-in-out",
+
+  // Durations
   durationFast: "150ms",
   durationNormal: "250ms",
   durationSlow: "350ms",
   durationSlower: "500ms",
+
+  // Generic
   all: "all .25s ease",
   color: "color .25s ease",
   background: "background-color .25s ease",
@@ -20,28 +28,76 @@ export const transitions = {
   shadow: "box-shadow .25s ease",
   filter: "filter .25s ease",
   blur: "backdrop-filter .3s ease",
-  glass:"background-color .25s ease, backdrop-filter .3s ease, box-shadow .3s ease, border-color .25s ease",
-  glassHover:"background-color .25s ease, backdrop-filter .25s ease, transform .25s ease, box-shadow .25s ease",
-  glassActive:"background-color .2s ease, backdrop-filter .2s ease",
+
+  // Glassmorphism
+  glass:
+    "background-color .25s ease, backdrop-filter .3s ease, box-shadow .3s ease, border-color .25s ease",
+
+  glassHover:
+    "background-color .25s ease, backdrop-filter .25s ease, transform .25s ease, box-shadow .25s ease",
+
+  glassActive:
+    "background-color .2s ease, backdrop-filter .2s ease",
+
+  // Components
   button: "all .25s ease",
-  card: "transform .25s ease, box-shadow .25s ease",
-  input: "border-color .25s ease, box-shadow .25s ease",
-  modal: "opacity .3s ease, transform .3s ease",
-  sidebar: "width .3s ease",
-  navbar: "background-color .25s ease, backdrop-filter .3s ease",
-  menu: "background-color .25s ease, transform .25s ease",
-  collapse: "max-height .35s ease",
-  fade: "opacity .25s ease",
-  hoverLift: "transform .25s ease, box-shadow .25s ease",
-  hoverScale: "transform .2s ease",
-  hoverGlow: "box-shadow .25s ease, transform .25s ease",
-  icon: "color .2s ease, transform .2s ease",
-  rotate: "transform .3s ease",
-  sidebarItem:"background-color .25s ease, transform .25s ease, color .25s ease",
-  sidebarIcon:"color .2s ease, transform .2s ease",
-  sidebarMenu:"max-height .3s ease, opacity .25s ease",
-  dropdown:"opacity .2s ease, transform .2s ease",
-  notification:"background-color .25s ease, color .25s ease, transform .25s ease",
+
+  card:
+    "transform .25s ease, box-shadow .25s ease",
+
+  input:
+    "border-color .25s ease, box-shadow .25s ease",
+
+  modal:
+    "opacity .3s ease, transform .3s ease",
+
+  sidebar:
+    "width .3s ease",
+
+  navbar:
+    "background-color .25s ease, backdrop-filter .3s ease",
+
+  menu:
+    "background-color .25s ease, transform .25s ease",
+
+  collapse:
+    "max-height .35s ease",
+
+  fade:
+    "opacity .25s ease",
+
+  dropdown:
+    "opacity .2s ease, transform .2s ease",
+
+  notification:
+    "background-color .25s ease, color .25s ease, transform .25s ease",
+
+  // Hover Effects
+  hoverLift:
+    "transform .25s ease, box-shadow .25s ease",
+
+  hoverScale:
+    "transform .2s ease",
+
+  hoverGlow:
+    "box-shadow .25s ease, transform .25s ease",
+
+  // Icons
+  icon:
+    "color .2s ease, transform .2s ease",
+
+  rotate:
+    "transform .3s ease",
+
+  // Sidebar
+  sidebarItem:
+    "background-color .25s ease, transform .25s ease, color .25s ease",
+
+  sidebarIcon:
+    "color .2s ease, transform .2s ease",
+
+  sidebarMenu:
+    "max-height .3s ease, opacity .25s ease",
 };
 
 export default transitions;

@@ -36,21 +36,6 @@ const platformOwnerSidebar = [
         path: "/retailers/requests",
       },
       {
-        id: "active-retailers",
-        label: "Active Retailers",
-        path: "/retailers/active",
-      },
-      {
-        id: "suspended-retailers",
-        label: "Suspended Retailers",
-        path: "/retailers/suspended",
-      },
-      {
-        id: "expired-retailers",
-        label: "Expired Retailers",
-        path: "/retailers/expired",
-      },
-      {
         id: "retailer-branches",
         label: "Retailer Branches",
         path: "/retailers/branches",
@@ -62,7 +47,7 @@ const platformOwnerSidebar = [
       },
       {
         id: "retailer-statistics",
-        label: "Retailer Statistics",
+        label: "Statistics",
         path: "/retailers/statistics",
       },
     ],

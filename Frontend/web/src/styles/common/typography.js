@@ -1,3 +1,5 @@
+// src/styles/common/typography.js
+
 import { colors } from "./colors";
 
 export const display = {
@@ -10,22 +12,22 @@ export const display = {
 export const heading1 = {
   fontSize: { base: "28px", md: "32px" },
   fontWeight: "700",
-  color: colors.textPrimary,
   lineHeight: "1.2",
+  color: colors.textPrimary,
 };
 
 export const heading2 = {
   fontSize: { base: "24px", md: "28px" },
   fontWeight: "700",
-  color: colors.textPrimary,
   lineHeight: "1.3",
+  color: colors.textPrimary,
 };
 
 export const heading3 = {
   fontSize: { base: "20px", md: "24px" },
   fontWeight: "600",
-  color: colors.textPrimary,
   lineHeight: "1.3",
+  color: colors.textPrimary,
 };
 
 export const heading4 = {
@@ -67,14 +69,14 @@ export const subtitle = {
 
 export const body = {
   fontSize: "14px",
-  color: colors.textPrimary,
   lineHeight: "1.6",
+  color: colors.textPrimary,
 };
 
 export const bodySmall = {
   fontSize: "13px",
-  color: colors.textSecondary,
   lineHeight: "1.5",
+  color: colors.textSecondary,
 };
 
 export const caption = {
@@ -157,8 +159,8 @@ export const breadcrumb = {
 export const tableHeader = {
   fontSize: "13px",
   fontWeight: "600",
-  color: colors.textSecondary,
   textTransform: "uppercase",
+  color: colors.textSecondary,
 };
 
 export const tableCell = {

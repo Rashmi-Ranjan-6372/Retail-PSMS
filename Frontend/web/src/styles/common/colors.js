@@ -1,32 +1,41 @@
+// src/styles/common/colors.js
+
 export const colors = {
+  // Primary
   primary: "#2563EB",
   primaryDark: "#1D4ED8",
   primaryLight: "#3B82F6",
 
+  // Secondary
   secondary: "#0EA5E9",
   secondaryDark: "#0284C7",
   secondaryLight: "#38BDF8",
 
+  // Success
   success: "#16A34A",
   successDark: "#15803D",
   successLight: "#22C55E",
   successBg: "#DCFCE7",
 
+  // Danger
   danger: "#DC2626",
   dangerDark: "#B91C1C",
   dangerLight: "#EF4444",
   dangerBg: "#FEF2F2",
 
+  // Warning
   warning: "#D97706",
   warningDark: "#B45309",
   warningLight: "#F59E0B",
   warningBg: "#FEF3C7",
 
+  // Info
   info: "#2563EB",
   infoDark: "#1D4ED8",
   infoLight: "#60A5FA",
   infoBg: "#DBEAFE",
 
+  // Text
   text: "#1E293B",
   textPrimary: "#1E293B",
   textSecondary: "#334155",
@@ -34,19 +43,23 @@ export const colors = {
   textMuted: "#94A3B8",
   textWhite: "#FFFFFF",
 
+  // Background
   background: "#F8FAFC",
   backgroundSecondary: "#EEF6FF",
   backgroundLight: "#E9EEF5",
   backgroundDark: "#E2E8F0",
 
+  // Base Colors
   white: "#FFFFFF",
-  transparent: "transparent",
   black: "#000000",
+  transparent: "transparent",
 
+  // Borders
   border: "#CBD5E1",
   borderLight: "#E2E8F0",
   borderDark: "#94A3B8",
 
+  // Glassmorphism
   glass: "rgba(255,255,255,0.70)",
   glassStrong: "rgba(255,255,255,0.82)",
   glassLight: "rgba(255,255,255,0.65)",
@@ -60,12 +73,15 @@ export const colors = {
   glassBorder: "rgba(255,255,255,0.35)",
   glassBorderStrong: "rgba(255,255,255,0.60)",
 
+  // Overlays
   overlay: "rgba(255,255,255,.75)",
   overlayDark: "rgba(0,0,0,.45)",
 
+  // Transparent Theme Colors
   primaryTransparent: "rgba(37,99,235,.25)",
   secondaryTransparent: "rgba(14,165,233,.25)",
 
+  // Gray Scale
   gray50: "#F8FAFC",
   gray100: "#F1F5F9",
   gray200: "#E2E8F0",
