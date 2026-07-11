@@ -18,7 +18,7 @@ import {
 } from "@chakra-ui/react";
 import { FaBell, FaSearch, FaUser, FaCog, FaSignOutAlt } from "react-icons/fa";
 
-import useAuth from "../../hooks/useAuth";
+import useAuth from "../../../hooks/useAuth";
 import navbar from "../../styles/components/navbar";
 import notificationBadge from "../../styles/common/badges";
 
@@ -69,9 +69,7 @@ const Navbar = () => {
             sx={navbar.notificationButton}
           />
 
-          <Badge sx={navbar.notificationBadge}>
-            5
-          </Badge>
+          <Badge sx={navbar.notificationBadge}>5</Badge>
         </Box>
 
         <Menu>

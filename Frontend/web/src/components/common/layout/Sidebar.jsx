@@ -11,11 +11,11 @@ import {
 } from "@chakra-ui/react";
 import { FaChevronDown, FaChevronUp } from "react-icons/fa";
 import { useNavigate, useLocation } from "react-router-dom";
-import { getSidebarByRole } from "../../config/navigation";
-import useAuth from "../../hooks/useAuth";
+import { getSidebarByRole } from "../../../config/navigation";
+import useAuth from "../../../hooks/useAuth";
 import DefaultLogo from "../../assets/pharmacy-icons/pharmacy-logo.svg";
 import sidebar from "../../styles/components/sidebar";
-import { colors } from "../../styles/common/colors";
+import { colors } from "../../../styles/common/colors";
 
 const hasActiveChild = (menu, pathname) => {
   if (!menu.children) return false;

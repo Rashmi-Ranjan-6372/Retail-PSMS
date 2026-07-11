@@ -1,8 +1,8 @@
 import { Flex, Box } from "@chakra-ui/react";
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
-import { colors } from "../../styles/common/colors";
-import backgrounds from "../../styles/common/background";
+import { colors } from "../../../styles/common/colors";
+import backgrounds from "../../../styles/common/background";
 
 const Layout = ({ children }) => {
   return (
