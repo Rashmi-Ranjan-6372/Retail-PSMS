@@ -1,5 +1,5 @@
 import { colors } from "../../common/colors";
-import { badge } from "./badge";
+import { badge } from "./badges";
 
 export const successBadge = {
   ...badge,

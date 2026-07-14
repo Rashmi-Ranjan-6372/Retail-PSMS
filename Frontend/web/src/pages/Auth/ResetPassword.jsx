@@ -1,28 +1,21 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { FaEye, FaEyeSlash } from "react-icons/fa";
-import { Box, Button, FormControl, Input, Text } from "@chakra-ui/react";
+import { Box, Text } from "@chakra-ui/react";
+
 import { resetPassword } from "../../api/authAPI";
-import Loader from "../../components/common/Loader";
+
 import Background from "../../components/common/Background";
+import { PasswordInput } from "../../components/common/inputs";
+import {
+  PrimaryButton,
+  SecondaryButton,
+} from "../../components/common/buttons";
+
 import { pageContainer } from "../../styles/common/layout";
-import { glassCard } from "../../styles/common/cards";
-import {
-  form,
-  formGroup,
-  textInput,
-  floatingLabel,
-  floatingLabelActive,
-  inputAction,
-} from "../../styles/common/forms";
-import { errorAlert, successAlert } from "../../styles/common/alerts";
-import { primaryButton, ghostFullButton } from "../../styles/common/buttons";
-import { buttonLoader } from "../../styles/components/loader";
-import {
-  pageTitle,
-  pageSubtitle,
-  whiteButtonText,
-} from "../../styles/common/typography";
+import { glassCard } from "../../styles/components/cards";
+import { form } from "../../styles/components/forms";
+import { errorAlert, successAlert } from "../../styles/components/alerts";
+import { pageTitle, pageSubtitle } from "../../styles/common/typography";
 
 const ResetPassword = () => {
   const navigate = useNavigate();
@@ -32,11 +25,6 @@ const ResetPassword = () => {
     password: "",
     confirm_password: "",
   });
-
-  const [focusedField, setFocusedField] = useState("");
-
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [loading, setLoading] = useState(false);
 
@@ -56,7 +44,7 @@ const ResetPassword = () => {
     setError("");
     setSuccess("");
 
-    if (!formData.password || !formData.confirm_password) {
+    if (!formData.password.trim() || !formData.confirm_password.trim()) {
       setError("Please fill all fields.");
       return;
     }
@@ -74,13 +62,13 @@ const ResetPassword = () => {
     try {
       setLoading(true);
 
-      const res = await resetPassword({
+      const { data } = await resetPassword({
         uid,
         token,
         password: formData.password,
       });
 
-      if (res.data.success) {
+      if (data.success) {
         setSuccess("Password reset successfully. Redirecting to Login...");
 
         setTimeout(() => {
@@ -90,9 +78,13 @@ const ResetPassword = () => {
         return;
       }
 
-      setError(res.data.message || "Unable to reset password.");
+      setError(data.message || "Unable to reset password.");
     } catch (err) {
-      setError(err.response?.data?.message || "Password reset failed.");
+      setError(
+        err.response?.data?.message ||
+          err.response?.data?.detail ||
+          "Password reset failed.",
+      );
     } finally {
       setLoading(false);
     }
@@ -105,103 +97,38 @@ const ResetPassword = () => {
       <Box sx={glassCard}>
         <Text sx={pageTitle}>🔒 Reset Password</Text>
 
-        <Text sx={pageSubtitle}>Enter your new password.</Text>
+        <Text sx={pageSubtitle}>Enter your new password to continue.</Text>
 
         {error && <Box sx={errorAlert}>{error}</Box>}
 
         {success && <Box sx={successAlert}>{success}</Box>}
 
         <Box as="form" sx={form} onSubmit={handleSubmit}>
-          {/* New Password */}
+          <PasswordInput
+            label="New Password"
+            name="password"
+            value={formData.password}
+            onChange={handleChange}
+          />
 
-          <FormControl sx={formGroup}>
-            <Input
-              sx={textInput}
-              type={showPassword ? "text" : "password"}
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              onFocus={() => setFocusedField("password")}
-              onBlur={() => setFocusedField("")}
-            />
+          <PasswordInput
+            label="Confirm Password"
+            name="confirm_password"
+            value={formData.confirm_password}
+            onChange={handleChange}
+          />
 
-            <Text
-              as="label"
-              sx={{
-                ...floatingLabel,
-                ...(focusedField === "password" || formData.password
-                  ? floatingLabelActive
-                  : {}),
-              }}
-            >
-              New Password
-            </Text>
-
-            <Box
-              sx={inputAction}
-              onClick={() => setShowPassword(!showPassword)}
-            >
-              {showPassword ? <FaEyeSlash /> : <FaEye />}
-            </Box>
-          </FormControl>
-
-          {/* Confirm Password */}
-
-          <FormControl sx={formGroup}>
-            <Input
-              sx={textInput}
-              type={showConfirmPassword ? "text" : "password"}
-              name="confirm_password"
-              value={formData.confirm_password}
-              onChange={handleChange}
-              onFocus={() => setFocusedField("confirm_password")}
-              onBlur={() => setFocusedField("")}
-            />
-
-            <Text
-              as="label"
-              sx={{
-                ...floatingLabel,
-                ...(focusedField === "confirm_password" ||
-                formData.confirm_password
-                  ? floatingLabelActive
-                  : {}),
-              }}
-            >
-              Confirm Password
-            </Text>
-
-            <Box
-              sx={inputAction}
-              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-            >
-              {showConfirmPassword ? <FaEyeSlash /> : <FaEye />}
-            </Box>
-          </FormControl>
-
-          {/* Submit */}
-
-          <Button type="submit" sx={primaryButton} isDisabled={loading}>
-            {loading ? (
-              <Box sx={buttonLoader}>
-                <Loader size="18px" />
-
-                <Text sx={whiteButtonText}>Resetting Password...</Text>
-              </Box>
-            ) : (
-              "Reset Password"
-            )}
-          </Button>
-
-          {/* Back */}
-
-          <Button
-            type="button"
-            sx={ghostFullButton}
-            onClick={() => navigate("/login")}
+          <PrimaryButton
+            type="submit"
+            isLoading={loading}
+            loadingText="Resetting Password..."
           >
+            Reset Password
+          </PrimaryButton>
+
+          <SecondaryButton type="button" onClick={() => navigate("/login")}>
             Back to Login
-          </Button>
+          </SecondaryButton>
         </Box>
       </Box>
     </Box>

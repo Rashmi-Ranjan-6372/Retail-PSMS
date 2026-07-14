@@ -1,4 +1,4 @@
-import { colors } from "../colors";
+import { colors } from "../../common/colors";
 
 const helperText = {
   mt: "4px",

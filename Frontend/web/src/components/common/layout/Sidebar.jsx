@@ -7,33 +7,29 @@ import {
   VStack,
   Collapse,
   Image,
-  useColorModeValue,
 } from "@chakra-ui/react";
 import { FaChevronDown, FaChevronUp } from "react-icons/fa";
 import { useNavigate, useLocation } from "react-router-dom";
-import { getSidebarByRole } from "../../../config/navigation";
+
 import useAuth from "../../../hooks/useAuth";
-import DefaultLogo from "../../assets/pharmacy-icons/pharmacy-logo.svg";
-import sidebar from "../../styles/components/sidebar";
+import { getSidebarByRole } from "../../../config/navigation";
+
+import DefaultLogo from "../../../assets/pharmacy-icons/pharmacy-logo.svg";
+
+import sidebar from "../../../styles/components/layout/sidebar";
 import { colors } from "../../../styles/common/colors";
 
 const hasActiveChild = (menu, pathname) => {
   if (!menu.children) return false;
 
   return menu.children.some((child) => {
-    if (child.path) {
-      return pathname === child.path;
-    }
-
+    if (child.path) return pathname === child.path;
     return child.children && hasActiveChild(child, pathname);
   });
 };
 
 const isMenuActive = (menu, pathname) => {
-  if (menu.path) {
-    return pathname === menu.path;
-  }
-
+  if (menu.path) return pathname === menu.path;
   return hasActiveChild(menu, pathname);
 };
 
@@ -55,7 +51,7 @@ const getDefaultOpenMenus = (menus, pathname) => {
 
 const MenuItem = ({
   item,
-  level,
+  level = 0,
   pathname,
   navigate,
   openedMenus,
@@ -67,11 +63,14 @@ const MenuItem = ({
 
   const isActive = isMenuActive(item, pathname);
 
-  const textColor = useColorModeValue(colors.textPrimary, colors.white);
-
-  const toggleMenu = () => {
-    if (!hasChildren) return;
-    setOpenedMenus(isOpen ? [] : [item.id]);
+  const handleClick = () => {
+    if (hasChildren) {
+      setOpenedMenus((prev) =>
+        isOpen ? prev.filter((id) => id !== item.id) : [...prev, item.id],
+      );
+    } else if (item.path) {
+      navigate(item.path);
+    }
   };
 
   return (
@@ -80,16 +79,9 @@ const MenuItem = ({
         sx={{
           ...sidebar.sidebarItem,
           ...(isActive ? sidebar.sidebarActive : sidebar.sidebarInactive),
+          pl: `${level === 0 ? 18 : level * 20 + 18}px`,
         }}
-        _hover={isActive ? undefined : sidebar.sidebarHover}
-        pl={`${level === 0 ? 15 : level * 20 + 14}px`}
-        onClick={() => {
-          if (hasChildren) {
-            toggleMenu();
-          } else {
-            navigate(item.path);
-          }
-        }}
+        onClick={handleClick}
       >
         <Flex sx={sidebar.sidebarItemContent}>
           {item.icon && (
@@ -128,7 +120,7 @@ const MenuItem = ({
           <VStack align="stretch" spacing={1} sx={sidebar.sidebarSubMenu}>
             {item.children.map((child, index) => (
               <MenuItem
-                key={child.id ?? child.path ?? `${item.id}-${index}`}
+                key={child.id || child.path || index}
                 item={child}
                 level={level + 1}
                 pathname={pathname}
@@ -145,28 +137,28 @@ const MenuItem = ({
 };
 
 const Sidebar = () => {
-  const { role, user } = useAuth();
-
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const location = useLocation();
+
+  const { role, user } = useAuth();
 
   const sidebarMenus = useMemo(() => {
     if (!role) return [];
     return getSidebarByRole(role);
   }, [role]);
 
-  const defaultOpened = useMemo(
-    () => getDefaultOpenMenus(sidebarMenus, pathname),
-    [sidebarMenus, pathname],
+  const defaultOpenedMenus = useMemo(
+    () => getDefaultOpenMenus(sidebarMenus, location.pathname),
+    [sidebarMenus, location.pathname],
   );
 
-  const [openedMenus, setOpenedMenus] = useState(defaultOpened);
+  const [openedMenus, setOpenedMenus] = useState(defaultOpenedMenus);
 
   useEffect(() => {
-    setOpenedMenus(defaultOpened);
-  }, [defaultOpened]);
+    setOpenedMenus(defaultOpenedMenus);
+  }, [defaultOpenedMenus]);
 
-  const logoSrc =
+  const logo =
     user?.company_logo || user?.logo || user?.organization?.logo || DefaultLogo;
 
   return (
@@ -174,7 +166,7 @@ const Sidebar = () => {
       <Flex sx={sidebar.sidebarHeader}>
         <Box sx={sidebar.sidebarLogoWrapper}>
           <Image
-            src={logoSrc}
+            src={logo}
             alt="Company Logo"
             fallbackSrc={DefaultLogo}
             sx={sidebar.sidebarLogoImage}
@@ -186,10 +178,9 @@ const Sidebar = () => {
         <VStack align="stretch" spacing={2} sx={sidebar.sidebarMenu}>
           {sidebarMenus.map((menu, index) => (
             <MenuItem
-              key={menu.id ?? menu.path ?? `menu-${index}`}
+              key={menu.id || menu.path || index}
               item={menu}
-              level={0}
-              pathname={pathname}
+              pathname={location.pathname}
               navigate={navigate}
               openedMenus={openedMenus}
               setOpenedMenus={setOpenedMenus}

@@ -11,6 +11,7 @@ import {
   FaChartBar,
   FaClipboardList,
   FaUserCircle,
+  FaKey,
   FaSignOutAlt,
 } from "react-icons/fa";
 
@@ -30,16 +31,19 @@ const pharmacistSidebar = [
     icon: FaBoxes,
     children: [
       {
+        id: "products",
         label: "Products",
         icon: FaCapsules,
         path: "/masters/products",
       },
       {
+        id: "categories",
         label: "Categories",
         icon: FaBoxes,
         path: "/masters/categories",
       },
       {
+        id: "customers",
         label: "Customers",
         icon: FaUserFriends,
         path: "/masters/customers",
@@ -54,14 +58,19 @@ const pharmacistSidebar = [
     icon: FaWarehouse,
     children: [
       {
+        id: "stock-transactions",
         label: "Stock Transactions",
+        icon: FaWarehouse,
         path: "/inventory/transactions",
       },
       {
+        id: "stock-batches",
         label: "Stock Batches",
+        icon: FaWarehouse,
         path: "/inventory/batches",
       },
       {
+        id: "expiry-damages",
         label: "Expiry Damages",
         icon: FaClock,
         path: "/inventory/expiry-damages",
@@ -76,15 +85,19 @@ const pharmacistSidebar = [
     icon: FaFileInvoiceDollar,
     children: [
       {
+        id: "sales-list",
         label: "Sales",
+        icon: FaFileInvoiceDollar,
         path: "/sales",
       },
       {
+        id: "sales-returns",
         label: "Sales Returns",
         icon: FaUndo,
         path: "/sales-returns",
       },
       {
+        id: "receipts",
         label: "Receipts",
         icon: FaMoneyCheckAlt,
         path: "/receipts",
@@ -99,16 +112,19 @@ const pharmacistSidebar = [
     icon: FaChartBar,
     children: [
       {
+        id: "stock-report",
         label: "Stock Report",
         icon: FaWarehouse,
         path: "/reports/stock",
       },
       {
+        id: "expiry-report",
         label: "Expiry Report",
         icon: FaClock,
         path: "/reports/expiry",
       },
       {
+        id: "product-ledger",
         label: "Product Ledger",
         icon: FaClipboardList,
         path: "/reports/product-ledger",
@@ -123,14 +139,19 @@ const pharmacistSidebar = [
     icon: FaUserCircle,
     children: [
       {
+        id: "profile",
         label: "Profile",
+        icon: FaUserCircle,
         path: "/account/profile",
       },
       {
+        id: "change-password",
         label: "Change Password",
+        icon: FaKey,
         path: "/account/change-password",
       },
       {
+        id: "logout",
         label: "Logout",
         icon: FaSignOutAlt,
         path: "/logout",

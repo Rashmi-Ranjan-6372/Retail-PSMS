@@ -1,21 +1,19 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Button, FormControl, Input, Text } from "@chakra-ui/react";
+import { Box, Button, FormControl, Text } from "@chakra-ui/react";
+
 import { forgotPassword } from "../../api/authAPI";
-import Loader from "../../components/common/Loader";
+
 import Background from "../../components/common/Background";
+import Spinner from "../../components/common/loaders/Spinner";
+import { TextInput } from "../../components/common/inputs";
+
 import { pageContainer } from "../../styles/common/layout";
-import { glassCard } from "../../styles/common/cards";
-import {
-  form,
-  formGroup,
-  textInput,
-  floatingLabel,
-  floatingLabelActive,
-} from "../../styles/common/forms";
-import { errorAlert, successAlert } from "../../styles/common/alerts";
-import { primaryButton, ghostFullButton } from "../../styles/common/buttons";
-import { buttonLoader } from "../../styles/components/loader";
+import { glassCard } from "../../styles/components/cards";
+import { form, formGroup } from "../../styles/components/forms";
+import { errorAlert, successAlert } from "../../styles/components/alerts";
+import { primaryButton, ghostButton } from "../../styles/components/buttons";
+import { buttonLoader } from "../../styles/components/loaders";
 import {
   pageTitle,
   pageSubtitle,
@@ -26,10 +24,7 @@ const ForgotPassword = () => {
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
-  const [focused, setFocused] = useState(false);
-
   const [loading, setLoading] = useState(false);
-
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -47,16 +42,14 @@ const ForgotPassword = () => {
     try {
       setLoading(true);
 
-      const res = await forgotPassword({
-        email,
-      });
+      const { data } = await forgotPassword({ email });
 
-      if (res.data.success) {
+      if (data.success) {
         setMessage(
           "Password reset link has been sent to your registered email.",
         );
       } else {
-        setError(res.data.message);
+        setError(data.message || "Something went wrong.");
       }
     } catch (err) {
       setError(
@@ -72,56 +65,38 @@ const ForgotPassword = () => {
       <Background />
 
       <Box sx={glassCard}>
-        {/* Heading */}
         <Text sx={pageTitle}>Forgot Password</Text>
 
         <Text sx={pageSubtitle}>
           Enter your registered email address to receive a password reset link.
         </Text>
 
-        {/* Alerts */}
         {error && <Box sx={errorAlert}>{error}</Box>}
 
         {message && <Box sx={successAlert}>{message}</Box>}
 
-        {/* Form */}
         <Box as="form" sx={form} onSubmit={handleSubmit}>
           <FormControl sx={formGroup}>
-            <Input
-              sx={textInput}
+            <TextInput
+              label="Registered Email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              onFocus={() => setFocused(true)}
-              onBlur={() => setFocused(false)}
             />
-
-            <Text
-              as="label"
-              sx={{
-                ...floatingLabel,
-                ...(focused || email ? floatingLabelActive : {}),
-              }}
-            >
-              Registered Email
-            </Text>
           </FormControl>
 
-          <Button type="submit" sx={primaryButton} isDisabled={loading}>
-            {loading ? (
-              <Box sx={buttonLoader}>
-                <Loader size="18px" />
-
-                <Text sx={whiteButtonText}>Sending...</Text>
-              </Box>
-            ) : (
-              "Send Reset Link"
-            )}
+          <Button
+            type="submit"
+            sx={primaryButton}
+            isLoading={loading}
+            loadingText="Sending..."
+          >
+            {!loading && "Send Reset Link"}
           </Button>
 
           <Button
             type="button"
-            sx={ghostFullButton}
+            sx={ghostButton}
             onClick={() => navigate("/login")}
           >
             Back to Login

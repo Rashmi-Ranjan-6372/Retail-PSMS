@@ -1,5 +1,4 @@
-import { colors } from "../colors";
-
+import { colors } from "../../common/colors";
 const textArea = {
   bg: colors.white,
   border: `1.5px solid ${colors.border}`,

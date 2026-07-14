@@ -1,48 +1,42 @@
 import { Flex, Box } from "@chakra-ui/react";
+
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
-import { colors } from "../../../styles/common/colors";
-import backgrounds from "../../../styles/common/background";
+
+import {
+  layoutWrapper,
+  sidebarWrapper,
+  contentWrapper,
+  navbarWrapper,
+  pageWrapper,
+  pageContent,
+} from "../../../styles/components/layout";
+
+import {
+  pageBackground,
+  blobOne,
+  blobTwo,
+} from "../../../styles/common/background";
 
 const Layout = ({ children }) => {
   return (
-    <Flex h="100vh" overflow="hidden">
-      {/* Sidebar */}
-      <Box flexShrink={0}>
+    <Flex sx={layoutWrapper}>
+      <Box sx={sidebarWrapper}>
         <Sidebar />
       </Box>
 
-      {/* Right Side */}
-      <Flex flex="1" direction="column" overflow="hidden">
-        {/* Navbar */}
-        <Box flexShrink={0} zIndex={10}>
+      <Flex sx={contentWrapper}>
+        <Box sx={navbarWrapper}>
           <Navbar />
         </Box>
 
-        {/* Content Area */}
-        <Box
-          flex="1"
-          position="relative"
-          overflow="hidden"
-          bg={colors.background}
-        >
-          {/* Animated Background */}
-          <Box sx={backgrounds.pageBackground}>
-            <Box sx={backgrounds.blobOne} />
-            <Box sx={backgrounds.blobTwo} />
+        <Box sx={pageWrapper}>
+          <Box sx={pageBackground}>
+            <Box sx={blobOne} />
+            <Box sx={blobTwo} />
           </Box>
 
-          {/* All Pages */}
-          <Box
-            position="relative"
-            zIndex={2}
-            h="100%"
-            overflowY="auto"
-            px={6}
-            py={6}
-          >
-            {children}
-          </Box>
+          <Box sx={pageContent}>{children}</Box>
         </Box>
       </Flex>
     </Flex>

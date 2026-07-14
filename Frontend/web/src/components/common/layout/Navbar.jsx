@@ -14,16 +14,20 @@ import {
   MenuItem,
   Text,
   Select,
-  Badge,
+  Divider,
 } from "@chakra-ui/react";
+
 import { FaBell, FaSearch, FaUser, FaCog, FaSignOutAlt } from "react-icons/fa";
 
 import useAuth from "../../../hooks/useAuth";
-import navbar from "../../styles/components/navbar";
-import notificationBadge from "../../styles/common/badges";
+
+import navbar from "../../../styles/components/layout/navbar";
+import { searchInput } from "../../../styles/components/inputs";
+import { notificationButton } from "../../../styles/components/buttons";
+import { notificationBadge } from "../../../styles/components/badges";
 
 const Navbar = () => {
-  const { logout, user } = useAuth();
+  const { user, logout } = useAuth();
 
   const [selectedBranch, setSelectedBranch] = useState("main");
 
@@ -31,47 +35,51 @@ const Navbar = () => {
 
   return (
     <Flex sx={navbar.navbarWrapper}>
+      {/* Search */}
       <Box sx={navbar.searchWrapper}>
         <InputGroup>
           <InputLeftElement pointerEvents="none">
-            <FaSearch style={navbar.searchIcon} />
+            <FaSearch />
           </InputLeftElement>
 
           <Input
-            sx={navbar.searchInput}
+            sx={searchInput}
             placeholder="Search products, invoices, customers..."
           />
         </InputGroup>
       </Box>
 
-      <HStack sx={navbar.rightSection}>
+      {/* Right Section */}
+      <HStack spacing={4} sx={navbar.rightSection}>
+        {/* Branch */}
         {isSuperAdmin && (
           <Box sx={navbar.branchWrapper}>
             <Select
-              sx={navbar.branchSelect}
               value={selectedBranch}
               onChange={(e) => setSelectedBranch(e.target.value)}
             >
               <option value="main">Main Branch</option>
-              <option value="bbsr">Bhubaneswar Branch</option>
-              <option value="ctc">Cuttack Branch</option>
-              <option value="puri">Puri Branch</option>
-              <option value="berhampur">Berhampur Branch</option>
+              <option value="bbsr">Bhubaneswar</option>
+              <option value="ctc">Cuttack</option>
+              <option value="puri">Puri</option>
+              <option value="berhampur">Berhampur</option>
             </Select>
           </Box>
         )}
 
+        {/* Notification */}
         <Box sx={navbar.notificationWrapper}>
           <IconButton
-            icon={<FaBell />}
             aria-label="Notifications"
+            icon={<FaBell />}
             variant="ghost"
-            sx={navbar.notificationButton}
+            sx={notificationButton}
           />
 
-          <Badge sx={navbar.notificationBadge}>5</Badge>
+          <Box sx={notificationBadge}>5</Box>
         </Box>
 
+        {/* User */}
         <Menu>
           <MenuButton>
             <HStack sx={navbar.userButton}>
@@ -82,7 +90,9 @@ const Navbar = () => {
               />
 
               <Box sx={navbar.userInfo}>
-                <Text sx={navbar.userName}>{user?.name || "Admin"}</Text>
+                <Text sx={navbar.userName}>
+                  {user?.name || "Administrator"}
+                </Text>
 
                 <Text sx={navbar.userRole}>{user?.role || "Super Admin"}</Text>
               </Box>
@@ -99,24 +109,28 @@ const Navbar = () => {
                 mb={3}
               />
 
-              <Text sx={navbar.userName}>{user?.name || "Admin"}</Text>
+              <Text sx={navbar.userName}>{user?.name || "Administrator"}</Text>
 
               <Text sx={navbar.userRole}>
                 {user?.email || "admin@example.com"}
               </Text>
             </Box>
 
-            <MenuItem sx={navbar.menuItem} icon={<FaUser />}>
+            <Divider sx={navbar.divider} />
+
+            <MenuItem icon={<FaUser />} sx={navbar.menuItem}>
               Profile
             </MenuItem>
 
-            <MenuItem sx={navbar.menuItem} icon={<FaCog />}>
+            <MenuItem icon={<FaCog />} sx={navbar.menuItem}>
               Settings
             </MenuItem>
 
+            <Divider sx={navbar.divider} />
+
             <MenuItem
-              sx={navbar.logoutItem}
               icon={<FaSignOutAlt />}
+              sx={navbar.logoutItem}
               onClick={logout}
             >
               Logout

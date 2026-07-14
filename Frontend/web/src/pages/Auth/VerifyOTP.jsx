@@ -1,33 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import {
-  Box,
-  Button,
-  FormControl,
-  HStack,
-  Input,
-  Text,
-} from "@chakra-ui/react";
+import { Box, HStack, Input, Text } from "@chakra-ui/react";
 import { verifyOTP, resendOTP } from "../../api/authAPI";
 import useAuth from "../../hooks/useAuth";
-import Loader from "../../components/common/Loader";
 import Background from "../../components/common/Background";
+import {
+  PrimaryButton,
+  SecondaryButton,
+} from "../../components/common/buttons";
 import { pageContainer } from "../../styles/common/layout";
-import { glassCard } from "../../styles/common/cards";
-import { form, pinContainer, pinInput } from "../../styles/common/forms";
-import { errorAlert, successAlert } from "../../styles/common/alerts";
-import {
-  primaryButton,
-  secondaryButton,
-  ghostFullButton,
-} from "../../styles/common/buttons";
-import { buttonLoader } from "../../styles/components/loader";
-import {
-  pageTitle,
-  pageSubtitle,
-  whiteButtonText,
-  body,
-} from "../../styles/common/typography";
+import { glassCard } from "../../styles/components/cards";
+import { form } from "../../styles/components/forms";
+import { pinContainer, pinInput } from "../../styles/components/inputs";
+import { errorAlert, successAlert } from "../../styles/components/alerts";
+import { pageTitle, pageSubtitle, body } from "../../styles/common/typography";
 
 const VerifyOTP = () => {
   const navigate = useNavigate();
@@ -49,7 +35,7 @@ const VerifyOTP = () => {
 
   useEffect(() => {
     if (!user_id) {
-      navigate("/login");
+      navigate("/login", { replace: true });
       return;
     }
 
@@ -59,10 +45,10 @@ const VerifyOTP = () => {
   const handleChange = (value, index) => {
     if (!/^\d?$/.test(value)) return;
 
-    const updatedOTP = [...otp];
-    updatedOTP[index] = value;
+    const updated = [...otp];
+    updated[index] = value;
 
-    setOtp(updatedOTP);
+    setOtp(updated);
 
     if (value && index < 5) {
       inputRefs.current[index + 1]?.focus();
@@ -86,13 +72,13 @@ const VerifyOTP = () => {
     if (!pasted) return;
 
     const values = pasted.split("");
-    const updatedOTP = [...otp];
+    const updated = [...otp];
 
     values.forEach((digit, i) => {
-      updatedOTP[i] = digit;
+      updated[i] = digit;
     });
 
-    setOtp(updatedOTP);
+    setOtp(updated);
 
     inputRefs.current[Math.min(values.length, 5)]?.focus();
   };
@@ -113,17 +99,17 @@ const VerifyOTP = () => {
     try {
       setLoading(true);
 
-      const res = await verifyOTP({
+      const { data } = await verifyOTP({
         user_id,
         otp: otpValue,
       });
 
-      if (res.data.success) {
+      if (data.success) {
         login({
-          user: res.data.user,
+          user: data.user,
           tokens: {
-            access: res.data.access,
-            refresh: res.data.refresh,
+            access: data.access,
+            refresh: data.refresh,
           },
         });
 
@@ -134,9 +120,13 @@ const VerifyOTP = () => {
         return;
       }
 
-      setError(res.data.message || "Invalid OTP.");
+      setError(data.message || "Invalid OTP.");
     } catch (err) {
-      setError(err.response?.data?.message || "OTP verification failed.");
+      setError(
+        err.response?.data?.message ||
+          err.response?.data?.detail ||
+          "OTP verification failed.",
+      );
     } finally {
       setLoading(false);
     }
@@ -149,21 +139,25 @@ const VerifyOTP = () => {
       setError("");
       setMessage("");
 
-      const res = await resendOTP({
+      const { data } = await resendOTP({
         user_id,
       });
 
-      if (res.data.success) {
+      if (data.success) {
         setMessage("A new OTP has been sent to your registered email.");
 
         setOtp(["", "", "", "", "", ""]);
 
         inputRefs.current[0]?.focus();
       } else {
-        setError(res.data.message);
+        setError(data.message || "Unable to resend OTP.");
       }
     } catch (err) {
-      setError(err.response?.data?.message || "Unable to resend OTP.");
+      setError(
+        err.response?.data?.message ||
+          err.response?.data?.detail ||
+          "Unable to resend OTP.",
+      );
     } finally {
       setResending(false);
     }
@@ -193,57 +187,47 @@ const VerifyOTP = () => {
         <Box as="form" sx={form} onSubmit={handleVerify}>
           <HStack sx={pinContainer}>
             {otp.map((digit, index) => (
-              <FormControl key={index}>
-                <Input
-                  ref={(el) => (inputRefs.current[index] = el)}
-                  value={digit}
-                  maxLength={1}
-                  type="text"
-                  inputMode="numeric"
-                  sx={pinInput}
-                  onChange={(e) => handleChange(e.target.value, index)}
-                  onKeyDown={(e) => handleKeyDown(e, index)}
-                  onPaste={handlePaste}
-                />
-              </FormControl>
+              <Input
+                key={index}
+                ref={(el) => (inputRefs.current[index] = el)}
+                value={digit}
+                maxLength={1}
+                type="text"
+                inputMode="numeric"
+                sx={pinInput}
+                onChange={(e) => handleChange(e.target.value, index)}
+                onKeyDown={(e) => handleKeyDown(e, index)}
+                onPaste={handlePaste}
+              />
             ))}
           </HStack>
 
-          <Button type="submit" sx={primaryButton} isDisabled={loading} mt={2}>
-            {loading ? (
-              <Box sx={buttonLoader}>
-                <Loader size="18px" />
-                <Text sx={whiteButtonText}>Verifying...</Text>
-              </Box>
-            ) : (
-              "Verify OTP"
-            )}
-          </Button>
+          <PrimaryButton
+            mt={6}
+            type="submit"
+            isLoading={loading}
+            loadingText="Verifying..."
+          >
+            Verify OTP
+          </PrimaryButton>
         </Box>
 
-        <Button
-          sx={secondaryButton}
+        <SecondaryButton
           mt={4}
+          isLoading={resending}
+          loadingText="Sending..."
           onClick={handleResend}
-          isDisabled={resending}
         >
-          {resending ? (
-            <Box sx={buttonLoader}>
-              <Loader size="18px" />
-              <Text>Sending...</Text>
-            </Box>
-          ) : (
-            "Resend OTP"
-          )}
-        </Button>
+          Resend OTP
+        </SecondaryButton>
 
-        <Button
-          type="button"
-          sx={ghostFullButton}
+        <SecondaryButton
+          mt={3}
+          variant="ghost"
           onClick={() => navigate("/login")}
         >
           Back to Login
-        </Button>
+        </SecondaryButton>
       </Box>
     </Box>
   );

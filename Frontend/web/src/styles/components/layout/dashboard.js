@@ -40,4 +40,4 @@ export default {
   dashboardTitle,
   dashboardSubtitle,
   dashboardActions,
-};
+}; 

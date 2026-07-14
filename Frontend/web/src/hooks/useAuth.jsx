@@ -1,5 +1,7 @@
 const useAuth = () => {
   const token = localStorage.getItem("accessToken");
+  const refreshToken = localStorage.getItem("refreshToken");
+
   const user = JSON.parse(localStorage.getItem("user") || "null");
 
   const login = (data) => {
@@ -14,12 +16,24 @@ const useAuth = () => {
     localStorage.removeItem("user");
   };
 
+  const hasRole = (...roles) => {
+    return roles.includes(user?.role);
+  };
+
+  const hasPermission = (permission) => {
+    return user?.permissions?.includes(permission);
+  };
+
   return {
     user,
+    token,
+    refreshToken,
     role: user?.role,
-    isAuthenticated: !!token,
+    isAuthenticated: Boolean(token),
     login,
     logout,
+    hasRole,
+    hasPermission,
   };
 };
 

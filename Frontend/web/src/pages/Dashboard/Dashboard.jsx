@@ -1,13 +1,13 @@
 import { Box, Text, Heading, Flex, SimpleGrid } from "@chakra-ui/react";
 
-import dashboard from "../../styles/components/dashboard";
+import { dashboard } from "../../styles/components/layout";
 
 const DashboardCard = ({ title, value }) => {
   return (
-    <Box sx={dashboard.dashboardCard}>
-      <Text sx={dashboard.cardTitle}>{title}</Text>
+    <Box sx={dashboard.statCard}>
+      <Text sx={dashboard.statTitle}>{title}</Text>
 
-      <Heading sx={dashboard.cardValue}>{value}</Heading>
+      <Heading sx={dashboard.statValue}>{value}</Heading>
     </Box>
   );
 };
@@ -16,7 +16,7 @@ const Dashboard = () => {
   return (
     <Box sx={dashboard.dashboardWrapper}>
       <Flex sx={dashboard.dashboardHeader}>
-        <Box sx={dashboard.dashboardTitleWrapper}>
+        <Box>
           <Heading sx={dashboard.dashboardTitle}>Dashboard</Heading>
 
           <Text sx={dashboard.dashboardSubtitle}>Welcome back 👋</Text>

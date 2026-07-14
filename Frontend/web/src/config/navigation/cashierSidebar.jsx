@@ -7,6 +7,10 @@ import {
   FaChartBar,
   FaUserCircle,
   FaSignOutAlt,
+  FaReceipt,
+  FaChartLine,
+  FaUserEdit,
+  FaKey,
 } from "react-icons/fa";
 
 const cashierSidebar = [
@@ -16,6 +20,7 @@ const cashierSidebar = [
     label: "Dashboard",
     icon: FaTachometerAlt,
     path: "/dashboard",
+    exact: true,
   },
 
   // Sales
@@ -25,16 +30,19 @@ const cashierSidebar = [
     icon: FaFileInvoiceDollar,
     children: [
       {
+        id: "sales",
         label: "Sales",
-        icon: FaFileInvoiceDollar,
+        icon: FaReceipt,
         path: "/sales",
       },
       {
+        id: "sales-returns",
         label: "Sales Returns",
         icon: FaUndo,
         path: "/sales-returns",
       },
       {
+        id: "receipts",
         label: "Receipts",
         icon: FaMoneyCheckAlt,
         path: "/receipts",
@@ -57,7 +65,9 @@ const cashierSidebar = [
     icon: FaChartBar,
     children: [
       {
+        id: "daily-sales-summary",
         label: "Daily Sales Summary",
+        icon: FaChartLine,
         path: "/reports/daily-sales",
       },
     ],
@@ -70,17 +80,22 @@ const cashierSidebar = [
     icon: FaUserCircle,
     children: [
       {
+        id: "profile",
         label: "Profile",
+        icon: FaUserEdit,
         path: "/account/profile",
       },
       {
+        id: "change-password",
         label: "Change Password",
+        icon: FaKey,
         path: "/account/change-password",
       },
       {
+        id: "logout",
         label: "Logout",
         icon: FaSignOutAlt,
-        path: "/logout",
+        action: "logout",
       },
     ],
   },

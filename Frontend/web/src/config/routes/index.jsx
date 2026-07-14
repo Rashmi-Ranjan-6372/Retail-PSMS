@@ -1,0 +1,11 @@
+export { authRoutes } from "./authRoutes";
+export { dashboardRoutes } from "./dashboardRoutes";
+export { masterRoutes } from "./masterRoutes";
+export { inventoryRoutes } from "./inventoryRoutes";
+export { purchaseRoutes } from "./purchaseRoutes";
+export { salesRoutes } from "./salesRoutes";
+export { reportRoutes } from "./reportRoutes";
+export { accountRoutes } from "./accountRoutes";
+export { settingsRoutes } from "./settingsRoutes";
+export { platformRoutes } from "./platformRoutes";
+export { routesConfig } from "./routesConfig";

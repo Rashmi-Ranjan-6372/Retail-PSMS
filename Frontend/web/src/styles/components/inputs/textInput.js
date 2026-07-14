@@ -1,5 +1,4 @@
-import { colors } from "../colors";
-
+import { colors } from "../../common/colors";
 const textInput = {
   width: "100%",
   h: "55px",

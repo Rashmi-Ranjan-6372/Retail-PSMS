@@ -1,5 +1,4 @@
 import { Box } from "@chakra-ui/react";
-
 import Capsule from "../../assets/pharmacy-icons/capsule-medicine.svg";
 import MedicineCross from "../../assets/pharmacy-icons/medical-cross.svg";
 import Hospital from "../../assets/pharmacy-icons/hospital.svg";
@@ -12,12 +11,11 @@ import Monitor from "../../assets/pharmacy-icons/health-monitor.svg";
 import HospitalLocation from "../../assets/pharmacy-icons/hospital-location.svg";
 import PatientBed from "../../assets/pharmacy-icons/patient-bed.svg";
 import Temperature from "../../assets/pharmacy-icons/temperature.svg";
-
 import {
-  pharmacyBackground,
+  pageBackground,
   backgroundIcon,
   iconPositions,
-} from "../../styles/common/layout";
+} from "../../styles/common/background";
 
 const icons = [
   Capsule,
@@ -36,13 +34,13 @@ const icons = [
 
 const Background = () => {
   return (
-    <Box sx={pharmacyBackground}>
+    <Box sx={pageBackground}>
       {icons.map((icon, index) => (
         <Box
           key={index}
           as="img"
           src={icon}
-          alt=""
+          alt={`Background Icon ${index + 1}`}
           sx={{
             ...backgroundIcon,
             ...iconPositions[`icon${index + 1}`],
