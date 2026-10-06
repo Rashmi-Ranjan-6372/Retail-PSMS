@@ -13,8 +13,6 @@ export const resendOTP = (data) => {
   return api.post(ENDPOINTS.RESEND_OTP, data);
 };
 
-//  Forgot Password
-
 export const forgotPassword = (data) => {
   return api.post(ENDPOINTS.FORGOT_PASSWORD, data);
 };

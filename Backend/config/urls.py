@@ -3,13 +3,13 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/auth/', include('accounts.urls')),
-    path('api/branches/', include('branches.urls')),
-    path('api/masters/', include('masters.urls')),
-    path('api/inventory/', include('inventory.urls')),
-    path('api/reports/', include('reports.urls')),
-    path('api/settings/', include('settings.urls')),
-    path('api/backups/', include('backups.urls')),
-    path('api/subscriptions/', include('subscriptions.urls')),
-    path('api/supports/', include('support.urls')),
+    path('auth/', include('accounts.urls')),
+    path('branches/', include('branches.urls')),
+    path('masters/', include('masters.urls')),
+    path('inventory/', include('inventory.urls')),
+    path('reports/', include('reports.urls')),
+    path('settings/', include('settings.urls')),
+    path('backups/', include('backups.urls')),
+    path('subscriptions/', include('subscriptions.urls')),
+    path('supports/', include('support.urls')),
 ]

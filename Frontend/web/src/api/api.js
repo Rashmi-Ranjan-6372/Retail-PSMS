@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "http://127.0.0.1:8003/api",
+  baseURL: "http://127.0.0.1:8003/",
 });
 
 // ---------------- REQUEST INTERCEPTOR ---------------- //
@@ -51,14 +51,13 @@ api.interceptors.response.use(
         const refresh = localStorage.getItem("refreshToken");
 
         const res = await axios.post(
-          "http://127.0.0.1:8003/api/token/refresh/",
+          "http://127.0.0.1:8003/token/refresh/",
           { refresh }
         );
 
         const newAccess = res.data.access;
         const newRefresh = res.data.refresh;
 
-        // 🔥 update tokens
         localStorage.setItem("accessToken", newAccess);
         localStorage.setItem("refreshToken", newRefresh);
 

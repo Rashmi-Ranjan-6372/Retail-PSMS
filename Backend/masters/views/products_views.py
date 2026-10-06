@@ -1,6 +1,5 @@
-from urllib3 import request
-
-from rest_framework import generics, status
+from rest_framework.views import APIView
+from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
@@ -11,63 +10,53 @@ from accounts.permissions import IsAdmin, IsSuperAdmin
 from subscriptions.utils import check_subscription_write_access
 from accounts.views import create_audit_log
 
-
 # =========================================================
-# BASE QUERYSET MIXIN
+# BASE QUERYSET HELPER
 # =========================================================
 
-class RetailerProductMixin:
 
-    def get_queryset(self):
+def get_product_queryset(user, request):
 
-        user = self.request.user
+    queryset = Product.objects.select_related(
+        "category", "manufacturer", "retailer", "branch"
+    )
 
-        queryset = Product.objects.select_related(
-            "category",
-            "manufacturer",
-            "retailer",
-            "branch"
-        )
+    # ================= PLATFORM OWNER =================
 
-        # ================= PLATFORM OWNER =================
-        if user.is_superuser:
+    if user.is_superuser:
 
-            retailer_id = self.request.query_params.get("retailer")
+        retailer_id = request.query_params.get("retailer")
 
-            if retailer_id:
-                queryset = queryset.filter(retailer_id=retailer_id)
+        if retailer_id:
+            queryset = queryset.filter(retailer_id=retailer_id)
 
-            return queryset
+        return queryset
 
-        # ================= RETAILER USERS =================
-        return queryset.filter(
-            retailer=user.retailer
-        )
+    # ================= RETAILER USERS =================
+
+    return queryset.filter(retailer=user.retailer)
 
 
 # =========================================================
-# CREATE
+# PRODUCT CREATE
 # =========================================================
 
-class ProductCreateView(
-    RetailerProductMixin,
-    generics.CreateAPIView
-):
-    serializer_class = ProductSerializer
+
+class ProductCreateAPIView(APIView):
+
     permission_classes = [IsAuthenticated, IsAdmin]
 
-    def perform_create(self, serializer):
+    def post(self, request):
 
-        user = self.request.user
+        user = request.user
 
-        check_subscription_write_access(
-            user.retailer
-        )
+        check_subscription_write_access(user.retailer)
 
-        product = serializer.save(
-            retailer=user.retailer,
-            branch=user.branch
-        )
+        serializer = ProductSerializer(data=request.data)
+
+        serializer.is_valid(raise_exception=True)
+
+        product = serializer.save(retailer=user.retailer, branch=user.branch)
 
         create_audit_log(
             user=user,
@@ -75,198 +64,245 @@ class ProductCreateView(
             model_name="Product",
             object_id=product.id,
             description=f"Created Product {product.name}",
-            request=self.request
+            request=request,
         )
 
-        return product
-
-    def create(self, request, *args, **kwargs):
-
-        response = super().create(request, *args, **kwargs)
-
-        return Response({
-            "success": True,
-            "message": "Product created successfully",
-            "data": response.data
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "success": True,
+                "message": "Product created successfully",
+                "data": ProductSerializer(product).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 # =========================================================
-# LIST
+# PRODUCT LIST
 # =========================================================
 
-class ProductListView(
-    RetailerProductMixin,
-    generics.ListAPIView
-):
-    serializer_class = ProductSerializer
+
+class ProductListAPIView(APIView):
+
     permission_classes = [IsAuthenticated, IsAdmin]
 
-    def get_queryset(self):
+    def get(self, request):
 
-        queryset = super().get_queryset()
+        queryset = get_product_queryset(request.user, request)
 
-        is_active = self.request.query_params.get("is_active")
-        category = self.request.query_params.get("category")
-        manufacturer = self.request.query_params.get("manufacturer")
-        search = self.request.query_params.get("search")
-        prescription_required = self.request.query_params.get(
-            "prescription_required"
-        )
-        branch = self.request.query_params.get("branch")
+        # =================================================
+        # FILTER PARAMETERS
+        # =================================================
 
-        # ================= FILTERS =================
+        is_active = request.query_params.get("is_active")
+
+        category = request.query_params.get("category")
+
+        manufacturer = request.query_params.get("manufacturer")
+
+        search = request.query_params.get("search")
+
+        prescription_required = request.query_params.get("prescription_required")
+
+        branch = request.query_params.get("branch")
+
+        # =================================================
+        # ACTIVE FILTER
+        # =================================================
 
         if is_active is not None:
-            queryset = queryset.filter(
-                is_active=is_active.lower() == "true"
-            )
+
+            queryset = queryset.filter(is_active=is_active.lower() == "true")
+
+        # =================================================
+        # CATEGORY FILTER
+        # =================================================
 
         if category:
-            queryset = queryset.filter(
-                category_id=category
-            )
+
+            queryset = queryset.filter(category_id=category)
+
+        # =================================================
+        # MANUFACTURER FILTER
+        # =================================================
 
         if manufacturer:
-            queryset = queryset.filter(
-                manufacturer_id=manufacturer
-            )
+
+            queryset = queryset.filter(manufacturer_id=manufacturer)
+
+        # =================================================
+        # PRESCRIPTION FILTER
+        # =================================================
 
         if prescription_required is not None:
+
             queryset = queryset.filter(
-                prescription_required=
-                prescription_required.lower() == "true"
+                prescription_required=(prescription_required.lower() == "true")
             )
+
+        # =================================================
+        # BRANCH FILTER
+        # =================================================
 
         if branch:
-            queryset = queryset.filter(
-                branch_id=branch
-            )
+
+            queryset = queryset.filter(branch_id=branch)
+
+        # =================================================
+        # SEARCH
+        # =================================================
 
         if search:
-            queryset = queryset.filter(
-                name__icontains=search
+
+            queryset = queryset.filter(name__icontains=search)
+
+        # =================================================
+        # ORDER
+        # =================================================
+
+        queryset = queryset.order_by("name")
+
+        serializer = ProductSerializer(queryset, many=True)
+
+        return Response(
+            {"success": True, "count": queryset.count(), "data": serializer.data},
+            status=status.HTTP_200_OK,
+        )
+
+
+# =========================================================
+# PRODUCT DETAIL
+# =========================================================
+
+
+class ProductDetailAPIView(APIView):
+
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def get_object(self, request, pk):
+
+        queryset = get_product_queryset(request.user, request)
+
+        return queryset.filter(id=pk).first()
+
+    def get(self, request, pk):
+
+        product = self.get_object(request, pk)
+
+        if not product:
+
+            return Response(
+                {"success": False, "message": "Product not found"},
+                status=status.HTTP_404_NOT_FOUND,
             )
 
-        return queryset.order_by("name")
+        serializer = ProductSerializer(product)
 
-    def list(self, request, *args, **kwargs):
-
-        queryset = self.get_queryset()
-
-        serializer = self.get_serializer(
-            queryset,
-            many=True
+        return Response(
+            {"success": True, "data": serializer.data}, status=status.HTTP_200_OK
         )
 
-        return Response({
-            "success": True,
-            "count": queryset.count(),
-            "data": serializer.data
-        })
-
 
 # =========================================================
-# DETAIL
+# PRODUCT UPDATE
 # =========================================================
 
-class ProductDetailView(
-    RetailerProductMixin,
-    generics.RetrieveAPIView
-):
-    serializer_class = ProductSerializer
+
+class ProductUpdateAPIView(APIView):
+
     permission_classes = [IsAuthenticated, IsAdmin]
 
-    def get_queryset(self):
-        return super().get_queryset()
+    def get_object(self, request, pk):
 
+        queryset = get_product_queryset(request.user, request)
 
-# =========================================================
-# UPDATE
-# =========================================================
+        return queryset.filter(id=pk).first()
 
-class ProductUpdateView(
-    RetailerProductMixin,
-    generics.UpdateAPIView
-):
-    serializer_class = ProductSerializer
-    permission_classes = [IsAuthenticated, IsAdmin]
+    def put(self, request, pk):
 
-    def get_queryset(self):
-        return super().get_queryset()
+        return self.update_product(request, pk, partial=False)
 
-    def update(self, request, *args, **kwargs):
+    def patch(self, request, pk):
 
-        instance = self.get_object()
+        return self.update_product(request, pk, partial=True)
 
-        check_subscription_write_access(
-            request.user.retailer
-        )
+    def update_product(self, request, pk, partial=False):
 
-        old_name = instance.name
+        product = self.get_object(request, pk)
 
-        serializer = self.get_serializer(
-            instance,
-            data=request.data,
-            partial=True
-        )
+        if not product:
 
-        serializer.is_valid(
-            raise_exception=True
-        )
+            return Response(
+                {"success": False, "message": "Product not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
-        serializer.save()
+        check_subscription_write_access(request.user.retailer)
+
+        old_name = product.name
+
+        serializer = ProductSerializer(product, data=request.data, partial=partial)
+
+        serializer.is_valid(raise_exception=True)
+
+        product = serializer.save()
 
         create_audit_log(
             user=request.user,
             action="update",
             model_name="Product",
-            object_id=instance.id,
-            description=f"Updated Product from {old_name} to {serializer.instance.name}",
-            request=request
+            object_id=product.id,
+            description=(f"Updated Product from " f"{old_name} to {product.name}"),
+            request=request,
         )
 
-        return Response({
-            "success": True,
-            "message": "Product updated successfully",
-            "data": serializer.data
-        })
+        return Response(
+            {
+                "success": True,
+                "message": "Product updated successfully",
+                "data": ProductSerializer(product).data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 # =========================================================
-# SOFT DELETE
+# PRODUCT SOFT DELETE
 # =========================================================
 
-class ProductSoftDeleteView(
-    RetailerProductMixin,
-    generics.UpdateAPIView
-):
 
-    serializer_class = ProductSerializer
+class ProductSoftDeleteAPIView(APIView):
 
-    permission_classes = [
-        IsAuthenticated,
-        IsAdmin
-    ]
+    permission_classes = [IsAuthenticated, IsAdmin]
 
-    def get_queryset(self):
-        return super().get_queryset()
+    def get_object(self, request, pk):
 
-    def patch(self, request, *args, **kwargs):
+        queryset = get_product_queryset(request.user, request)
 
-        product = self.get_object()
+        return queryset.filter(id=pk).first()
 
-        check_subscription_write_access(
-            request.user.retailer
-        )
+    def patch(self, request, pk):
+
+        product = self.get_object(request, pk)
+
+        if not product:
+
+            return Response(
+                {"success": False, "message": "Product not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        check_subscription_write_access(request.user.retailer)
 
         if not product.is_active:
-            return Response({
-                "success": False,
-                "message": "Product already inactive"
-            }, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response(
+                {"success": False, "message": "Product already inactive"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         product.is_active = False
+
         product.save(update_fields=["is_active"])
 
         create_audit_log(
@@ -274,50 +310,53 @@ class ProductSoftDeleteView(
             action="soft_delete",
             model_name="Product",
             object_id=product.id,
-            description=f"Deactivated Product {product.name}",
-            request=request
+            description=(f"Deactivated Product " f"{product.name}"),
+            request=request,
         )
 
-        return Response({
-            "success": True,
-            "message": "Product deactivated successfully"
-        })
+        return Response(
+            {"success": True, "message": "Product deactivated successfully"},
+            status=status.HTTP_200_OK,
+        )
 
 
 # =========================================================
-# ACTIVATE PRODUCT
+# PRODUCT ACTIVATE
 # =========================================================
 
-class ProductActivateView(
-    RetailerProductMixin,
-    generics.UpdateAPIView
-):
 
-    serializer_class = ProductSerializer
+class ProductActivateAPIView(APIView):
 
-    permission_classes = [
-        IsAuthenticated,
-        IsAdmin
-    ]
+    permission_classes = [IsAuthenticated, IsAdmin]
 
-    def get_queryset(self):
-        return super().get_queryset()
+    def get_object(self, request, pk):
 
-    def patch(self, request, *args, **kwargs):
+        queryset = get_product_queryset(request.user, request)
 
-        product = self.get_object()
+        return queryset.filter(id=pk).first()
 
-        check_subscription_write_access(
-            request.user.retailer
-        )
+    def patch(self, request, pk):
+
+        product = self.get_object(request, pk)
+
+        if not product:
+
+            return Response(
+                {"success": False, "message": "Product not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        check_subscription_write_access(request.user.retailer)
 
         if product.is_active:
-            return Response({
-                "success": False,
-                "message": "Product already active"
-            }, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response(
+                {"success": False, "message": "Product already active"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         product.is_active = True
+
         product.save(update_fields=["is_active"])
 
         create_audit_log(
@@ -325,42 +364,43 @@ class ProductActivateView(
             action="restore",
             model_name="Product",
             object_id=product.id,
-            description=f"Activated Product {product.name}",
-            request=request
+            description=(f"Activated Product " f"{product.name}"),
+            request=request,
         )
 
-        return Response({
-            "success": True,
-            "message": "Product activated successfully"
-        })
+        return Response(
+            {"success": True, "message": "Product activated successfully"},
+            status=status.HTTP_200_OK,
+        )
 
 
 # =========================================================
-# HARD DELETE
+# PRODUCT HARD DELETE
 # =========================================================
 
-class ProductDeleteView(
-    RetailerProductMixin,
-    generics.DestroyAPIView
-):
 
-    serializer_class = ProductSerializer
+class ProductDeleteAPIView(APIView):
 
-    permission_classes = [
-        IsAuthenticated,
-        IsSuperAdmin
-    ]
+    permission_classes = [IsAuthenticated, IsSuperAdmin]
 
-    def get_queryset(self):
-        return super().get_queryset()
+    def get_object(self, request, pk):
 
-    def destroy(self, request, *args, **kwargs):
+        queryset = get_product_queryset(request.user, request)
 
-        product = self.get_object()
+        return queryset.filter(id=pk).first()
 
-        check_subscription_write_access(
-            request.user.retailer
-        )
+    def delete(self, request, pk):
+
+        product = self.get_object(request, pk)
+
+        if not product:
+
+            return Response(
+                {"success": False, "message": "Product not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        check_subscription_write_access(request.user.retailer)
 
         product_name = product.name
         product_id = product.id
@@ -372,11 +412,11 @@ class ProductDeleteView(
             action="delete",
             model_name="Product",
             object_id=product_id,
-            description=f"Permanently Deleted Product {product_name}",
-            request=request
+            description=(f"Permanently Deleted Product " f"{product_name}"),
+            request=request,
         )
 
-        return Response({
-            "success": True,
-            "message": "Product deleted permanently"
-        }, status=status.HTTP_200_OK)
+        return Response(
+            {"success": True, "message": "Product deleted permanently"},
+            status=status.HTTP_200_OK,
+        )

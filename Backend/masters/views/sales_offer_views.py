@@ -1,405 +1,389 @@
-from rest_framework import generics, status
+from rest_framework.views import APIView
+from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
 from masters.models import SalesOffer
 from masters.serializers import SalesOfferSerializer
+
 from accounts.permissions import IsAdmin, IsSuperAdmin
 from subscriptions.utils import check_subscription_write_access
 from accounts.views import create_audit_log
 
 # =========================================================
-# BASE RETAILER MIXIN
+# BASE QUERYSET HELPER
 # =========================================================
 
-class RetailerSalesOfferMixin:
 
-    def get_queryset(self):
+def get_sales_offer_queryset(user, request):
 
-        user = self.request.user
+    queryset = SalesOffer.objects.select_related(
+        "product", "category", "manufacturer", "retailer", "branch"
+    )
 
-        queryset = SalesOffer.objects.select_related(
-            "product",
-            "category",
-            "manufacturer",
-            "retailer",
-            "branch"
-        )
+    # ================= PLATFORM OWNER =================
 
-        # ================= PLATFORM OWNER =================
-        if user.is_superuser:
+    if user.is_superuser:
 
-            retailer_id = self.request.query_params.get("retailer")
+        retailer_id = request.query_params.get("retailer")
 
-            if retailer_id:
-                queryset = queryset.filter(
-                    retailer_id=retailer_id
-                )
+        if retailer_id:
 
-            return queryset
+            queryset = queryset.filter(retailer_id=retailer_id)
 
-        # ================= RETAILER USERS =================
-        return queryset.filter(
-            retailer=user.retailer
-        )
+        return queryset
+
+    # ================= RETAILER USERS =================
+
+    return queryset.filter(retailer=user.retailer)
 
 
 # =========================================================
 # CREATE
 # =========================================================
 
-class SalesOfferCreateView(
-    RetailerSalesOfferMixin,
-    generics.CreateAPIView
-):
 
-    serializer_class = SalesOfferSerializer
+class SalesOfferCreateAPIView(APIView):
 
-    permission_classes = [
-        IsAuthenticated,
-        IsAdmin
-    ]
+    permission_classes = [IsAuthenticated, IsAdmin]
 
-    def perform_create(self, serializer):
+    def post(self, request):
 
-        user = self.request.user
+        user = request.user
 
-        check_subscription_write_access(
-            user.retailer
-        )
+        check_subscription_write_access(user.retailer)
 
-        sales_offer = serializer.save(
-            retailer=user.retailer,
-            branch=user.branch
-        )
+        serializer = SalesOfferSerializer(data=request.data)
+
+        serializer.is_valid(raise_exception=True)
+
+        sales_offer = serializer.save(retailer=user.retailer, branch=user.branch)
 
         create_audit_log(
             user=user,
             action="create",
             model_name="SalesOffer",
             object_id=sales_offer.id,
-            description=(
-                f"Created Sales Offer "
-                f"{sales_offer.name}"
-            ),
-            request=self.request
+            description=(f"Created Sales Offer " f"{sales_offer.name}"),
+            request=request,
         )
 
-    def create(self, request, *args, **kwargs):
-
-        response = super().create(
-            request,
-            *args,
-            **kwargs
+        return Response(
+            {
+                "success": True,
+                "message": "Sales offer created successfully",
+                "data": SalesOfferSerializer(sales_offer).data,
+            },
+            status=status.HTTP_201_CREATED,
         )
-
-        return Response({
-            "success": True,
-            "message": "Sales offer created successfully",
-            "data": response.data
-        }, status=status.HTTP_201_CREATED)
 
 
 # =========================================================
 # LIST
 # =========================================================
 
-class SalesOfferListView(
-    RetailerSalesOfferMixin,
-    generics.ListAPIView
-):
 
-    serializer_class = SalesOfferSerializer
+class SalesOfferListAPIView(APIView):
 
-    permission_classes = [
-        IsAuthenticated,
-        IsAdmin
-    ]
+    permission_classes = [IsAuthenticated, IsAdmin]
 
-    def get_queryset(self):
+    def get(self, request):
 
-        queryset = super().get_queryset()
+        queryset = get_sales_offer_queryset(request.user, request)
 
-        is_active = self.request.query_params.get(
-            "is_active"
-        )
+        # =================================================
+        # FILTER PARAMETERS
+        # =================================================
 
-        offer_type = self.request.query_params.get(
-            "offer_type"
-        )
+        is_active = request.query_params.get("is_active")
 
-        branch = self.request.query_params.get(
-            "branch"
-        )
+        offer_type = request.query_params.get("offer_type")
 
-        search = self.request.query_params.get(
-            "search"
-        )
+        branch = request.query_params.get("branch")
 
-        # ================= FILTERS =================
+        search = request.query_params.get("search")
+
+        # =================================================
+        # ACTIVE FILTER
+        # =================================================
 
         if is_active is not None:
-            queryset = queryset.filter(
-                is_active=is_active.lower() == "true"
-            )
+
+            queryset = queryset.filter(is_active=is_active.lower() == "true")
+
+        # =================================================
+        # OFFER TYPE FILTER
+        # =================================================
 
         if offer_type:
-            queryset = queryset.filter(
-                offer_type=offer_type
-            )
+
+            queryset = queryset.filter(offer_type=offer_type)
+
+        # =================================================
+        # BRANCH FILTER
+        # =================================================
 
         if branch:
-            queryset = queryset.filter(
-                branch_id=branch
-            )
+
+            queryset = queryset.filter(branch_id=branch)
+
+        # =================================================
+        # SEARCH
+        # =================================================
 
         if search:
-            queryset = queryset.filter(
-                name__icontains=search
-            )
 
-        return queryset.order_by("-created_at")
+            queryset = queryset.filter(name__icontains=search)
 
-    def list(self, request, *args, **kwargs):
+        # =================================================
+        # ORDER
+        # =================================================
 
-        queryset = self.get_queryset()
+        queryset = queryset.order_by("-created_at")
 
-        serializer = self.get_serializer(
-            queryset,
-            many=True
+        serializer = SalesOfferSerializer(queryset, many=True)
+
+        return Response(
+            {"success": True, "count": queryset.count(), "data": serializer.data},
+            status=status.HTTP_200_OK,
         )
-
-        return Response({
-            "success": True,
-            "count": queryset.count(),
-            "data": serializer.data
-        })
 
 
 # =========================================================
 # DETAIL
 # =========================================================
 
-class SalesOfferDetailView(
-    RetailerSalesOfferMixin,
-    generics.RetrieveAPIView
-):
 
-    serializer_class = SalesOfferSerializer
+class SalesOfferDetailAPIView(APIView):
 
-    permission_classes = [
-        IsAuthenticated,
-        IsAdmin
-    ]
+    permission_classes = [IsAuthenticated, IsAdmin]
 
-    def get_queryset(self):
-        return super().get_queryset()
+    def get_object(self, request, pk):
+
+        queryset = get_sales_offer_queryset(request.user, request)
+
+        return queryset.filter(id=pk).first()
+
+    def get(self, request, pk):
+
+        offer = self.get_object(request, pk)
+
+        if not offer:
+
+            return Response(
+                {"success": False, "message": "Sales offer not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = SalesOfferSerializer(offer)
+
+        return Response(
+            {"success": True, "data": serializer.data}, status=status.HTTP_200_OK
+        )
 
 
 # =========================================================
 # UPDATE
 # =========================================================
 
-class SalesOfferUpdateView(
-    RetailerSalesOfferMixin,
-    generics.UpdateAPIView
-):
 
-    serializer_class = SalesOfferSerializer
+class SalesOfferUpdateAPIView(APIView):
 
-    permission_classes = [
-        IsAuthenticated,
-        IsAdmin
-    ]
+    permission_classes = [IsAuthenticated, IsAdmin]
 
-    def get_queryset(self):
-        return super().get_queryset()
+    def get_object(self, request, pk):
 
-    def update(self, request, *args, **kwargs):
+        queryset = get_sales_offer_queryset(request.user, request)
 
-        instance = self.get_object()
+        return queryset.filter(id=pk).first()
 
-        serializer = self.get_serializer(
-            instance,
-            data=request.data,
-            partial=True
-        )
+    def put(self, request, pk):
 
-        serializer.is_valid(
-            raise_exception=True
-        )
+        return self.update_offer(request, pk, partial=False)
 
-        check_subscription_write_access(
-            request.user.retailer
-        )
+    def patch(self, request, pk):
 
-        old_name = instance.name
+        return self.update_offer(request, pk, partial=True)
 
-        serializer.save()
+    def update_offer(self, request, pk, partial=False):
+
+        offer = self.get_object(request, pk)
+
+        if not offer:
+
+            return Response(
+                {"success": False, "message": "Sales offer not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        check_subscription_write_access(request.user.retailer)
+
+        old_name = offer.name
+
+        serializer = SalesOfferSerializer(offer, data=request.data, partial=partial)
+
+        serializer.is_valid(raise_exception=True)
+
+        offer = serializer.save()
 
         create_audit_log(
             user=request.user,
             action="update",
             model_name="SalesOffer",
-            object_id=instance.id,
+            object_id=offer.id,
             description=(
-                f"Updated Sales Offer "
-                f"from {old_name} "
-                f"to {serializer.instance.name}"
+                f"Updated Sales Offer " f"from {old_name} " f"to {offer.name}"
             ),
-            request=request
+            request=request,
         )
 
-        return Response({
-            "success": True,
-            "message": "Sales offer updated successfully",
-            "data": serializer.data
-        })
+        return Response(
+            {
+                "success": True,
+                "message": "Sales offer updated successfully",
+                "data": SalesOfferSerializer(offer).data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 # =========================================================
-# SOFT DELETE
+# SOFT DELETE / DEACTIVATE
 # =========================================================
 
-class SalesOfferSoftDeleteView(
-    RetailerSalesOfferMixin,
-    generics.UpdateAPIView
-):
 
-    serializer_class = SalesOfferSerializer
+class SalesOfferSoftDeleteAPIView(APIView):
 
-    permission_classes = [
-        IsAuthenticated,
-        IsAdmin
-    ]
+    permission_classes = [IsAuthenticated, IsAdmin]
 
-    def get_queryset(self):
-        return super().get_queryset()
+    def get_object(self, request, pk):
 
-    def patch(self, request, *args, **kwargs):
+        queryset = get_sales_offer_queryset(request.user, request)
 
-        offer = self.get_object()
+        return queryset.filter(id=pk).first()
+
+    def patch(self, request, pk):
+
+        offer = self.get_object(request, pk)
+
+        if not offer:
+
+            return Response(
+                {"success": False, "message": "Sales offer not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         if not offer.is_active:
-            return Response({
-                "success": False,
-                "message": "Offer already inactive"
-            }, status=status.HTTP_400_BAD_REQUEST)
 
-        check_subscription_write_access(
-            request.user.retailer
-        )
+            return Response(
+                {"success": False, "message": "Offer already inactive"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        check_subscription_write_access(request.user.retailer)
 
         offer.is_active = False
 
-        offer.save(
-            update_fields=["is_active"]
-        )
+        offer.save(update_fields=["is_active"])
 
         create_audit_log(
             user=request.user,
             action="deactivate",
             model_name="SalesOffer",
             object_id=offer.id,
-            description=(
-                f"Deactivated Sales Offer "
-                f"{offer.name}"
-            ),
-            request=request
+            description=(f"Deactivated Sales Offer " f"{offer.name}"),
+            request=request,
         )
 
-        return Response({
-            "success": True,
-            "message": "Sales offer deactivated successfully"
-        })
+        return Response(
+            {"success": True, "message": "Sales offer deactivated successfully"},
+            status=status.HTTP_200_OK,
+        )
 
 
 # =========================================================
 # ACTIVATE
 # =========================================================
 
-class SalesOfferActivateView(
-    RetailerSalesOfferMixin,
-    generics.UpdateAPIView
-):
 
-    serializer_class = SalesOfferSerializer
+class SalesOfferActivateAPIView(APIView):
 
-    permission_classes = [
-        IsAuthenticated,
-        IsAdmin
-    ]
+    permission_classes = [IsAuthenticated, IsAdmin]
 
-    def get_queryset(self):
-        return super().get_queryset()
+    def get_object(self, request, pk):
 
-    def patch(self, request, *args, **kwargs):
+        queryset = get_sales_offer_queryset(request.user, request)
 
-        offer = self.get_object()
+        return queryset.filter(id=pk).first()
+
+    def patch(self, request, pk):
+
+        offer = self.get_object(request, pk)
+
+        if not offer:
+
+            return Response(
+                {"success": False, "message": "Sales offer not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         if offer.is_active:
-            return Response({
-                "success": False,
-                "message": "Offer already active"
-            }, status=status.HTTP_400_BAD_REQUEST)
 
-        check_subscription_write_access(
-            request.user.retailer
-        )
+            return Response(
+                {"success": False, "message": "Offer already active"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        check_subscription_write_access(request.user.retailer)
 
         offer.is_active = True
 
-        offer.save(
-            update_fields=["is_active"]
-        )
+        offer.save(update_fields=["is_active"])
 
         create_audit_log(
             user=request.user,
             action="activate",
             model_name="SalesOffer",
             object_id=offer.id,
-            description=(
-                f"Activated Sales Offer "
-                f"{offer.name}"
-            ),
-            request=request
+            description=(f"Activated Sales Offer " f"{offer.name}"),
+            request=request,
         )
 
-        return Response({
-            "success": True,
-            "message": "Sales offer activated successfully"
-        })
+        return Response(
+            {"success": True, "message": "Sales offer activated successfully"},
+            status=status.HTTP_200_OK,
+        )
 
 
 # =========================================================
 # HARD DELETE
 # =========================================================
 
-class SalesOfferDeleteView(
-    RetailerSalesOfferMixin,
-    generics.DestroyAPIView
-):
 
-    serializer_class = SalesOfferSerializer
+class SalesOfferDeleteAPIView(APIView):
 
-    permission_classes = [
-        IsAuthenticated,
-        IsSuperAdmin
-    ]
+    permission_classes = [IsAuthenticated, IsSuperAdmin]
 
-    def get_queryset(self):
-        return super().get_queryset()
+    def get_object(self, request, pk):
 
-    def destroy(self, request, *args, **kwargs):
+        queryset = get_sales_offer_queryset(request.user, request)
 
-        offer = self.get_object()
+        return queryset.filter(id=pk).first()
 
-        check_subscription_write_access(
-            request.user.retailer
-        )
+    def delete(self, request, pk):
+
+        offer = self.get_object(request, pk)
+
+        if not offer:
+
+            return Response(
+                {"success": False, "message": "Sales offer not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        check_subscription_write_access(request.user.retailer)
 
         offer_name = offer.name
-
         offer_id = offer.id
 
         offer.delete()
@@ -409,14 +393,11 @@ class SalesOfferDeleteView(
             action="delete",
             model_name="SalesOffer",
             object_id=offer_id,
-            description=(
-                f"Deleted Sales Offer "
-                f"{offer_name}"
-            ),
-            request=request
+            description=(f"Deleted Sales Offer " f"{offer_name}"),
+            request=request,
         )
 
-        return Response({
-            "success": True,
-            "message": "Sales offer deleted permanently"
-        }, status=status.HTTP_200_OK)
+        return Response(
+            {"success": True, "message": "Sales offer deleted permanently"},
+            status=status.HTTP_200_OK,
+        )
