@@ -1,8 +1,9 @@
 from django.contrib import admin
+
 from .models import (
     SubscriptionPlan,
     RetailerSubscription,
-    PaymentHistory
+    PaymentHistory,
 )
 
 
@@ -18,6 +19,7 @@ class SubscriptionPlanAdmin(admin.ModelAdmin):
         "max_branches",
         "max_products",
         "is_active",
+        "created_at",
     )
 
     list_filter = (
@@ -30,9 +32,12 @@ class SubscriptionPlanAdmin(admin.ModelAdmin):
         "plan_type",
     )
 
-    ordering = (
-        "name",
+    readonly_fields = (
+        "created_at",
+        "updated_at",
     )
+
+    ordering = ("name",)
 
 
 @admin.register(RetailerSubscription)
@@ -42,16 +47,18 @@ class RetailerSubscriptionAdmin(admin.ModelAdmin):
         "retailer",
         "plan",
         "billing_cycle",
-        "status",
         "start_date",
         "expiry_date",
+        "status",
         "auto_renew",
+        "created_at",
     )
 
     list_filter = (
-        "billing_cycle",
         "status",
+        "billing_cycle",
         "auto_renew",
+        "plan",
     )
 
     search_fields = (
@@ -59,14 +66,17 @@ class RetailerSubscriptionAdmin(admin.ModelAdmin):
         "plan__name",
     )
 
-    ordering = (
-        "-created_at",
-    )
-
     readonly_fields = (
         "created_at",
         "updated_at",
     )
+
+    autocomplete_fields = (
+        "retailer",
+        "plan",
+    )
+
+    ordering = ("-created_at",)
 
 
 @admin.register(PaymentHistory)
@@ -74,7 +84,28 @@ class PaymentHistoryAdmin(admin.ModelAdmin):
 
     list_display = (
         "retailer",
+        "subscription",
         "amount",
         "payment_status",
-        "payment_date"
+        "transaction_id",
+        "payment_date",
     )
+
+    list_filter = (
+        "payment_status",
+        "payment_date",
+    )
+
+    search_fields = (
+        "retailer__name",
+        "transaction_id",
+    )
+
+    readonly_fields = ("payment_date",)
+
+    autocomplete_fields = (
+        "retailer",
+        "subscription",
+    )
+
+    ordering = ("-payment_date",)

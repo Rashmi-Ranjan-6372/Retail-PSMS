@@ -3,7 +3,7 @@ from django.utils import timezone
 from django.conf import settings
 
 class Branch(models.Model):
-    retailer = models.ForeignKey("accounts.Retailer",on_delete=models.CASCADE,related_name="branches", null=True, blank=True)
+    retailer = models.ForeignKey("accounts.Retailer", on_delete=models.CASCADE, related_name="branches")
     name = models.CharField(max_length=255)
     code = models.CharField(max_length=20, unique=True)
     address = models.TextField()
@@ -14,20 +14,10 @@ class Branch(models.Model):
     logo = models.ImageField(upload_to='branch_logos/', blank=True, null=True)
     is_active = models.BooleanField(default=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="created_branches"
-    )
-    deleted_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="deleted_branches"
-    )
+
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_branches")
+    deleted_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="deleted_branches")
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -37,13 +27,27 @@ class Branch(models.Model):
         self.is_active = False
         self.deleted_at = timezone.now()
         self.deleted_by = user
-        self.save()
+        self.save(
+            update_fields=[
+                "is_active",
+                "deleted_at",
+                "deleted_by",
+                "updated_at",
+            ]
+        )
 
     def restore(self):
         self.is_active = True
         self.deleted_at = None
         self.deleted_by = None
-        self.save()
+        self.save(
+            update_fields=[
+                "is_active",
+                "deleted_at",
+                "deleted_by",
+                "updated_at",
+            ]
+        )
 
     def hard_delete(self):
         super().delete()
@@ -60,7 +64,12 @@ class Branch(models.Model):
             models.Index(fields=["retailer", "is_active"]),
             models.Index(fields=["retailer", "name"]),
         ]
-        unique_together = ("retailer", "name")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["retailer", "name"],
+                name="unique_branch_name_per_retailer"
+            )
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.code})"

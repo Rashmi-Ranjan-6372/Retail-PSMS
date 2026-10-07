@@ -1,34 +1,35 @@
-from rest_framework import generics
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 
-from .models import (
-    SubscriptionPlan,
-    RetailerSubscription,
-    PaymentHistory
-)
+from .models import SubscriptionPlan, RetailerSubscription, PaymentHistory
 
 from .serializers import (
     SubscriptionPlanSerializer,
     RetailerSubscriptionSerializer,
     RetailerSubscriptionCreateSerializer,
     PaymentHistorySerializer,
-    PaymentHistoryCreateSerializer
+    PaymentHistoryCreateSerializer,
 )
 
 from accounts.permissions import IsPlatformOwner
 from accounts.views import create_audit_log
 
+# =====================================================
+# SUBSCRIPTION PLAN LIST / CREATE
+# =====================================================
 
-# =====================================================
-# SUBSCRIPTION PLAN
-# =====================================================
-class SubscriptionPlanListCreateView(generics.ListCreateAPIView):
-    queryset = SubscriptionPlan.objects.all()
-    serializer_class = SubscriptionPlanSerializer
+
+class SubscriptionPlanListCreateAPIView(APIView):
+
     permission_classes = [IsAuthenticated, IsPlatformOwner]
 
-    def list(self, request, *args, **kwargs):
-        response = super().list(request, *args, **kwargs)
+    def get(self, request):
+
+        plans = SubscriptionPlan.objects.all()
+
+        serializer = SubscriptionPlanSerializer(plans, many=True)
 
         create_audit_log(
             user=request.user,
@@ -36,62 +37,183 @@ class SubscriptionPlanListCreateView(generics.ListCreateAPIView):
             model_name="SubscriptionPlan",
             object_id=None,
             description="Viewed Subscription Plans list",
-            request=request
+            request=request,
         )
 
-        return response
+        return Response(
+            {
+                "success": True,
+                "message": "Subscription Plans retrieved successfully.",
+                "data": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
-    def create(self, request, *args, **kwargs):
-        response = super().create(request, *args, **kwargs)
+    def post(self, request):
+
+        serializer = SubscriptionPlanSerializer(data=request.data)
+
+        serializer.is_valid(raise_exception=True)
+
+        plan = serializer.save()
 
         create_audit_log(
             user=request.user,
             action="create",
             model_name="SubscriptionPlan",
-            object_id=response.data.get("id"),
+            object_id=plan.id,
             description="Created Subscription Plan",
-            request=request
+            request=request,
         )
 
-        return response
+        return Response(
+            {
+                "success": True,
+                "message": "Subscription Plan created successfully.",
+                "data": SubscriptionPlanSerializer(plan).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
-class SubscriptionPlanDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = SubscriptionPlan.objects.all()
-    serializer_class = SubscriptionPlanSerializer
+# =====================================================
+# SUBSCRIPTION PLAN DETAIL
+# =====================================================
+
+
+class SubscriptionPlanDetailAPIView(APIView):
+
     permission_classes = [IsAuthenticated, IsPlatformOwner]
 
-    def retrieve(self, request, *args, **kwargs):
-        response = super().retrieve(request, *args, **kwargs)
+    def get_object(self, pk):
+
+        return SubscriptionPlan.objects.filter(id=pk).first()
+
+    def get(self, request, pk):
+
+        plan = self.get_object(pk)
+
+        if not plan:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Subscription Plan not found.",
+                    "data": None,
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = SubscriptionPlanSerializer(plan)
 
         create_audit_log(
             user=request.user,
             action="view",
             model_name="SubscriptionPlan",
-            object_id=kwargs.get("pk"),
+            object_id=pk,
             description="Viewed Subscription Plan detail",
-            request=request
+            request=request,
         )
 
-        return response
+        return Response(
+            {
+                "success": True,
+                "message": "Subscription Plan retrieved successfully.",
+                "data": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
-    def update(self, request, *args, **kwargs):
-        response = super().update(request, *args, **kwargs)
+    def put(self, request, pk):
+
+        plan = self.get_object(pk)
+
+        if not plan:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Subscription Plan not found.",
+                    "data": None,
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = SubscriptionPlanSerializer(plan, data=request.data)
+
+        serializer.is_valid(raise_exception=True)
+
+        plan = serializer.save()
 
         create_audit_log(
             user=request.user,
             action="update",
             model_name="SubscriptionPlan",
-            object_id=kwargs.get("pk"),
+            object_id=pk,
             description="Updated Subscription Plan",
-            request=request
+            request=request,
         )
 
-        return response
+        return Response(
+            {
+                "success": True,
+                "message": "Subscription Plan updated successfully.",
+                "data": SubscriptionPlanSerializer(plan).data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
-    def destroy(self, request, *args, **kwargs):
-        pk = kwargs.get("pk")
-        response = super().destroy(request, *args, **kwargs)
+    def patch(self, request, pk):
+
+        plan = self.get_object(pk)
+
+        if not plan:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Subscription Plan not found.",
+                    "data": None,
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = SubscriptionPlanSerializer(plan, data=request.data, partial=True)
+
+        serializer.is_valid(raise_exception=True)
+
+        plan = serializer.save()
+
+        create_audit_log(
+            user=request.user,
+            action="update",
+            model_name="SubscriptionPlan",
+            object_id=pk,
+            description="Updated Subscription Plan",
+            request=request,
+        )
+
+        return Response(
+            {
+                "success": True,
+                "message": "Subscription Plan updated successfully.",
+                "data": SubscriptionPlanSerializer(plan).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def delete(self, request, pk):
+
+        plan = self.get_object(pk)
+
+        if not plan:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Subscription Plan not found.",
+                    "data": None,
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        plan.delete()
 
         create_audit_log(
             user=request.user,
@@ -99,22 +221,33 @@ class SubscriptionPlanDetailView(generics.RetrieveUpdateDestroyAPIView):
             model_name="SubscriptionPlan",
             object_id=pk,
             description="Deleted Subscription Plan",
-            request=request
+            request=request,
         )
 
-        return response
+        return Response(
+            {
+                "success": True,
+                "message": "Subscription Plan deleted successfully.",
+                "data": None,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 # =====================================================
-# RETAILER SUBSCRIPTIONS
+# RETAILER SUBSCRIPTION LIST
 # =====================================================
-class RetailerSubscriptionListView(generics.ListAPIView):
-    queryset = RetailerSubscription.objects.select_related("retailer", "plan")
-    serializer_class = RetailerSubscriptionSerializer
+
+
+class RetailerSubscriptionListAPIView(APIView):
+
     permission_classes = [IsAuthenticated, IsPlatformOwner]
 
-    def list(self, request, *args, **kwargs):
-        response = super().list(request, *args, **kwargs)
+    def get(self, request):
+
+        subscriptions = RetailerSubscription.objects.select_related("retailer", "plan")
+
+        serializer = RetailerSubscriptionSerializer(subscriptions, many=True)
 
         create_audit_log(
             user=request.user,
@@ -122,68 +255,199 @@ class RetailerSubscriptionListView(generics.ListAPIView):
             model_name="RetailerSubscription",
             object_id=None,
             description="Viewed Retailer Subscriptions list",
-            request=request
+            request=request,
         )
 
-        return response
+        return Response(
+            {
+                "success": True,
+                "message": "Retailer Subscriptions retrieved successfully.",
+                "data": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
-class RetailerSubscriptionCreateView(generics.CreateAPIView):
-    queryset = RetailerSubscription.objects.all()
-    serializer_class = RetailerSubscriptionCreateSerializer
+# =====================================================
+# RETAILER SUBSCRIPTION CREATE
+# =====================================================
+
+
+class RetailerSubscriptionCreateAPIView(APIView):
+
     permission_classes = [IsAuthenticated, IsPlatformOwner]
 
-    def create(self, request, *args, **kwargs):
-        response = super().create(request, *args, **kwargs)
+    def post(self, request):
+
+        serializer = RetailerSubscriptionCreateSerializer(data=request.data)
+
+        serializer.is_valid(raise_exception=True)
+
+        subscription = serializer.save()
 
         create_audit_log(
             user=request.user,
             action="create",
             model_name="RetailerSubscription",
-            object_id=response.data.get("id"),
+            object_id=subscription.id,
             description="Created Retailer Subscription",
-            request=request
+            request=request,
         )
 
-        return response
+        return Response(
+            {
+                "success": True,
+                "message": "Retailer Subscription created successfully.",
+                "data": RetailerSubscriptionSerializer(subscription).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
-class RetailerSubscriptionDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = RetailerSubscription.objects.select_related("retailer", "plan")
-    serializer_class = RetailerSubscriptionSerializer
+# =====================================================
+# RETAILER SUBSCRIPTION DETAIL
+# =====================================================
+
+
+class RetailerSubscriptionDetailAPIView(APIView):
+
     permission_classes = [IsAuthenticated, IsPlatformOwner]
 
-    def retrieve(self, request, *args, **kwargs):
-        response = super().retrieve(request, *args, **kwargs)
+    def get_object(self, pk):
+
+        return (
+            RetailerSubscription.objects.select_related("retailer", "plan")
+            .filter(id=pk)
+            .first()
+        )
+
+    def get(self, request, pk):
+
+        subscription = self.get_object(pk)
+
+        if not subscription:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Retailer Subscription not found.",
+                    "data": None,
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = RetailerSubscriptionSerializer(subscription)
 
         create_audit_log(
             user=request.user,
             action="view",
             model_name="RetailerSubscription",
-            object_id=kwargs.get("pk"),
+            object_id=pk,
             description="Viewed Retailer Subscription detail",
-            request=request
+            request=request,
         )
 
-        return response
+        return Response(
+            {
+                "success": True,
+                "message": "Retailer Subscription retrieved successfully.",
+                "data": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
-    def update(self, request, *args, **kwargs):
-        response = super().update(request, *args, **kwargs)
+    def put(self, request, pk):
+
+        subscription = self.get_object(pk)
+
+        if not subscription:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Retailer Subscription not found.",
+                    "data": None,
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = RetailerSubscriptionSerializer(subscription, data=request.data)
+
+        serializer.is_valid(raise_exception=True)
+
+        subscription = serializer.save()
 
         create_audit_log(
             user=request.user,
             action="update",
             model_name="RetailerSubscription",
-            object_id=kwargs.get("pk"),
+            object_id=pk,
             description="Updated Retailer Subscription",
-            request=request
+            request=request,
         )
 
-        return response
+        return Response(
+            {
+                "success": True,
+                "message": "Retailer Subscription updated successfully.",
+                "data": RetailerSubscriptionSerializer(subscription).data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
-    def destroy(self, request, *args, **kwargs):
-        pk = kwargs.get("pk")
-        response = super().destroy(request, *args, **kwargs)
+    def patch(self, request, pk):
+
+        subscription = self.get_object(pk)
+
+        if not subscription:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Retailer Subscription not found.",
+                    "data": None,
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = RetailerSubscriptionSerializer(
+            subscription, data=request.data, partial=True
+        )
+
+        serializer.is_valid(raise_exception=True)
+
+        subscription = serializer.save()
+
+        create_audit_log(
+            user=request.user,
+            action="update",
+            model_name="RetailerSubscription",
+            object_id=pk,
+            description="Updated Retailer Subscription",
+            request=request,
+        )
+
+        return Response(
+            {
+                "success": True,
+                "message": "Retailer Subscription updated successfully.",
+                "data": RetailerSubscriptionSerializer(subscription).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def delete(self, request, pk):
+
+        subscription = self.get_object(pk)
+
+        if not subscription:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Retailer Subscription not found.",
+                    "data": None,
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        subscription.delete()
 
         create_audit_log(
             user=request.user,
@@ -191,22 +455,33 @@ class RetailerSubscriptionDetailView(generics.RetrieveUpdateDestroyAPIView):
             model_name="RetailerSubscription",
             object_id=pk,
             description="Deleted Retailer Subscription",
-            request=request
+            request=request,
         )
 
-        return response
+        return Response(
+            {
+                "success": True,
+                "message": "Retailer Subscription deleted successfully.",
+                "data": None,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 # =====================================================
-# PAYMENT HISTORY
+# PAYMENT HISTORY LIST
 # =====================================================
-class PaymentHistoryListView(generics.ListAPIView):
-    queryset = PaymentHistory.objects.select_related("retailer", "subscription")
-    serializer_class = PaymentHistorySerializer
+
+
+class PaymentHistoryListAPIView(APIView):
+
     permission_classes = [IsAuthenticated, IsPlatformOwner]
 
-    def list(self, request, *args, **kwargs):
-        response = super().list(request, *args, **kwargs)
+    def get(self, request):
+
+        payments = PaymentHistory.objects.select_related("retailer", "subscription")
+
+        serializer = PaymentHistorySerializer(payments, many=True)
 
         create_audit_log(
             user=request.user,
@@ -214,47 +489,102 @@ class PaymentHistoryListView(generics.ListAPIView):
             model_name="PaymentHistory",
             object_id=None,
             description="Viewed Payment History list",
-            request=request
+            request=request,
         )
 
-        return response
+        return Response(
+            {
+                "success": True,
+                "message": "Payment History retrieved successfully.",
+                "data": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
-class PaymentHistoryCreateView(generics.CreateAPIView):
-    queryset = PaymentHistory.objects.all()
-    serializer_class = PaymentHistoryCreateSerializer
+# =====================================================
+# PAYMENT HISTORY CREATE
+# =====================================================
+
+
+class PaymentHistoryCreateAPIView(APIView):
+
     permission_classes = [IsAuthenticated, IsPlatformOwner]
 
-    def create(self, request, *args, **kwargs):
-        response = super().create(request, *args, **kwargs)
+    def post(self, request):
+
+        serializer = PaymentHistoryCreateSerializer(data=request.data)
+
+        serializer.is_valid(raise_exception=True)
+
+        payment = serializer.save()
 
         create_audit_log(
             user=request.user,
             action="create",
             model_name="PaymentHistory",
-            object_id=response.data.get("id"),
+            object_id=payment.id,
             description="Created Payment History entry",
-            request=request
+            request=request,
         )
 
-        return response
+        return Response(
+            {
+                "success": True,
+                "message": "Payment History created successfully.",
+                "data": PaymentHistorySerializer(payment).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
-class PaymentHistoryDetailView(generics.RetrieveAPIView):
-    queryset = PaymentHistory.objects.select_related("retailer", "subscription")
-    serializer_class = PaymentHistorySerializer
+# =====================================================
+# PAYMENT HISTORY DETAIL
+# =====================================================
+
+
+class PaymentHistoryDetailAPIView(APIView):
+
     permission_classes = [IsAuthenticated, IsPlatformOwner]
 
-    def retrieve(self, request, *args, **kwargs):
-        response = super().retrieve(request, *args, **kwargs)
+    def get_object(self, pk):
+
+        return (
+            PaymentHistory.objects.select_related("retailer", "subscription")
+            .filter(id=pk)
+            .first()
+        )
+
+    def get(self, request, pk):
+
+        payment = self.get_object(pk)
+
+        if not payment:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Payment History not found.",
+                    "data": None,
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = PaymentHistorySerializer(payment)
 
         create_audit_log(
             user=request.user,
             action="view",
             model_name="PaymentHistory",
-            object_id=kwargs.get("pk"),
+            object_id=pk,
             description="Viewed Payment History detail",
-            request=request
+            request=request,
         )
 
-        return response
+        return Response(
+            {
+                "success": True,
+                "message": "Payment History retrieved successfully.",
+                "data": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )

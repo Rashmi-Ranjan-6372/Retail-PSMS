@@ -12,4 +12,10 @@ urlpatterns = [
     path('restore/<int:pk>/', BranchRestoreView.as_view()),
     path('delete/<int:pk>/', BranchHardDeleteView.as_view()),
     path('filter/', BranchStatusFilterView.as_view()),
-]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+]
+
+if settings.DEBUG:
+    urlpatterns += static(
+        settings.MEDIA_URL,
+        document_root=settings.MEDIA_ROOT
+    )

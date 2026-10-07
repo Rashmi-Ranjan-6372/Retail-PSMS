@@ -2,7 +2,7 @@ from django.db import models
 from django.db.models import Max
 from datetime import datetime
 from django.db import transaction
-from .constants import STATUS
+from .constants import RETURN_STATUS
 from django.conf import settings
 from accounts.models import Retailer
 from branches.models import Branch
@@ -14,7 +14,7 @@ class SalesReturn(models.Model):
     sales = models.ForeignKey("Sales", on_delete=models.CASCADE)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     refund_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    status = models.CharField(max_length=20, choices=STATUS, default="COMPLETED")
+    status = models.CharField(max_length=20, choices=RETURN_STATUS, default="COMPLETED")
     remarks = models.TextField(null=True, blank=True)
 
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.SET_NULL,null=True,blank=True)

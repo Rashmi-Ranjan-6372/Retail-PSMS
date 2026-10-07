@@ -1,17 +1,13 @@
 from rest_framework import serializers
 
-from .models import (
-    SubscriptionPlan,
-    RetailerSubscription,
-    PaymentHistory
-)
+from .models import SubscriptionPlan, RetailerSubscription, PaymentHistory
 
 from accounts.models import Retailer
-
 
 # =====================================================
 # SUBSCRIPTION PLAN
 # =====================================================
+
 
 class SubscriptionPlanSerializer(serializers.ModelSerializer):
 
@@ -20,30 +16,19 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
 
         fields = "__all__"
 
-        read_only_fields = (
-            "id",
-            "created_at",
-            "updated_at"
-        )
+        read_only_fields = ("id", "created_at", "updated_at")
 
 
 # =====================================================
 # RETAILER SUBSCRIPTION
 # =====================================================
 
-class RetailerSubscriptionSerializer(
-    serializers.ModelSerializer
-):
 
-    retailer_name = serializers.CharField(
-        source="retailer.name",
-        read_only=True
-    )
+class RetailerSubscriptionSerializer(serializers.ModelSerializer):
 
-    plan_name = serializers.CharField(
-        source="plan.name",
-        read_only=True
-    )
+    retailer_name = serializers.CharField(source="retailer.name", read_only=True)
+
+    plan_name = serializers.CharField(source="plan.name", read_only=True)
 
     class Meta:
         model = RetailerSubscription
@@ -54,28 +39,26 @@ class RetailerSubscriptionSerializer(
             "retailer_name",
             "plan",
             "plan_name",
+            "billing_cycle",
             "start_date",
             "expiry_date",
             "status",
             "auto_renew",
+            "cancelled_at",
+            "cancelled_reason",
             "created_at",
             "updated_at",
         ]
 
-        read_only_fields = (
-            "id",
-            "created_at",
-            "updated_at"
-        )
+        read_only_fields = ("id", "created_at", "updated_at")
 
 
 # =====================================================
 # CREATE / UPDATE RETAILER SUBSCRIPTION
 # =====================================================
 
-class RetailerSubscriptionCreateSerializer(
-    serializers.ModelSerializer
-):
+
+class RetailerSubscriptionCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RetailerSubscription
@@ -83,23 +66,22 @@ class RetailerSubscriptionCreateSerializer(
         fields = [
             "retailer",
             "plan",
+            "billing_cycle",
             "start_date",
             "expiry_date",
             "status",
             "auto_renew",
+            "cancelled_at",
+            "cancelled_reason",
         ]
 
     def validate(self, attrs):
 
         retailer = attrs.get("retailer")
 
-        if RetailerSubscription.objects.filter(
-            retailer=retailer
-        ).exists():
+        if RetailerSubscription.objects.filter(retailer=retailer).exists():
 
-            raise serializers.ValidationError(
-                "Retailer already has a subscription."
-            )
+            raise serializers.ValidationError("Retailer already has a subscription.")
 
         return attrs
 
@@ -108,19 +90,12 @@ class RetailerSubscriptionCreateSerializer(
 # PAYMENT HISTORY
 # =====================================================
 
-class PaymentHistorySerializer(
-    serializers.ModelSerializer
-):
 
-    retailer_name = serializers.CharField(
-        source="retailer.name",
-        read_only=True
-    )
+class PaymentHistorySerializer(serializers.ModelSerializer):
 
-    plan_name = serializers.CharField(
-        source="subscription.plan.name",
-        read_only=True
-    )
+    retailer_name = serializers.CharField(source="retailer.name", read_only=True)
+
+    plan_name = serializers.CharField(source="subscription.plan.name", read_only=True)
 
     class Meta:
         model = PaymentHistory
@@ -137,19 +112,15 @@ class PaymentHistorySerializer(
             "payment_date",
         ]
 
-        read_only_fields = (
-            "id",
-            "payment_date"
-        )
+        read_only_fields = ("id", "payment_date")
 
 
 # =====================================================
 # CREATE PAYMENT
 # =====================================================
 
-class PaymentHistoryCreateSerializer(
-    serializers.ModelSerializer
-):
+
+class PaymentHistoryCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PaymentHistory

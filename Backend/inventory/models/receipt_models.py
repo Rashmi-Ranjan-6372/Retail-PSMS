@@ -2,7 +2,7 @@ from django.db import models
 from django.db.models import Max
 from datetime import datetime
 from django.db import transaction
-from .constants import RECEIPT_STATUS
+from .constants import PAYMENT_METHOD, RECEIPT_STATUS
 from django.conf import settings
 from accounts.models import Retailer
 from branches.models import Branch
@@ -15,7 +15,7 @@ class Receipt(models.Model):
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     paid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     due_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    payment_method = models.CharField(max_length=30)
+    payment_method = models.CharField(max_length=30, choices=PAYMENT_METHOD)
     status = models.CharField(max_length=20, choices=RECEIPT_STATUS, default="RECEIVED")
     reference_no = models.CharField(max_length=50, null=True, blank=True)
     remarks = models.TextField(null=True, blank=True)

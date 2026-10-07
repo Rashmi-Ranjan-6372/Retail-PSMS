@@ -4,7 +4,7 @@ from datetime import datetime
 from django.db import transaction
 
 from django.conf import settings
-from .constants import PAYMENT_STATUS
+from .constants import PAYMENT_METHOD, PAYMENT_STATUS
 from accounts.models import Retailer
 from branches.models import Branch
 
@@ -16,7 +16,7 @@ class Payment(models.Model):
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     paid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     due_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    payment_method = models.CharField(max_length=30)
+    payment_method = models.CharField(max_length=30, choices=PAYMENT_METHOD)
     status = models.CharField(max_length=20, choices=PAYMENT_STATUS, default="PAID")
     reference_no = models.CharField(max_length=50, null=True, blank=True)
     remarks = models.TextField(null=True, blank=True)
@@ -92,7 +92,7 @@ class Payment(models.Model):
             self.status = "PARTIAL"
 
         else:
-            self.status = "PENDING"
+            self.status = "UNPAID"
 
         super().save(*args, **kwargs)
 

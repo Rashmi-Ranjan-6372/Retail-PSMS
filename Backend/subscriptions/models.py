@@ -51,11 +51,23 @@ class RetailerSubscription(models.Model):
     expiry_date = models.DateField()
     status = models.CharField(max_length=20,choices=STATUS_CHOICES,default="active")
     auto_renew = models.BooleanField(default=False)
+    cancelled_at = models.DateTimeField(blank=True, null=True)
+    cancelled_reason = models.TextField(blank=True, null=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def is_expired(self):
         return self.expiry_date < timezone.now().date()
+
+    def is_active(self):
+        today = timezone.now().date()
+
+        return (
+            self.status == "active"
+            and self.start_date <= today
+            and self.expiry_date >= today
+        )
 
     @property
     def amount(self):

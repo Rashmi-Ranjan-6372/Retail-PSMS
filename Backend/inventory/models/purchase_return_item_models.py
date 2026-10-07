@@ -1,5 +1,5 @@
 from django.db import models
-from .constants import RETURN_TYPE
+from .constants import RETURN_CONDITION
 from django.conf import settings
 from accounts.models import Retailer
 from branches.models import Branch
@@ -14,7 +14,7 @@ class PurchaseReturnItem(models.Model):
     free_qty = models.IntegerField(default=0)
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
     amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    return_type = models.CharField(max_length=20, choices=RETURN_TYPE, default="GOOD")
+    return_condition = models.CharField(max_length=20, choices=RETURN_CONDITION, default="GOOD")
     remarks = models.TextField(null=True, blank=True)
     
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.SET_NULL,null=True,blank=True)
@@ -29,13 +29,13 @@ class PurchaseReturnItem(models.Model):
             models.Index(fields=["branch"]),
             models.Index(fields=["product"]),
             models.Index(fields=["batch"]),
-            models.Index(fields=["return_type"]),
+            models.Index(fields=["return_condition"]),
             models.Index(fields=["created_at"]),
             models.Index(fields=["retailer", "branch"]),
             models.Index(fields=["retailer", "product"]),
             models.Index(fields=["branch", "product"]),
             models.Index(fields=["product", "batch"]),
-            models.Index(fields=["retailer", "return_type"]),
+            models.Index(fields=["retailer", "return_condition"]),
         ]
 
     def save(self, *args, **kwargs):

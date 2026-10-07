@@ -1,34 +1,34 @@
 from django.urls import path
 
 from .views import (
-    SubscriptionPlanListCreateView,
-    SubscriptionPlanDetailView,
-    RetailerSubscriptionListView,
-    RetailerSubscriptionCreateView,
-    RetailerSubscriptionDetailView,
-    PaymentHistoryListView,
-    PaymentHistoryCreateView,
-    PaymentHistoryDetailView,
+    SubscriptionPlanListCreateAPIView,
+    SubscriptionPlanDetailAPIView,
+    RetailerSubscriptionListAPIView,
+    RetailerSubscriptionCreateAPIView,
+    RetailerSubscriptionDetailAPIView,
+    PaymentHistoryListAPIView,
+    PaymentHistoryCreateAPIView,
+    PaymentHistoryDetailAPIView,
 )
 
 urlpatterns = [
     # =====================================================
     # PLANS
     # =====================================================
-    path("plans/", SubscriptionPlanListCreateView.as_view(), name="subscription-plan-list-create"),
-    path("plans/<int:pk>/", SubscriptionPlanDetailView.as_view(), name="subscription-plan-detail"),
+    path("plans/", SubscriptionPlanListCreateAPIView.as_view(), name="subscription-plan-list-create"),
+    path("plans/<int:pk>/", SubscriptionPlanDetailAPIView.as_view(), name="subscription-plan-detail"),
 
     # =====================================================
     # RETAILER SUBSCRIPTIONS
     # =====================================================
-    path("retailer-subscriptions/", RetailerSubscriptionListView.as_view(), name="retailer-subscription-list"),
-    path("retailer-subscriptions/create/", RetailerSubscriptionCreateView.as_view(), name="retailer-subscription-create"),
-    path("retailer-subscriptions/<int:pk>/", RetailerSubscriptionDetailView.as_view(), name="retailer-subscription-detail"),
+    path("retailer-subscriptions/", RetailerSubscriptionListAPIView.as_view(), name="retailer-subscription-list"),
+    path("retailer-subscriptions/create/", RetailerSubscriptionCreateAPIView.as_view(), name="retailer-subscription-create"),
+    path("retailer-subscriptions/<int:pk>/", RetailerSubscriptionDetailAPIView.as_view(), name="retailer-subscription-detail"),
 
     # =====================================================
     # PAYMENTS
     # =====================================================
-    path("payments/", PaymentHistoryListView.as_view(), name="payment-history-list"),
-    path("payments/create/", PaymentHistoryCreateView.as_view(), name="payment-history-create"),
-    path("payments/<int:pk>/", PaymentHistoryDetailView.as_view(), name="payment-history-detail"),
+    path("payments/", PaymentHistoryListAPIView.as_view(), name="payment-history-list"),
+    path("payments/create/", PaymentHistoryCreateAPIView.as_view(), name="payment-history-create"),
+    path("payments/<int:pk>/", PaymentHistoryDetailAPIView.as_view(), name="payment-history-detail"),
 ]

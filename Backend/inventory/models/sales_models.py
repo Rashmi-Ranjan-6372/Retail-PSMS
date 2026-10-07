@@ -2,7 +2,7 @@ from django.db import models
 from django.db.models import Max
 from datetime import datetime
 from django.db import transaction
-from .constants import STATUS
+from .constants import SALE_STATUS
 from django.conf import settings
 from accounts.models import Retailer
 from branches.models import Branch
@@ -18,7 +18,7 @@ class Sales(models.Model):
     paid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     due_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     payment_status = models.CharField(max_length=20, default="UNPAID")
-    status = models.CharField(max_length=20, choices=STATUS, default="CONFIRMED")
+    status = models.CharField(max_length=20, choices=SALE_STATUS, default="CONFIRMED")
     remarks = models.TextField(null=True, blank=True)
 
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.SET_NULL,null=True,blank=True)
