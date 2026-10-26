@@ -87,30 +87,3 @@ class Receipt(models.Model):
             self.status = "PENDING"
 
         super().save(*args, **kwargs)
-
-        # =========================
-        # DUE CALCULATION
-        # =========================
-
-        self.due_amount = (
-            self.amount - self.paid_amount
-        )
-
-        # =========================
-        # STATUS CALCULATION
-        # =========================
-
-        if self.due_amount <= 0:
-            self.status = "RECEIVED"
-
-        elif self.paid_amount > 0:
-            self.status = "PARTIAL"
-
-        else:
-            self.status = "PENDING"
-
-        super().save(*args, **kwargs)
-
-    def __str__(self):
-
-        return self.receipt_no

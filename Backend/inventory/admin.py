@@ -256,6 +256,10 @@ class SalesItemAdmin(RetailerBranchAdmin):
         "qty",
         "unit_price",
         "amount",
+        "discount_type",
+        "discount",
+        "tax_percent",
+        "tax_amount",
     )
 
     search_fields = (
@@ -282,7 +286,7 @@ class SalesReturnAdmin(RetailerBranchAdmin):
         "total_amount",
         "refund_amount",
         "status",
-        "created_at",
+        "created_at",        
     )
 
     search_fields = (
@@ -307,6 +311,9 @@ class SalesReturnItemAdmin(RetailerBranchAdmin):
         "product",
         "qty",
         "amount",
+        "discount_type",
+        "discount",
+        "created_at",
     )
 
     list_filter = (

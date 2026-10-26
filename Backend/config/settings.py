@@ -179,7 +179,7 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 
 EMAIL_HOST_USER = "rashmiranjan6372@gmail.com"
-EMAIL_HOST_PASSWORD = "lscazuhoyiqywqmz"
+EMAIL_HOST_PASSWORD = "sheyhujhopwjmyfh"
 
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 

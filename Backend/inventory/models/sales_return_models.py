@@ -2,26 +2,39 @@ from django.db import models
 from django.db.models import Max
 from datetime import datetime
 from django.db import transaction
-from .constants import RETURN_STATUS
 from django.conf import settings
+from django.core.validators import MinValueValidator
+
 from accounts.models import Retailer
 from branches.models import Branch
 
+from .constants import RETURN_STATUS
+
+
 class SalesReturn(models.Model):
+
     retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="sales_returns")
     branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name="sales_returns")
-    return_no = models.CharField(max_length=50, unique=True, blank=True)
-    sales = models.ForeignKey("Sales", on_delete=models.CASCADE)
-    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    refund_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    status = models.CharField(max_length=20, choices=RETURN_STATUS, default="COMPLETED")
-    remarks = models.TextField(null=True, blank=True)
-
+    return_no = models.CharField(max_length=50,unique=True, blank=True)
+    sales = models.ForeignKey("Sales", on_delete=models.CASCADE, related_name="sales_returns")
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0,
+        validators=[
+            MinValueValidator(0)
+        ]
+    )
+    refund_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0,
+        validators=[
+            MinValueValidator(0)
+        ]
+    )
+    status = models.CharField(max_length=20,choices=RETURN_STATUS,default="DRAFT")
+    remarks = models.TextField(null=True,blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.SET_NULL,null=True,blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+
         ordering = ["-id"]
 
         indexes = [
@@ -31,11 +44,26 @@ class SalesReturn(models.Model):
             models.Index(fields=["sales"]),
             models.Index(fields=["status"]),
             models.Index(fields=["created_at"]),
-            models.Index(fields=["retailer", "branch"]),
-            models.Index(fields=["retailer", "status"]),
-            models.Index(fields=["branch", "status"]),
-            models.Index(fields=["sales", "status"]),
-            models.Index(fields=["created_at", "status"]),
+
+            models.Index(
+                fields=["retailer", "branch"]
+            ),
+
+            models.Index(
+                fields=["retailer", "status"]
+            ),
+
+            models.Index(
+                fields=["branch", "status"]
+            ),
+
+            models.Index(
+                fields=["sales", "status"]
+            ),
+
+            models.Index(
+                fields=["created_at", "status"]
+            ),
         ]
 
     def save(self, *args, **kwargs):
@@ -50,8 +78,8 @@ class SalesReturn(models.Model):
                     SalesReturn.objects.filter(
                         return_no__startswith=f"SR-{year}"
                     ).aggregate(
-                        Max("id")
-                    )["id__max"] or 0
+                        max_id=Max("id")
+                    )["max_id"] or 0
                 )
 
                 self.return_no = (
@@ -76,4 +104,5 @@ class SalesReturn(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
+
         return self.return_no

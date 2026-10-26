@@ -26,6 +26,14 @@ SALE_TYPE = (
     ("LOOSE", "Loose Sale"),
 )
 
+# =========================
+# DISCOUNT TYPE
+# =========================
+
+DISCOUNT_TYPE = (
+    ("FLAT", "Flat Amount"),
+    ("PERCENTAGE", "Percentage"),
+)
 
 # =========================
 # SALE STATUS

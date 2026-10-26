@@ -1,4 +1,5 @@
 from django.db import models
+from .constants import DISCOUNT_TYPE
 from accounts.models import Retailer
 from branches.models import Branch
 from django.conf import settings
@@ -12,6 +13,7 @@ class SalesItem(models.Model):
     qty = models.PositiveIntegerField()
     free_qty = models.PositiveIntegerField(default=0)
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
+    discount_type = models.CharField(max_length=20, choices=DISCOUNT_TYPE, default="FLAT")
     discount = models.DecimalField(max_digits=10,decimal_places=2,default=0)
     tax_percent = models.DecimalField(max_digits=5,decimal_places=2,default=0)
     tax_amount = models.DecimalField(max_digits=12,decimal_places=2,default=0)
@@ -67,21 +69,59 @@ class SalesItem(models.Model):
             )
 
         base_amount = (
-            (self.qty or 0) *
-            (self.unit_price or 0)
+            self.qty * self.unit_price
         )
+
+        # =========================
+        # DISCOUNT CALCULATION
+        # =========================
+
+        if self.discount_type == "FLAT":
+
+            if self.discount > base_amount:
+                raise ValueError(
+                    "Flat discount cannot exceed base amount"
+                )
+
+            discount_amount = self.discount
+
+        elif self.discount_type == "PERCENTAGE":
+
+            if self.discount > 100:
+                raise ValueError(
+                    "Discount percentage cannot exceed 100"
+                )
+
+            discount_amount = (
+                base_amount * self.discount
+            ) / 100
+
+        else:
+
+            raise ValueError(
+                "Invalid discount type"
+            )
+
+        # =========================
+        # DISCOUNTED AMOUNT
+        # =========================
 
         discounted_amount = (
-            base_amount - (self.discount or 0)
+            base_amount - discount_amount
         )
 
-        if discounted_amount < 0:
-            discounted_amount = 0
+        # =========================
+        # TAX CALCULATION
+        # =========================
 
         self.tax_amount = (
             discounted_amount *
-            (self.tax_percent or 0)
+            self.tax_percent
         ) / 100
+
+        # =========================
+        # FINAL AMOUNT
+        # =========================
 
         self.amount = (
             discounted_amount +
