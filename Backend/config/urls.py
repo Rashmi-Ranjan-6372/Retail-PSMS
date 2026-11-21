@@ -12,4 +12,5 @@ urlpatterns = [
     path('backups/', include('backups.urls')),
     path('subscriptions/', include('subscriptions.urls')),
     path('supports/', include('support.urls')),
+    path('email-config/', include('email_config.urls')),
 ]

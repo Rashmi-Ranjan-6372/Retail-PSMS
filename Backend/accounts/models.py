@@ -54,38 +54,39 @@ class RetailerBranchAutoFillMixin(models.Model):
         super().save(*args, **kwargs)
 
 class PasswordSetupToken(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="password_setup_tokens")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.CASCADE,related_name="password_setup_tokens")
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     expires_at = models.DateTimeField()
     is_used = models.BooleanField(default=False)
+    otp = models.CharField(max_length=6, null=True, blank=True)
+    otp_expires_at = models.DateTimeField(null=True, blank=True)
+    is_otp_verified = models.BooleanField(default=False)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def is_valid(self):
-
         return (
-            not self.is_used and
-            self.expires_at > timezone.now()
+            not self.is_used
+            and self.expires_at > timezone.now()
+        )
+
+    def is_otp_valid(self):
+        return (
+            self.is_valid()
+            and self.is_otp_verified
         )
 
     def __str__(self):
-
-        return (
-            f"{self.user.username} - "
-            f"{self.token}"
-        )
+        return f"{self.user.username} - {self.token}"
 
     class Meta:
-
-        ordering = [
-            "-created_at"
-        ]
-
+        ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["user"]),
             models.Index(fields=["token"]),
             models.Index(fields=["is_used"]),
             models.Index(fields=["expires_at"]),
-            models.Index(fields=["user","is_used"]),
+            models.Index(fields=["user", "is_used"]),
         ]
 
 
@@ -150,7 +151,7 @@ class User(AbstractUser):
     def is_super_admin_user(self):
         return (
             self.is_active
-            and self.role == "super_admin"
+            and self.role == "superadmin"
         )
 
     @property
@@ -214,11 +215,7 @@ class User(AbstractUser):
         ]
 
 class EmailOTP(models.Model):
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="otps"
-    )
+    user = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.CASCADE,related_name="otps")
     otp = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()

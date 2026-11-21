@@ -17,7 +17,10 @@ from django.db.models import Q
 from django.utils import timezone
 from django.db import transaction
 from django.contrib.auth import authenticate
-from django.core.mail import send_mail
+from email_config.services.email_service import (
+    send_platform_email,
+    send_user_auth_email,
+)
 import random
 from datetime import timedelta
 from accounts.models import PasswordSetupToken
@@ -168,10 +171,22 @@ class CreateRetailerView(APIView):
                 data = serializer.save()
 
                 token_obj = PasswordSetupToken.objects.create(
-                    user=data["user"], expires_at=timezone.now() + timedelta(hours=24)
+                    user=data["user"],
+                    expires_at=timezone.now() + timedelta(hours=24),
                 )
 
-                setup_link = f"{settings.PASSWORD_SETUP_URL}/" f"{token_obj.token}"
+                otp = str(random.randint(100000, 999999))
+
+                token_obj.otp = otp
+                token_obj.otp_expires_at = timezone.now() + timedelta(minutes=10)
+                token_obj.save(
+                    update_fields=["otp", "otp_expires_at"]
+                )
+
+                setup_link = (
+                    f"{settings.PASSWORD_SETUP_URL.rstrip('/')}/"
+                    f"{token_obj.token}"
+                )
 
                 current_plan = data["subscription"].plan
 
@@ -192,7 +207,7 @@ class CreateRetailerView(APIView):
                         f"Products Allowed : {plan.max_products}\n"
                     )
 
-                send_mail(
+                send_platform_email(
                     subject="Welcome to Pharmacy ERP",
                     message=(
                         f"Hello {data['retailer'].owner_name},\n\n"
@@ -213,6 +228,8 @@ class CreateRetailerView(APIView):
                         f"Expiry Date : {data['subscription'].expiry_date}\n"
                         f"Status : {data['subscription'].status}\n"
                         f"Billing Cycle : {data['subscription'].billing_cycle.title()}\n\n"
+                        f"Your password setup OTP is: {otp}\n\n"
+                        f"This OTP is valid for 10 minutes.\n\n"
                         f"Set your password using the link below:\n\n"
                         f"{setup_link}\n\n"
                         f"This link will expire in 24 hours.\n\n"
@@ -225,9 +242,7 @@ class CreateRetailerView(APIView):
                         f"Regards,\n"
                         f"Pharmacy ERP Team"
                     ),
-                    from_email=settings.DEFAULT_FROM_EMAIL,
                     recipient_list=[data["retailer"].email],
-                    fail_silently=False,
                 )
 
             create_audit_log(
@@ -348,53 +363,159 @@ class AssignSubscriptionView(APIView):
             status=status.HTTP_201_CREATED,
         )
 
+# ====================================================
+#                VERIFY PASSWORD SETUP OTP
+# ===================================================
+class VerifyPasswordSetupOTPView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        token = request.data.get("token")
+        otp = request.data.get("otp")
+
+        if not token or not otp:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Token and OTP are required."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            token_obj = PasswordSetupToken.objects.select_related(
+                "user"
+            ).get(token=token)
+
+        except (PasswordSetupToken.DoesNotExist, ValueError):
+            return Response(
+                {
+                    "success": False,
+                    "message": "Invalid password setup link."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not token_obj.is_valid():
+            return Response(
+                {
+                    "success": False,
+                    "message": "Password setup link expired or already used."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not token_obj.otp or not token_obj.otp_expires_at:
+            return Response(
+                {
+                    "success": False,
+                    "message": "OTP not found. Please request a new invitation."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if token_obj.otp_expires_at <= timezone.now():
+            return Response(
+                {
+                    "success": False,
+                    "message": "OTP has expired. Please request a new invitation."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if token_obj.otp != str(otp).strip():
+            return Response(
+                {
+                    "success": False,
+                    "message": "Invalid OTP."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        token_obj.is_otp_verified = True
+        token_obj.save(update_fields=["is_otp_verified"])
+
+        return Response(
+            {
+                "success": True,
+                "message": "OTP verified successfully. You can now set your password."
+            },
+            status=status.HTTP_200_OK,
+        )
 
 # ======================================================================
 #                   SET PASSWORD BY THE SUPERADMIN
 # ======================================================================
 class SetPasswordView(APIView):
     permission_classes = [AllowAny]
+    authentication_classes = []
 
     def post(self, request):
         serializer = SetPasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
         token = serializer.validated_data["token"]
 
         try:
+            token_obj = PasswordSetupToken.objects.select_related(
+                "user"
+            ).get(token=token)
 
-            token_obj = PasswordSetupToken.objects.get(token=token)
-
-        except PasswordSetupToken.DoesNotExist:
-
+        except (PasswordSetupToken.DoesNotExist, ValueError):
             return Response(
-                {"success": False, "message": "Invalid token"},
+                {
+                    "success": False,
+                    "message": "Invalid token."
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         if not token_obj.is_valid():
-
             return Response(
-                {"success": False, "message": "Token expired or already used"},
+                {
+                    "success": False,
+                    "message": "Token expired or already used."
+                },
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not token_obj.is_otp_valid():
+            return Response(
+                {
+                    "success": False,
+                    "message": "Please verify your email OTP before setting your password."
+                },
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         user = token_obj.user
 
         user.set_password(serializer.validated_data["password"])
         user.save()
-        token_obj.is_used = True
 
-        token_obj.save(update_fields=["is_used"])
+        token_obj.is_used = True
+        token_obj.otp = None
+        token_obj.otp_expires_at = None
+        token_obj.save(
+            update_fields=["is_used", "otp", "otp_expires_at"]
+        )
 
         create_audit_log(
             user=user,
             action="update",
             model_name="User",
             object_id=user.id,
-            description=("Password setup completed"),
+            description="Initial password setup completed after OTP verification",
         )
 
-        return Response({"success": True, "message": "Password set successfully"})
+        return Response(
+            {
+                "success": True,
+                "message": "Password set successfully."
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 # ================================================================
@@ -414,7 +535,11 @@ class ValidatePasswordTokenView(APIView):
             return Response({"valid": False})
 
         return Response(
-            {"valid": token_obj.is_valid(), "username": token_obj.user.username}
+            {
+                "valid": token_obj.is_valid(),
+                "otp_verified": token_obj.is_otp_verified,
+                "username": token_obj.user.username,
+            }
         )
 
 
@@ -453,21 +578,30 @@ class ForgotPasswordView(APIView):
             f"http://localhost:5173/reset-password/" f"{user.id}/{password_token.token}"
         )
 
-        send_mail(
-            subject="Reset Your Password",
-            message=(
-                f"Hello {user.first_name or user.username},\n\n"
-                "We received a request to reset your password.\n\n"
-                f"Click the link below to reset your password:\n\n"
-                f"{reset_link}\n\n"
-                "This link will expire in 1 hour.\n\n"
-                "If you did not request a password reset, "
-                "please ignore this email."
-            ),
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
-            fail_silently=False,
+        email_message = (
+            f"Hello {user.first_name or user.username},\n\n"
+            "We received a request to reset your password.\n\n"
+            f"Click the link below to reset your password:\n\n"
+            f"{reset_link}\n\n"
+            "This link will expire in 1 hour.\n\n"
+            "If you did not request a password reset, "
+            "please ignore this email."
         )
+
+        if user.is_superuser:
+            send_platform_email(
+                subject="Reset Your Password",
+                message=email_message,
+                recipient_list=[user.email],
+            )
+
+        else:
+            send_user_auth_email(
+                user=user,
+                subject="Reset Your Password",
+                message=email_message,
+                recipient_list=[user.email],
+            )
 
         return Response(
             {
@@ -795,12 +929,11 @@ class LoginView(APIView):
                 user=user, otp=otp, expires_at=timezone.now() + timedelta(minutes=5)
             )
 
-            send_mail(
+            send_user_auth_email(
+                user=user,
                 subject="Retail PSMS Login OTP",
                 message=f"Your OTP is {otp}. Valid for 5 minutes.",
-                from_email=settings.EMAIL_HOST_USER,
                 recipient_list=[user.email],
-                fail_silently=False,
             )
 
             create_audit_log(
@@ -1031,16 +1164,17 @@ class ResendOTPView(APIView):
             user=user, otp=otp, expires_at=timezone.now() + timedelta(minutes=5)
         )
 
-        send_mail(
+        otp_message = (
+            f"Dear {user.username},\n\n"
+            f"Your login OTP is: {otp}\n\n"
+            f"This OTP is valid for 5 minutes."
+        )
+
+        send_user_auth_email(
+            user=user,
             subject="Retail PSMS Login OTP",
-            message=(
-                f"Dear {user.username},\n\n"
-                f"Your login OTP is: {otp}\n\n"
-                f"This OTP is valid for 5 minutes."
-            ),
-            from_email=settings.EMAIL_HOST_USER,
+            message=otp_message,
             recipient_list=[user.email],
-            fail_silently=False,
         )
 
         create_audit_log(
