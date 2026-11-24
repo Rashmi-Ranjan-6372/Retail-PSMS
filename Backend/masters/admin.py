@@ -1,4 +1,5 @@
 from django.contrib import admin
+from .models.customers_models import RetailerCustomer
 from masters.models import (
     Supplier,
     Manufacturer,
@@ -526,3 +527,36 @@ class CustomerAdmin(BaseRetailerBranchAdmin):
         "created_at",
         "updated_at",
     )
+
+@admin.register(RetailerCustomer)
+class RetailerCustomerAdmin(admin.ModelAdmin):
+
+    list_display = (
+        "id",
+        "customer",
+        "retailer",
+        "branch",
+        "is_active",
+        "created_at",
+    )
+
+    list_filter = (
+        "retailer",
+        "branch",
+        "is_active",
+        "created_at",
+    )
+
+    search_fields = (
+        "customer__name",
+        "customer__mobile",
+        "retailer__name",
+    )
+
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+    )
+
+    ordering = ("-id",)
+    list_per_page = 25

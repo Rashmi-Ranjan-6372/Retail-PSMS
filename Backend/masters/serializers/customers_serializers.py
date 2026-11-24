@@ -1,43 +1,70 @@
 from rest_framework import serializers
 
-from masters.models.customers_models import Customer
+from masters.models.customers_models import Customer, RetailerCustomer
 
 
 class CustomerSerializer(serializers.ModelSerializer):
-
-    retailer_name = serializers.CharField(
-        source="retailer.name",
-        read_only=True
-    )
-
-    branch_name = serializers.CharField(
-        source="branch.name",
-        read_only=True
-    )
 
     class Meta:
         model = Customer
 
         fields = [
             "id",
-
-            # Retailer Info
-            "retailer",
-            "retailer_name",
-
-            # Branch Info
-            "branch",
-            "branch_name",
-
-            # Customer Info
             "name",
             "mobile",
             "email",
             "address",
+            "created_at",
+            "updated_at",
+        ]
 
+        read_only_fields = [
+            "id",
+            "created_at",
+            "updated_at",
+        ]
+
+    def validate_mobile(self, value):
+
+        value = value.strip()
+
+        if self.instance:
+            queryset = Customer.objects.filter(mobile=value).exclude(
+                id=self.instance.id
+            )
+
+            if queryset.exists():
+                raise serializers.ValidationError(
+                    "Customer with this mobile already exists"
+                )
+
+        return value
+
+class RetailerCustomerSerializer(serializers.ModelSerializer):
+
+    customer = CustomerSerializer(read_only=True)
+
+    retailer_name = serializers.CharField(source="retailer.name", read_only=True)
+
+    branch_name = serializers.CharField(
+        source="branch.name", read_only=True, allow_null=True
+    )
+
+    class Meta:
+        model = RetailerCustomer
+
+        fields = [
+            "id",
+            # Customer Information
+            "customer",
+            # Retailer Information
+            "retailer",
+            "retailer_name",
+            # Branch Information
+            "branch",
+            "branch_name",
             # Status
             "is_active",
-
             # Timestamps
             "created_at",
             "updated_at",
@@ -45,28 +72,11 @@ class CustomerSerializer(serializers.ModelSerializer):
 
         read_only_fields = [
             "id",
+            "customer",
             "retailer",
-            "branch",
             "retailer_name",
+            "branch",
             "branch_name",
             "created_at",
             "updated_at",
         ]
-
-    def validate_mobile(self, value):
-
-        queryset = Customer.objects.filter(
-            mobile=value
-        )
-
-        if self.instance:
-            queryset = queryset.exclude(
-                id=self.instance.id
-            )
-
-        if queryset.exists():
-            raise serializers.ValidationError(
-                "Customer with this mobile already exists"
-            )
-
-        return value

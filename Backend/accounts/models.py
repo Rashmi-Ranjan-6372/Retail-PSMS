@@ -54,6 +54,10 @@ class RetailerBranchAutoFillMixin(models.Model):
         super().save(*args, **kwargs)
 
 class PasswordSetupToken(models.Model):
+    PURPOSE_CHOICES = (
+        ("initial_setup", "Initial Setup"),
+        ("password_reset", "Password Reset"),
+    )
     user = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.CASCADE,related_name="password_setup_tokens")
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     expires_at = models.DateTimeField()
@@ -61,7 +65,7 @@ class PasswordSetupToken(models.Model):
     otp = models.CharField(max_length=6, null=True, blank=True)
     otp_expires_at = models.DateTimeField(null=True, blank=True)
     is_otp_verified = models.BooleanField(default=False)
-
+    purpose = models.CharField(max_length=20, choices=PURPOSE_CHOICES, default="initial_setup")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def is_valid(self):
@@ -74,6 +78,8 @@ class PasswordSetupToken(models.Model):
         return (
             self.is_valid()
             and self.is_otp_verified
+            and self.otp_expires_at
+            and self.otp_expires_at > timezone.now()
         )
 
     def __str__(self):
@@ -126,11 +132,19 @@ class User(AbstractUser):
         if self.is_superuser:
             self.role = "platform_owner"
 
+        password_changed = False
+
         if self.pk:
-            old_user = User.objects.filter(pk=self.pk).first()
+            old_user = User.objects.filter(pk=self.pk).only("password").first()
 
             if old_user and old_user.password != self.password:
                 self.password_changed_at = timezone.now()
+                password_changed = True
+
+        update_fields = kwargs.get("update_fields")
+
+        if password_changed and update_fields is not None:
+            kwargs["update_fields"] = set(update_fields) | {"password_changed_at"}
 
         super().save(*args, **kwargs)
 

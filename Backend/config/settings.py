@@ -1,25 +1,53 @@
 import os
 from pathlib import Path
 from datetime import timedelta
-from decouple import config
 
-# ---------------- BASE ---------------- #
+from decouple import config, Csv
+
+# ============================================================
+#                         BASE
+# ============================================================
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-# ---------------- SECURITY ---------------- #
+# ============================================================
+#                       SECURITY
+# ============================================================
 
 SECRET_KEY = config("DJANGO_SECRET_KEY")
 
 DEBUG = config("DEBUG", default=False, cast=bool)
 
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = config(
+    "ALLOWED_HOSTS",
+    default="localhost,127.0.0.1",
+    cast=Csv(),
+)
 
-CORS_ALLOW_ALL_ORIGINS = True
+
+# ============================================================
+#                         CORS
+# ============================================================
+
+CORS_ALLOWED_ORIGINS = config(
+    "CORS_ALLOWED_ORIGINS",
+    default="http://localhost:3000,http://localhost:5173",
+    cast=Csv(),
+)
+
+CORS_ALLOW_ALL_ORIGINS = False
+
+CSRF_TRUSTED_ORIGINS = config(
+    "CSRF_TRUSTED_ORIGINS",
+    default="http://localhost:3000,http://localhost:5173",
+    cast=Csv(),
+)
 
 
-# ---------------- APPLICATIONS ---------------- #
+# ============================================================
+#                     APPLICATIONS
+# ============================================================
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -45,7 +73,9 @@ INSTALLED_APPS = [
 ]
 
 
-# ---------------- MIDDLEWARE ---------------- #
+# ============================================================
+#                       MIDDLEWARE
+# ============================================================
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
@@ -56,16 +86,21 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "accounts.middleware.SessionValidationMiddleware",
+    # Add SessionValidationMiddleware only after
+    # implementing proper JWT session-ID validation.
 ]
 
 
-# ---------------- URLS ---------------- #
+# ============================================================
+#                         URLS
+# ============================================================
 
 ROOT_URLCONF = "config.urls"
 
 
-# ---------------- TEMPLATES ---------------- #
+# ============================================================
+#                       TEMPLATES
+# ============================================================
 
 TEMPLATES = [
     {
@@ -83,12 +118,16 @@ TEMPLATES = [
 ]
 
 
-# ---------------- WSGI ---------------- #
+# ============================================================
+#                          WSGI
+# ============================================================
 
 WSGI_APPLICATION = "config.wsgi.application"
 
 
-# ---------------- DATABASE ---------------- #
+# ============================================================
+#                        DATABASE
+# ============================================================
 
 DATABASES = {
     "default": {
@@ -98,12 +137,16 @@ DATABASES = {
 }
 
 
-# ---------------- AUTH USER ---------------- #
+# ============================================================
+#                       AUTH USER
+# ============================================================
 
 AUTH_USER_MODEL = "accounts.User"
 
 
-# ---------------- PASSWORD VALIDATION ---------------- #
+# ============================================================
+#                  PASSWORD VALIDATION
+# ============================================================
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -121,7 +164,9 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 
-# ---------------- INTERNATIONALIZATION ---------------- #
+# ============================================================
+#                  INTERNATIONALIZATION
+# ============================================================
 
 LANGUAGE_CODE = "en-us"
 
@@ -132,36 +177,57 @@ USE_I18N = True
 USE_TZ = True
 
 
-# ---------------- STATIC FILES ---------------- #
+# ============================================================
+#                     STATIC FILES
+# ============================================================
 
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
 
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+
+# ============================================================
+#                      MEDIA FILES
+# ============================================================
+
 MEDIA_URL = "/media/"
 
-MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+MEDIA_ROOT = BASE_DIR / "media"
 
 
-# ---------------- DEFAULT PK ---------------- #
+# ============================================================
+#                     BACKUP STORAGE
+# ============================================================
+
+# Keep private backups outside the public media directory.
+
+BACKUP_ROOT = BASE_DIR / "private_backups"
+
+
+# ============================================================
+#                    DEFAULT PRIMARY KEY
+# ============================================================
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
-# ---------------- DRF CONFIG ---------------- #
+# ============================================================
+#                     DRF CONFIGURATION
+# ============================================================
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "accounts.authentication.CustomJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
-    # Pagination
     "DEFAULT_PAGINATION_CLASS": ("rest_framework.pagination.PageNumberPagination"),
     "PAGE_SIZE": 20,
 }
 
 
-# ---------------- JWT CONFIG ---------------- #
+# ============================================================
+#                     JWT CONFIGURATION
+# ============================================================
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
@@ -179,12 +245,48 @@ SIMPLE_JWT = {
 }
 
 
-# ---------------- DYNAMIC EMAIL CONFIGURATION ---------------- #
+# ============================================================
+#                 DYNAMIC EMAIL CONFIGURATION
+# ============================================================
 
-DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="noreply@example.com")
+DEFAULT_FROM_EMAIL = config(
+    "DEFAULT_FROM_EMAIL",
+    default="noreply@example.com",
+)
 
 PASSWORD_SETUP_URL = config(
-    "PASSWORD_SETUP_URL", default="http://localhost:3000/set-password"
+    "PASSWORD_SETUP_URL",
+    default="http://localhost:3000/set-password",
+)
+
+PASSWORD_RESET_URL = config(
+    "PASSWORD_RESET_URL",
+    default="http://localhost:5173/reset-password",
 )
 
 SMTP_ENCRYPTION_KEY = config("SMTP_ENCRYPTION_KEY")
+
+
+# ============================================================
+#                  PRODUCTION SECURITY
+# ============================================================
+
+if not DEBUG:
+
+    SECURE_SSL_REDIRECT = True
+
+    SESSION_COOKIE_SECURE = True
+
+    CSRF_COOKIE_SECURE = True
+
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+
+    SECURE_BROWSER_XSS_FILTER = True
+
+    X_FRAME_OPTIONS = "DENY"
+
+    SECURE_HSTS_SECONDS = 31536000
+
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+
+    SECURE_HSTS_PRELOAD = True

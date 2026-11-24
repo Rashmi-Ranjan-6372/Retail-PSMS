@@ -1,3 +1,6 @@
+from django.db import IntegrityError, transaction
+from django.db.models.deletion import ProtectedError
+
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -8,6 +11,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from .models import Branch
 from .serializers import BranchSerializer
 
+from accounts.models import Retailer
 from accounts.permissions import IsRetailerOwnerOrPlatformOwner
 from accounts.views import create_audit_log
 
@@ -15,6 +19,42 @@ from subscriptions.utils import (
     validate_branch_subscription,
     check_subscription_write_access,
 )
+
+# =========================================================
+# COMMON BRANCH ACCESS
+# =========================================================
+
+
+def get_branch_for_user(user, pk=None):
+
+    queryset = Branch.objects.select_related("retailer", "created_by", "deleted_by")
+
+    if user.is_platform_owner():
+        pass
+
+    elif user.is_retailer_owner():
+        queryset = queryset.filter(retailer=user.retailer)
+
+    elif user.is_admin():
+        queryset = queryset.filter(retailer=user.retailer, id=user.branch_id)
+
+    else:
+        raise PermissionDenied("You do not have permission to access branches.")
+
+    if pk is not None:
+        try:
+            return queryset.get(pk=pk)
+        except Branch.DoesNotExist:
+            return None
+
+    return queryset
+
+
+def check_branch_write_access(retailer):
+
+    validate_branch_subscription(retailer)
+    check_subscription_write_access(retailer)
+
 
 # =========================================================
 # BRANCH CREATE VIEW
@@ -30,10 +70,36 @@ class BranchCreateView(APIView):
     def post(self, request):
 
         user = request.user
-        retailer = user.retailer
 
-        validate_branch_subscription(retailer)
-        check_subscription_write_access(retailer)
+        # PLATFORM OWNER
+        if user.is_platform_owner():
+
+            retailer_id = request.data.get("retailer")
+
+            if not retailer_id:
+                return Response(
+                    {"success": False, "message": "Retailer ID is required."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            try:
+                retailer = Retailer.objects.get(pk=retailer_id)
+
+            except Retailer.DoesNotExist:
+                return Response(
+                    {"success": False, "message": "Retailer not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+        # RETAILER OWNER
+        elif user.is_retailer_owner():
+
+            retailer = user.retailer
+
+        else:
+            raise PermissionDenied("You do not have permission to create a branch.")
+
+        check_branch_write_access(retailer)
 
         serializer = BranchSerializer(data=request.data, context={"request": request})
 
@@ -48,7 +114,19 @@ class BranchCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        branch = serializer.save(retailer=retailer, created_by=user)
+        try:
+            with transaction.atomic():
+
+                branch = serializer.save(retailer=retailer, created_by=user)
+
+        except IntegrityError:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Branch could not be created because of a duplicate name or code. Please try again.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         create_audit_log(
             user=user,
@@ -80,32 +158,11 @@ class BranchListView(APIView):
 
     def get(self, request):
 
-        user = request.user
+        queryset = get_branch_for_user(request.user)
 
-        # PLATFORM OWNER
-        if user.is_platform_owner():
-
-            queryset = Branch.objects.filter(deleted_at__isnull=True).select_related(
-                "retailer", "created_by", "deleted_by"
-            )
-
-        # RETAILER OWNER
-        elif user.is_retailer_owner():
-
-            queryset = Branch.objects.filter(
-                retailer=user.retailer, deleted_at__isnull=True
-            ).select_related("retailer", "created_by", "deleted_by")
-
-        # ADMIN
-        elif user.is_admin():
-
-            queryset = Branch.objects.filter(
-                id=user.branch_id, retailer=user.retailer, deleted_at__isnull=True
-            ).select_related("retailer", "created_by", "deleted_by")
-
-        else:
-
-            queryset = Branch.objects.none()
+        queryset = queryset.filter(is_active=True, deleted_at__isnull=True).order_by(
+            "name"
+        )
 
         serializer = BranchSerializer(queryset, many=True, context={"request": request})
 
@@ -126,43 +183,13 @@ class BranchDetailView(APIView):
 
     def get(self, request, pk):
 
-        try:
+        branch = get_branch_for_user(request.user, pk)
 
-            branch = Branch.objects.select_related(
-                "retailer", "created_by", "deleted_by"
-            ).get(pk=pk, deleted_at__isnull=True)
-
-        except Branch.DoesNotExist:
-
+        if branch is None or branch.deleted_at is not None:
             return Response(
                 {"success": False, "message": "Branch not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-
-        user = request.user
-
-        # PLATFORM OWNER
-        if user.is_platform_owner():
-
-            pass
-
-        # RETAILER OWNER
-        elif user.is_retailer_owner():
-
-            if branch.retailer != user.retailer:
-
-                raise PermissionDenied("You do not have access to this branch.")
-
-        # ADMIN
-        elif user.is_admin():
-
-            if branch.id != user.branch_id or branch.retailer != user.retailer:
-
-                raise PermissionDenied("You do not have access to this branch.")
-
-        else:
-
-            raise PermissionDenied("You do not have access to this branch.")
 
         serializer = BranchSerializer(branch, context={"request": request})
 
@@ -192,14 +219,9 @@ class BranchUpdateView(APIView):
 
     def _update(self, request, pk, partial=False):
 
-        try:
+        branch = get_branch_for_user(request.user, pk)
 
-            branch = Branch.objects.select_related(
-                "retailer", "created_by", "deleted_by"
-            ).get(pk=pk, deleted_at__isnull=True)
-
-        except Branch.DoesNotExist:
-
+        if branch is None or branch.deleted_at is not None:
             return Response(
                 {"success": False, "message": "Branch not found."},
                 status=status.HTTP_404_NOT_FOUND,
@@ -207,27 +229,8 @@ class BranchUpdateView(APIView):
 
         user = request.user
 
-        # PLATFORM OWNER
-        if user.is_platform_owner():
-
-            pass
-
-        # RETAILER OWNER
-        elif user.is_retailer_owner():
-
-            if branch.retailer != user.retailer:
-
-                raise PermissionDenied("You do not have access to this branch.")
-
-        else:
-
-            raise PermissionDenied("You do not have permission to update this branch.")
-
         if not user.is_platform_owner():
-
-            validate_branch_subscription(user.retailer)
-
-            check_subscription_write_access(user.retailer)
+            check_branch_write_access(branch.retailer)
 
         serializer = BranchSerializer(
             branch, data=request.data, partial=partial, context={"request": request}
@@ -244,7 +247,21 @@ class BranchUpdateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        branch = serializer.save(retailer=branch.retailer, created_by=branch.created_by)
+        try:
+            with transaction.atomic():
+
+                branch = serializer.save(
+                    retailer=branch.retailer, created_by=branch.created_by
+                )
+
+        except IntegrityError:
+            return Response(
+                {
+                    "success": False,
+                    "message": "A branch with this name or code already exists.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         create_audit_log(
             user=user,
@@ -276,14 +293,9 @@ class BranchSoftDeleteView(APIView):
 
     def patch(self, request, pk):
 
-        try:
+        branch = get_branch_for_user(request.user, pk)
 
-            branch = Branch.objects.select_related("retailer").get(
-                pk=pk, deleted_at__isnull=True
-            )
-
-        except Branch.DoesNotExist:
-
+        if branch is None or branch.deleted_at is not None:
             return Response(
                 {"success": False, "message": "Branch not found."},
                 status=status.HTTP_404_NOT_FOUND,
@@ -291,34 +303,14 @@ class BranchSoftDeleteView(APIView):
 
         user = request.user
 
-        # PLATFORM OWNER
-        if user.is_platform_owner():
-
-            pass
-
-        # RETAILER OWNER
-        elif user.is_retailer_owner():
-
-            if branch.retailer != user.retailer:
-
-                raise PermissionDenied("You do not have access to this branch.")
-
-        else:
-
-            raise PermissionDenied("You do not have permission to delete this branch.")
+        if not user.is_platform_owner():
+            check_branch_write_access(branch.retailer)
 
         if not branch.is_active:
-
             return Response(
-                {"success": False, "message": "Branch already inactive."},
+                {"success": False, "message": "Branch is already inactive."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        if not user.is_platform_owner():
-
-            validate_branch_subscription(user.retailer)
-
-            check_subscription_write_access(user.retailer)
 
         branch.soft_delete(user)
 
@@ -348,12 +340,9 @@ class BranchRestoreView(APIView):
 
     def patch(self, request, pk):
 
-        try:
+        branch = get_branch_for_user(request.user, pk)
 
-            branch = Branch.objects.select_related("retailer").get(pk=pk)
-
-        except Branch.DoesNotExist:
-
+        if branch is None:
             return Response(
                 {"success": False, "message": "Branch not found."},
                 status=status.HTTP_404_NOT_FOUND,
@@ -361,36 +350,27 @@ class BranchRestoreView(APIView):
 
         user = request.user
 
-        # PLATFORM OWNER
-        if user.is_platform_owner():
-
-            pass
-
-        # RETAILER OWNER
-        elif user.is_retailer_owner():
-
-            if branch.retailer != user.retailer:
-
-                raise PermissionDenied("You do not have access to this branch.")
-
-        else:
-
-            raise PermissionDenied("You do not have permission to restore this branch.")
-
-        if branch.is_active:
-
+        if branch.deleted_at is None:
             return Response(
-                {"success": False, "message": "Branch already active."},
+                {"success": False, "message": "Branch is not deleted."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         if not user.is_platform_owner():
+            check_branch_write_access(branch.retailer)
 
-            validate_branch_subscription(branch.retailer)
+        try:
+            with transaction.atomic():
+                branch.restore()
 
-            check_subscription_write_access(branch.retailer)
-
-        branch.restore()
+        except IntegrityError:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Cannot restore this branch. Another active branch already uses the same name or code.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         create_audit_log(
             user=user,
@@ -402,7 +382,11 @@ class BranchRestoreView(APIView):
         )
 
         return Response(
-            {"success": True, "message": "Branch restored successfully."},
+            {
+                "success": True,
+                "message": "Branch restored successfully.",
+                "data": BranchSerializer(branch, context={"request": request}).data,
+            },
             status=status.HTTP_200_OK,
         )
 
@@ -418,12 +402,9 @@ class BranchHardDeleteView(APIView):
 
     def delete(self, request, pk):
 
-        try:
+        branch = get_branch_for_user(request.user, pk)
 
-            branch = Branch.objects.select_related("retailer").get(pk=pk)
-
-        except Branch.DoesNotExist:
-
+        if branch is None:
             return Response(
                 {"success": False, "message": "Branch not found."},
                 status=status.HTTP_404_NOT_FOUND,
@@ -431,34 +412,24 @@ class BranchHardDeleteView(APIView):
 
         user = request.user
 
-        # PLATFORM OWNER
-        if user.is_platform_owner():
-
-            pass
-
-        # RETAILER OWNER
-        elif user.is_retailer_owner():
-
-            if branch.retailer != user.retailer:
-
-                raise PermissionDenied("You do not have access to this branch.")
-
-        else:
-
-            raise PermissionDenied(
-                "You do not have permission to permanently delete this branch."
-            )
-
         if not user.is_platform_owner():
-
-            validate_branch_subscription(user.retailer)
-
-            check_subscription_write_access(user.retailer)
+            check_branch_write_access(branch.retailer)
 
         branch_name = branch.name
         branch_id = branch.id
 
-        branch.hard_delete()
+        try:
+            with transaction.atomic():
+                branch.hard_delete()
+
+        except ProtectedError:
+            return Response(
+                {
+                    "success": False,
+                    "message": "This branch cannot be permanently deleted because it is linked to existing business records.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         create_audit_log(
             user=user,
@@ -486,30 +457,20 @@ class BranchStatusFilterView(APIView):
 
     def get(self, request):
 
-        user = request.user
-
         status_param = request.query_params.get("status", "active").lower()
 
-        queryset = Branch.objects.select_related("retailer", "created_by", "deleted_by")
+        allowed_statuses = ["active", "inactive", "deleted", "all"]
 
-        # PLATFORM OWNER
-        if user.is_platform_owner():
+        if status_param not in allowed_statuses:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Invalid status. Use active, inactive, deleted or all.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-            pass
-
-        # RETAILER OWNER
-        elif user.is_retailer_owner():
-
-            queryset = queryset.filter(retailer=user.retailer)
-
-        # ADMIN
-        elif user.is_admin():
-
-            queryset = queryset.filter(id=user.branch_id, retailer=user.retailer)
-
-        else:
-
-            queryset = Branch.objects.none()
+        queryset = get_branch_for_user(request.user)
 
         if status_param == "active":
 
@@ -517,19 +478,24 @@ class BranchStatusFilterView(APIView):
 
         elif status_param == "inactive":
 
-            queryset = queryset.filter(is_active=False)
+            queryset = queryset.filter(is_active=False, deleted_at__isnull=True)
 
-        elif status_param == "all":
+        elif status_param == "deleted":
 
-            pass
+            queryset = queryset.filter(deleted_at__isnull=False)
 
-        else:
+        # all returns active, inactive and deleted branches.
 
-            queryset = queryset.filter(is_active=True, deleted_at__isnull=True)
+        queryset = queryset.order_by("name")
 
         serializer = BranchSerializer(queryset, many=True, context={"request": request})
 
         return Response(
-            {"success": True, "count": queryset.count(), "data": serializer.data},
+            {
+                "success": True,
+                "status": status_param,
+                "count": queryset.count(),
+                "data": serializer.data,
+            },
             status=status.HTTP_200_OK,
         )

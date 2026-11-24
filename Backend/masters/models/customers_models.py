@@ -25,3 +25,26 @@ class Customer(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.mobile})"
+
+class RetailerCustomer(models.Model):
+
+    retailer = models.ForeignKey(Retailer,on_delete=models.CASCADE,related_name="retailer_customers")
+    customer = models.ForeignKey(Customer,on_delete=models.CASCADE,related_name="retailer_links")
+    branch = models.ForeignKey(Branch,on_delete=models.SET_NULL,null=True,blank=True,related_name="retailer_customers")
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "retailer_customers"
+        ordering = ["-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["retailer", "customer"],
+                name="unique_customer_per_retailer"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.customer.name} - {self.retailer}"

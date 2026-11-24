@@ -47,22 +47,17 @@ class ManufacturerCreateView(generics.CreateAPIView):
 
     def perform_create(self, serializer):
 
-        serializer.save(
-            retailer=self.request.user.retailer,
-            branch=self.request.user.branch
-        )
+        user = self.request.user
 
-        check_subscription_write_access(
-            self.request.user.retailer
-        )
+        check_subscription_write_access(user.retailer)
 
         manufacturer = serializer.save(
-            retailer=self.request.user.retailer,
-            branch=self.request.user.branch
+            retailer=user.retailer,
+            branch=user.branch
         )
 
         create_audit_log(
-            user=self.request.user,
+            user=user,
             action="create",
             model_name="Manufacturer",
             object_id=manufacturer.id,
