@@ -7,20 +7,10 @@ from branches.models import Branch
 class SupplierSerializer(serializers.ModelSerializer):
 
     branches = serializers.PrimaryKeyRelatedField(
-        many=True,
-        queryset=Branch.objects.all(),
-        required=False
+        many=True, queryset=Branch.objects.all(), required=False
     )
 
-    retailer_name = serializers.CharField(
-        source="retailer.name",
-        read_only=True
-    )
-
-    branch_name = serializers.CharField(
-        source="branch.name",
-        read_only=True
-    )
+    retailer_name = serializers.CharField(source="retailer.name", read_only=True)
 
     branch_names = serializers.SerializerMethodField()
 
@@ -29,46 +19,24 @@ class SupplierSerializer(serializers.ModelSerializer):
 
         fields = [
             "id",
-
-            # ================= RETAILER =================
             "retailer",
             "retailer_name",
-
-            # ================= PRIMARY BRANCH =================
-            "branch",
-            "branch_name",
-
-            # ================= MULTI BRANCH =================
             "branches",
             "branch_names",
-
-            # ================= BASIC =================
             "name",
             "contact_person",
-
-            # ================= CONTACT =================
             "phone",
             "alternate_phone",
             "email",
-
-            # ================= LEGAL =================
             "gst_no",
             "drug_license_no",
-
-            # ================= ADDRESS =================
             "address",
             "city",
             "state",
             "pincode",
-
-            # ================= FINANCE =================
             "opening_balance",
-
-            # ================= STATUS =================
             "is_active",
             "deleted_at",
-
-            # ================= TIMESTAMPS =================
             "created_at",
             "updated_at",
         ]
@@ -76,174 +44,175 @@ class SupplierSerializer(serializers.ModelSerializer):
         read_only_fields = (
             "id",
             "retailer",
-            "branch",
             "retailer_name",
-            "branch_name",
             "branch_names",
+            "is_active",
+            "deleted_at",
             "created_at",
             "updated_at",
         )
 
     def get_branch_names(self, obj):
+        return [branch.name for branch in obj.branches.all()]
 
-        return [
-            branch.name
-            for branch in obj.branches.all()
-        ]
+    def get_retailer(self):
+        retailer = self.context.get("retailer")
 
-    def validate(self, data):
+        if not retailer:
+            raise serializers.ValidationError({"retailer": "Retailer is required."})
 
-        request = self.context["request"]
-        user = request.user
-
-        branches = data.get("branches", [])
-
-        # ================= SUPERUSER =================
-
-        if user.is_superuser:
-
-            if not branches:
-                raise serializers.ValidationError({
-                    "branches":
-                    "This field is required for superuser."
-                })
-
-            invalid_branch = branches.exclude(
-                retailer=user.retailer
-            ).exists()
-
-            if invalid_branch:
-                raise serializers.ValidationError({
-                    "branches":
-                    "Invalid retailer branches selected."
-                })
-
-        # ================= NORMAL ADMIN =================
-
-        else:
-            data.pop("branches", None)
-
-        return data
+        return retailer
 
     def validate_name(self, value):
-
         value = value.strip().title()
 
-        request = self.context["request"]
-        user = request.user
-
-        queryset = Supplier.objects.filter(
-            retailer=user.retailer,
-            name__iexact=value
-        )
-
-        if self.instance:
-            queryset = queryset.exclude(
-                id=self.instance.id
-            )
-
-        if queryset.exists():
-            raise serializers.ValidationError(
-                "Supplier name already exists"
-            )
+        if not value:
+            raise serializers.ValidationError("Supplier name is required.")
 
         return value
 
     def validate_phone(self, value):
+        value = value.strip()
 
-        request = self.context["request"]
-        user = request.user
-
-        queryset = Supplier.objects.filter(
-            retailer=user.retailer,
-            phone=value
-        )
-
-        if self.instance:
-            queryset = queryset.exclude(
-                id=self.instance.id
-            )
-
-        if queryset.exists():
-            raise serializers.ValidationError(
-                "Phone number already exists"
-            )
+        if not value:
+            raise serializers.ValidationError("Phone number is required.")
 
         return value
 
     def validate_gst_no(self, value):
+        value = (value or "").strip().upper()
 
-        if value:
+        return value or None
 
-            request = self.context["request"]
-            user = request.user
+    def validate(self, data):
+        request = self.context.get("request")
 
-            queryset = Supplier.objects.filter(
-                retailer=user.retailer,
-                gst_no__iexact=value
-            )
+        if not request:
+            raise serializers.ValidationError("Request context is required.")
 
-            if self.instance:
-                queryset = queryset.exclude(
-                    id=self.instance.id
-                )
+        user = request.user
+        retailer = self.get_retailer()
 
-            if queryset.exists():
+        is_platform_owner = user.is_superuser
+        user_branch = getattr(user, "branch", None)
+
+        if self.instance:
+            if self.instance.retailer_id != retailer.id:
+                raise serializers.ValidationError("You cannot modify this supplier.")
+
+        branches = data.get("branches")
+
+        # ================= BRANCH VALIDATION =================
+
+        if branches is not None:
+
+            if not branches:
                 raise serializers.ValidationError(
-                    "GST number already exists"
+                    {"branches": "At least one branch is required."}
                 )
 
-        return value
+            for branch in branches:
+                if branch.retailer_id != retailer.id:
+                    raise serializers.ValidationError(
+                        {
+                            "branches": "Selected branch does not belong to this retailer."
+                        }
+                    )
+
+            # Branch admins cannot modify branch assignments
+            if not is_platform_owner and user_branch:
+
+                if self.instance:
+                    raise serializers.ValidationError(
+                        {
+                            "branches": "Branch admins cannot change supplier branch assignments."
+                        }
+                    )
+
+                if any(branch.id != user_branch.id for branch in branches):
+                    raise serializers.ValidationError(
+                        {
+                            "branches": "You can assign suppliers only to your own branch."
+                        }
+                    )
+
+        # ================= CREATE BRANCH VALIDATION =================
+
+        if not self.instance:
+
+            if not is_platform_owner and user_branch:
+
+                if branches is not None:
+                    if any(branch.id != user_branch.id for branch in branches):
+                        raise serializers.ValidationError(
+                            {
+                                "branches": "You can assign suppliers only to your own branch."
+                            }
+                        )
+
+            elif branches is None:
+                raise serializers.ValidationError(
+                    {"branches": "At least one branch must be selected."}
+                )
+
+        # ================= DUPLICATE VALIDATION =================
+
+        name = data.get("name", self.instance.name if self.instance else None)
+
+        phone = data.get("phone", self.instance.phone if self.instance else None)
+
+        gst_no = data.get("gst_no", self.instance.gst_no if self.instance else None)
+
+        queryset = Supplier.objects.filter(retailer=retailer)
+
+        if self.instance:
+            queryset = queryset.exclude(id=self.instance.id)
+
+        if name and queryset.filter(name__iexact=name).exists():
+            raise serializers.ValidationError({"name": "Supplier name already exists."})
+
+        if phone and queryset.filter(phone=phone).exists():
+            raise serializers.ValidationError({"phone": "Phone number already exists."})
+
+        if gst_no and queryset.filter(gst_no__iexact=gst_no).exists():
+            raise serializers.ValidationError({"gst_no": "GST number already exists."})
+
+        return data
 
     def create(self, validated_data):
+        user = self.context["request"].user
 
-        request = self.context["request"]
-        user = request.user
+        retailer = self.get_retailer()
+        branches = validated_data.pop("branches", None)
 
-        branches = validated_data.pop("branches", [])
-
-        validated_data["retailer"] = user.retailer
-        validated_data["branch"] = user.branch
-
-        supplier = Supplier.objects.create(
-            **validated_data
-        )
-
-        # ================= SUPERUSER =================
+        supplier = Supplier.objects.create(retailer=retailer, **validated_data)
 
         if user.is_superuser:
             supplier.branches.set(branches)
 
-        # ================= NORMAL ADMIN =================
+        elif getattr(user, "branch", None):
+            supplier.branches.set([user.branch])
 
         else:
-            supplier.branches.set([user.branch])
+            supplier.branches.set(branches)
 
         return supplier
 
     def update(self, instance, validated_data):
-
-        request = self.context["request"]
-        user = request.user
+        user = self.context["request"].user
 
         branches = validated_data.pop("branches", None)
 
         validated_data.pop("retailer", None)
-        validated_data.pop("branch", None)
 
-        supplier = super().update(
-            instance,
-            validated_data
-        )
+        supplier = super().update(instance, validated_data)
 
-        # ================= SUPERUSER =================
+        if not user.is_superuser and not getattr(user, "branch", None):
+            if branches is not None:
+                supplier.branches.set(branches)
 
-        if user.is_superuser and branches is not None:
-            supplier.branches.set(branches)
-
-        # ================= NORMAL ADMIN =================
-
-        elif not user.is_superuser:
-            supplier.branches.set([user.branch])
+        elif user.is_superuser:
+            if branches is not None:
+                supplier.branches.set(branches)
 
         return supplier

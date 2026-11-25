@@ -1,32 +1,34 @@
+
 from rest_framework import serializers
 
 from masters.models.sales_offer_models import SalesOffer
+
 
 class SalesOfferSerializer(serializers.ModelSerializer):
 
     product_name = serializers.CharField(
         source="product.name",
-        read_only=True
+        read_only=True,
+        allow_null=True
     )
-
     category_name = serializers.CharField(
         source="category.name",
-        read_only=True
+        read_only=True,
+        allow_null=True
     )
-
     manufacturer_name = serializers.CharField(
         source="manufacturer.name",
-        read_only=True
+        read_only=True,
+        allow_null=True
     )
-
     retailer_name = serializers.CharField(
         source="retailer.name",
         read_only=True
     )
-
     branch_name = serializers.CharField(
         source="branch.name",
-        read_only=True
+        read_only=True,
+        allow_null=True
     )
 
     class Meta:
@@ -34,54 +36,31 @@ class SalesOfferSerializer(serializers.ModelSerializer):
 
         fields = [
             "id",
-
-            # ================= RETAILER =================
             "retailer",
             "retailer_name",
-
-            # ================= BRANCH =================
             "branch",
             "branch_name",
-
-            # ================= BASIC =================
             "name",
             "offer_type",
             "discount_type",
-
-            # ================= TARGET =================
             "product",
             "product_name",
-
             "category",
             "category_name",
-
             "manufacturer",
             "manufacturer_name",
-
-            # ================= DISCOUNT =================
             "discount_percentage",
             "flat_discount_amount",
-
-            # ================= BUY X GET Y =================
             "buy_quantity",
             "free_quantity",
-
-            # ================= CONDITIONS =================
             "minimum_quantity",
             "minimum_bill_amount",
-
-            # ================= SPECIAL =================
             "expiry_before_days",
             "member_type",
-
-            # ================= DATES =================
             "start_date",
             "end_date",
-
-            # ================= STATUS =================
             "is_active",
-
-            # ================= TIMESTAMPS =================
+            "deleted_at",
             "created_at",
             "updated_at",
         ]
@@ -92,14 +71,82 @@ class SalesOfferSerializer(serializers.ModelSerializer):
             "branch",
             "retailer_name",
             "branch_name",
+            "is_active",
+            "deleted_at",
             "created_at",
             "updated_at",
         ]
 
+    # =====================================================
+    # NAME VALIDATION
+    # =====================================================
+
+    def validate_name(self, value):
+
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError(
+                "Offer name is required."
+            )
+
+        return value
+
+    # =====================================================
+    # MAIN VALIDATION
+    # =====================================================
+
     def validate(self, attrs):
 
-        request = self.context["request"]
+        request = self.context.get("request")
+
+        if not request:
+            raise serializers.ValidationError(
+                "Request context is required."
+            )
+
         user = request.user
+
+        # =================================================
+        # GET RETAILER
+        # =================================================
+
+        if self.instance:
+
+            retailer = self.instance.retailer
+
+        elif user.is_superuser:
+
+            retailer_id = request.data.get("retailer")
+
+            if not retailer_id:
+                raise serializers.ValidationError({
+                    "retailer": "Retailer is required."
+                })
+
+            from accounts.models import Retailer
+
+            try:
+                retailer = Retailer.objects.get(
+                    id=retailer_id
+                )
+            except (Retailer.DoesNotExist, ValueError, TypeError):
+                raise serializers.ValidationError({
+                    "retailer": "Invalid retailer."
+                })
+
+        else:
+
+            retailer = getattr(user, "retailer", None)
+
+            if not retailer:
+                raise serializers.ValidationError(
+                    "Retailer account is not assigned."
+                )
+
+        # =================================================
+        # GET EXISTING OR SUBMITTED VALUES
+        # =================================================
 
         product = attrs.get(
             "product",
@@ -131,93 +178,226 @@ class SalesOfferSerializer(serializers.ModelSerializer):
             getattr(self.instance, "offer_type", None)
         )
 
-        # ================= RETAILER CHECK =================
+        discount_type = attrs.get(
+            "discount_type",
+            getattr(self.instance, "discount_type", "PERCENTAGE")
+        )
 
-        if (
-            product and
-            product.retailer != user.retailer
-        ):
-            raise serializers.ValidationError({
-                "product": "Invalid retailer product"
-            })
+        discount_percentage = attrs.get(
+            "discount_percentage",
+            getattr(self.instance, "discount_percentage", None)
+        )
 
-        if (
-            category and
-            category.retailer != user.retailer
-        ):
-            raise serializers.ValidationError({
-                "category": "Invalid retailer category"
-            })
+        flat_discount_amount = attrs.get(
+            "flat_discount_amount",
+            getattr(self.instance, "flat_discount_amount", None)
+        )
 
-        if (
-            manufacturer and
-            manufacturer.retailer != user.retailer
-        ):
-            raise serializers.ValidationError({
-                "manufacturer": "Invalid retailer manufacturer"
-            })
+        buy_quantity = attrs.get(
+            "buy_quantity",
+            getattr(self.instance, "buy_quantity", None)
+        )
 
-        # ================= DATE CHECK =================
+        free_quantity = attrs.get(
+            "free_quantity",
+            getattr(self.instance, "free_quantity", None)
+        )
+
+        minimum_quantity = attrs.get(
+            "minimum_quantity",
+            getattr(self.instance, "minimum_quantity", None)
+        )
+
+        minimum_bill_amount = attrs.get(
+            "minimum_bill_amount",
+            getattr(self.instance, "minimum_bill_amount", None)
+        )
+
+        expiry_before_days = attrs.get(
+            "expiry_before_days",
+            getattr(self.instance, "expiry_before_days", None)
+        )
+
+        member_type = attrs.get(
+            "member_type",
+            getattr(self.instance, "member_type", None)
+        )
+
+        # =================================================
+        # PRODUCT VALIDATION
+        # =================================================
+
+        if product:
+
+            if product.retailer_id != retailer.id:
+                raise serializers.ValidationError({
+                    "product": "Product does not belong to this retailer."
+                })
+
+            if not product.is_active:
+                raise serializers.ValidationError({
+                    "product": "Inactive product cannot be used."
+                })
+
+        # =================================================
+        # CATEGORY VALIDATION
+        # =================================================
+
+        if category:
+
+            if category.retailer_id != retailer.id:
+                raise serializers.ValidationError({
+                    "category": "Category does not belong to this retailer."
+                })
+
+            if not category.is_active:
+                raise serializers.ValidationError({
+                    "category": "Inactive category cannot be used."
+                })
+
+        # =================================================
+        # MANUFACTURER VALIDATION
+        # =================================================
+
+        if manufacturer:
+
+            if manufacturer.retailer_id != retailer.id:
+                raise serializers.ValidationError({
+                    "manufacturer": "Manufacturer does not belong to this retailer."
+                })
+
+            if not manufacturer.is_active:
+                raise serializers.ValidationError({
+                    "manufacturer": "Inactive manufacturer cannot be used."
+                })
+
+        # =================================================
+        # DATE VALIDATION
+        # =================================================
 
         if start_date and end_date:
 
             if start_date > end_date:
                 raise serializers.ValidationError({
-                    "end_date":
-                    "End date must be greater than start date"
+                    "end_date": "End date cannot be earlier than start date."
                 })
 
-        # ================= OFFER VALIDATION =================
+        # =================================================
+        # DISCOUNT TYPE VALIDATION
+        # =================================================
 
-        if offer_type == "PRODUCT_DISCOUNT" and not product:
-            raise serializers.ValidationError({
-                "product":
-                "Product is required for product discount"
-            })
+        if discount_type == "PERCENTAGE":
 
-        if offer_type == "CATEGORY_DISCOUNT" and not category:
-            raise serializers.ValidationError({
-                "category":
-                "Category is required for category discount"
-            })
-
-        if (
-            offer_type == "MANUFACTURER_DISCOUNT" and
-            not manufacturer
-        ):
-            raise serializers.ValidationError({
-                "manufacturer":
-                "Manufacturer is required"
-            })
-
-        if offer_type == "BUY_X_GET_Y":
-
-            if not attrs.get("buy_quantity"):
+            if discount_percentage is None:
                 raise serializers.ValidationError({
-                    "buy_quantity":
-                    "Buy quantity is required"
+                    "discount_percentage": "Discount percentage is required."
                 })
 
-            if not attrs.get("free_quantity"):
+            if not 0 < discount_percentage <= 100:
                 raise serializers.ValidationError({
-                    "free_quantity":
-                    "Free quantity is required"
+                    "discount_percentage": "Discount percentage must be greater than 0 and cannot exceed 100."
+                })
+
+        elif discount_type == "FLAT":
+
+            if flat_discount_amount is None:
+                raise serializers.ValidationError({
+                    "flat_discount_amount": "Flat discount amount is required."
+                })
+
+            if flat_discount_amount <= 0:
+                raise serializers.ValidationError({
+                    "flat_discount_amount": "Flat discount amount must be greater than 0."
+                })
+
+        else:
+
+            raise serializers.ValidationError({
+                "discount_type": "Invalid discount type."
+            })
+
+        # =================================================
+        # OFFER TYPE VALIDATION
+        # =================================================
+
+        if offer_type == "PRODUCT_DISCOUNT":
+
+            if not product:
+                raise serializers.ValidationError({
+                    "product": "Product is required for product discount."
+                })
+
+        elif offer_type == "CATEGORY_DISCOUNT":
+
+            if not category:
+                raise serializers.ValidationError({
+                    "category": "Category is required for category discount."
+                })
+
+        elif offer_type == "MANUFACTURER_DISCOUNT":
+
+            if not manufacturer:
+                raise serializers.ValidationError({
+                    "manufacturer": "Manufacturer is required for manufacturer discount."
+                })
+
+        elif offer_type == "BUY_X_GET_Y":
+
+            if not buy_quantity or buy_quantity < 1:
+                raise serializers.ValidationError({
+                    "buy_quantity": "Buy quantity must be at least 1."
+                })
+
+            if not free_quantity or free_quantity < 1:
+                raise serializers.ValidationError({
+                    "free_quantity": "Free quantity must be at least 1."
+                })
+
+        elif offer_type == "QUANTITY_DISCOUNT":
+
+            if not minimum_quantity or minimum_quantity < 1:
+                raise serializers.ValidationError({
+                    "minimum_quantity": "Minimum quantity must be at least 1."
+                })
+
+        elif offer_type == "BILL_AMOUNT_DISCOUNT":
+
+            if minimum_bill_amount is None or minimum_bill_amount <= 0:
+                raise serializers.ValidationError({
+                    "minimum_bill_amount": "Minimum bill amount must be greater than 0."
+                })
+
+        elif offer_type == "EXPIRY_CLEARANCE":
+
+            if expiry_before_days is None or expiry_before_days < 1:
+                raise serializers.ValidationError({
+                    "expiry_before_days": "Expiry days must be at least 1."
+                })
+
+        elif offer_type == "MEMBER_DISCOUNT":
+
+            if not member_type or not member_type.strip():
+                raise serializers.ValidationError({
+                    "member_type": "Member type is required."
                 })
 
         return attrs
 
+    # =====================================================
+    # CREATE
+    # =====================================================
+
     def create(self, validated_data):
-
-        request = self.context["request"]
-        user = request.user
-
-        validated_data["retailer"] = user.retailer
-        validated_data["branch"] = user.branch
 
         return super().create(validated_data)
 
+    # =====================================================
+    # UPDATE
+    # =====================================================
+
     def update(self, instance, validated_data):
 
+        # Retailer and branch are controlled by the view.
         validated_data.pop("retailer", None)
         validated_data.pop("branch", None)
 

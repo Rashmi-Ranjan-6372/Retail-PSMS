@@ -1,18 +1,58 @@
+from django.db import transaction
+from django.db.models import ProtectedError
+from django.utils import timezone
+
 from rest_framework.views import APIView
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import ValidationError, PermissionDenied
 
-from masters.models import Supplier
-from masters.serializers import SupplierSerializer
+from masters.models.suppliers_models import Supplier
+from masters.serializers.suppliers_serializers import SupplierSerializer
 
 from branches.models import Branch
+from accounts.models import Retailer
 
 from accounts.permissions import IsAdmin, IsRetailerOwnerOrPlatformOwner
 
 from subscriptions.utils import check_subscription_write_access
 from accounts.views import create_audit_log
+
+# =========================================================
+# RETAILER HELPER
+# =========================================================
+
+
+def get_supplier_retailer(user, request, data=None):
+
+    if user.is_superuser:
+
+        retailer_id = None
+
+        if data:
+            retailer_id = data.get("retailer")
+
+        if not retailer_id:
+            retailer_id = request.query_params.get("retailer")
+
+        if not retailer_id:
+            raise ValidationError({"retailer": "Retailer is required."})
+
+        retailer = Retailer.objects.filter(id=retailer_id).first()
+
+        if not retailer:
+            raise ValidationError({"retailer": "Invalid retailer."})
+
+        return retailer
+
+    retailer = getattr(user, "retailer", None)
+
+    if not retailer:
+        raise ValidationError("Retailer account is not assigned.")
+
+    return retailer
+
 
 # =========================================================
 # BASE QUERYSET HELPER
@@ -21,25 +61,50 @@ from accounts.views import create_audit_log
 
 def get_supplier_queryset(user, request):
 
-    queryset = Supplier.objects.prefetch_related("branches").select_related(
-        "retailer", "branch"
-    )
+    queryset = Supplier.objects.select_related("retailer").prefetch_related("branches")
 
-    # ================= PLATFORM OWNER =================
+    retailer = get_supplier_retailer(user, request)
 
-    if user.is_superuser:
+    queryset = queryset.filter(retailer=retailer)
 
-        retailer_id = request.query_params.get("retailer")
+    # ================= BRANCH RESTRICTION =================
 
-        if retailer_id:
+    if not user.is_superuser:
 
-            queryset = queryset.filter(retailer_id=retailer_id)
+        user_branch = getattr(user, "branch", None)
 
-        return queryset
+        if user_branch:
+            queryset = queryset.filter(branches=user_branch)
 
-    # ================= RETAILER USERS =================
+    return queryset.distinct()
 
-    return queryset.filter(retailer=user.retailer)
+
+# =========================================================
+# BASE OBJECT ACCESS HELPER
+# =========================================================
+
+
+def get_supplier_object(request, pk):
+
+    supplier = get_supplier_queryset(request.user, request).filter(id=pk).first()
+
+    if not supplier:
+        raise ValidationError({"detail": "Supplier not found."})
+
+    return supplier
+
+
+# =========================================================
+# SERIALIZER CONTEXT
+# =========================================================
+
+
+def get_supplier_serializer_context(request, retailer):
+
+    return {
+        "request": request,
+        "retailer": retailer,
+    }
 
 
 # =========================================================
@@ -55,74 +120,68 @@ class SupplierCreateAPIView(APIView):
 
         user = request.user
 
-        # =================================================
-        # SUBSCRIPTION CHECK
-        # =================================================
+        retailer = get_supplier_retailer(user, request, request.data)
+
+        # ================= SUBSCRIPTION CHECK =================
 
         if not user.is_superuser:
+            check_subscription_write_access(retailer)
 
-            check_subscription_write_access(user.retailer)
+        # ================= BRANCH VALIDATION =================
 
-        serializer = SupplierSerializer(data=request.data)
-
-        serializer.is_valid(raise_exception=True)
-
-        # =================================================
-        # PLATFORM OWNER
-        # =================================================
-
-        if user.is_superuser:
-
-            retailer_id = request.data.get("retailer")
+        if user.is_superuser or not getattr(user, "branch", None):
 
             branch_ids = request.data.get("branches", [])
 
-            if not retailer_id:
-
-                raise ValidationError({"retailer": "Retailer is required"})
-
             if not branch_ids:
+                raise ValidationError({"branches": "At least one branch is required."})
 
-                raise ValidationError({"branches": ("At least one branch is required")})
+            if not isinstance(branch_ids, list):
+                raise ValidationError(
+                    {"branches": "Branches must be a list of branch IDs."}
+                )
 
-            branches = Branch.objects.filter(retailer_id=retailer_id, id__in=branch_ids)
+            branches = Branch.objects.filter(retailer=retailer, id__in=branch_ids)
 
-            if branches.count() != len(branch_ids):
-
-                raise ValidationError({"branches": "Invalid branch ids"})
-
-            supplier = serializer.save(retailer_id=retailer_id)
-
-            supplier.branches.set(branches)
-
-        # =================================================
-        # RETAILER USER
-        # =================================================
+            if branches.count() != len(set(branch_ids)):
+                raise ValidationError(
+                    {"branches": "One or more selected branches are invalid."}
+                )
 
         else:
+            branches = [user.branch]
 
-            supplier = serializer.save(retailer=user.retailer, branch=user.branch)
+        # ================= SERIALIZER =================
 
-            supplier.branches.set([user.branch])
+        serializer = SupplierSerializer(
+            data=request.data,
+            context=get_supplier_serializer_context(request, retailer),
+        )
 
-        # =================================================
-        # AUDIT LOG
-        # =================================================
+        serializer.is_valid(raise_exception=True)
+
+        with transaction.atomic():
+
+            supplier = serializer.save()
+
+        # ================= AUDIT LOG =================
 
         create_audit_log(
             user=user,
             action="create",
             model_name="Supplier",
             object_id=supplier.id,
-            description=(f"Created Supplier " f"{supplier.name}"),
+            description=f"Created Supplier {supplier.name}",
             request=request,
         )
 
         return Response(
             {
                 "success": True,
-                "message": "Supplier created successfully",
-                "data": SupplierSerializer(supplier).data,
+                "message": "Supplier created successfully.",
+                "data": SupplierSerializer(
+                    supplier, context=get_supplier_serializer_context(request, retailer)
+                ).data,
             },
             status=status.HTTP_201_CREATED,
         )
@@ -143,78 +202,74 @@ class SupplierListAPIView(APIView):
 
         queryset = get_supplier_queryset(user, request)
 
-        # =================================================
-        # ADMIN / STAFF BRANCH RESTRICTION
-        # =================================================
+        retailer = get_supplier_retailer(user, request)
 
-        if not user.is_superuser:
-
-            queryset = queryset.filter(branches=user.branch)
-
-        # =================================================
-        # FILTER PARAMETERS
-        # =================================================
+        # ================= FILTER PARAMETERS =================
 
         is_active = request.query_params.get("is_active")
-
         search = request.query_params.get("search")
-
         city = request.query_params.get("city")
-
         state = request.query_params.get("state")
-
         branch = request.query_params.get("branch")
 
-        # =================================================
-        # ACTIVE FILTER
-        # =================================================
+        # ================= ACTIVE FILTER =================
 
         if is_active is not None:
 
+            if is_active.lower() not in ["true", "false"]:
+                raise ValidationError({"is_active": "Use true or false."})
+
             queryset = queryset.filter(is_active=is_active.lower() == "true")
 
-        # =================================================
-        # CITY FILTER
-        # =================================================
+        # ================= CITY FILTER =================
 
         if city:
-
             queryset = queryset.filter(city__icontains=city)
 
-        # =================================================
-        # STATE FILTER
-        # =================================================
+        # ================= STATE FILTER =================
 
         if state:
-
             queryset = queryset.filter(state__icontains=state)
 
-        # =================================================
-        # BRANCH FILTER
-        # =================================================
+        # ================= BRANCH FILTER =================
 
         if branch:
 
-            queryset = queryset.filter(branches__id=branch)
+            selected_branch = Branch.objects.filter(
+                id=branch, retailer=retailer
+            ).first()
 
-        # =================================================
-        # SEARCH
-        # =================================================
+            if not selected_branch:
+                raise ValidationError({"branch": "Invalid branch."})
+
+            if not user.is_superuser and getattr(user, "branch", None):
+
+                if selected_branch.id != user.branch_id:
+                    raise PermissionDenied(
+                        "You cannot view suppliers from another branch."
+                    )
+
+            queryset = queryset.filter(branches=selected_branch)
+
+        # ================= SEARCH =================
 
         if search:
-
             queryset = queryset.filter(name__icontains=search)
-
-        # =================================================
-        # DISTINCT + ORDER
-        # =================================================
 
         queryset = queryset.distinct().order_by("-id")
 
-        serializer = SupplierSerializer(queryset, many=True)
+        serializer = SupplierSerializer(
+            queryset,
+            many=True,
+            context=get_supplier_serializer_context(request, retailer),
+        )
 
         return Response(
-            {"success": True, "count": queryset.count(), "data": serializer.data},
+            {
+                "success": True,
+                "count": queryset.count(),
+                "data": serializer.data,
+            },
             status=status.HTTP_200_OK,
         )
 
@@ -228,44 +283,22 @@ class SupplierDetailAPIView(APIView):
 
     permission_classes = [IsAuthenticated, IsAdmin]
 
-    def get_object(self, request, pk):
-
-        queryset = get_supplier_queryset(request.user, request)
-
-        supplier = queryset.filter(id=pk).first()
-
-        if not supplier:
-
-            raise ValidationError({"detail": "Supplier not found"})
-
-        user = request.user
-
-        # =================================================
-        # PLATFORM OWNER
-        # =================================================
-
-        if user.is_superuser:
-
-            return supplier
-
-        # =================================================
-        # BRANCH ACCESS
-        # =================================================
-
-        if user.branch in supplier.branches.all():
-
-            return supplier
-
-        raise PermissionDenied("You do not have access to this supplier.")
-
     def get(self, request, pk):
 
-        supplier = self.get_object(request, pk)
+        supplier = get_supplier_object(request, pk)
 
-        serializer = SupplierSerializer(supplier)
+        retailer = get_supplier_retailer(request.user, request)
+
+        serializer = SupplierSerializer(
+            supplier, context=get_supplier_serializer_context(request, retailer)
+        )
 
         return Response(
-            {"success": True, "data": serializer.data}, status=status.HTTP_200_OK
+            {
+                "success": True,
+                "data": serializer.data,
+            },
+            status=status.HTTP_200_OK,
         )
 
 
@@ -278,94 +311,59 @@ class SupplierUpdateAPIView(APIView):
 
     permission_classes = [IsAuthenticated, IsAdmin]
 
-    def get_object(self, request, pk):
-
-        queryset = get_supplier_queryset(request.user, request)
-
-        supplier = queryset.filter(id=pk).first()
-
-        if not supplier:
-
-            raise ValidationError({"detail": "Supplier not found"})
-
-        user = request.user
-
-        # =================================================
-        # PLATFORM OWNER
-        # =================================================
-
-        if user.is_superuser:
-
-            return supplier
-
-        # =================================================
-        # BRANCH ACCESS
-        # =================================================
-
-        if user.branch in supplier.branches.all():
-
-            return supplier
-
-        raise PermissionDenied("Cannot update this supplier")
-
     def put(self, request, pk):
-
         return self.update_supplier(request, pk, partial=False)
 
     def patch(self, request, pk):
-
         return self.update_supplier(request, pk, partial=True)
 
     def update_supplier(self, request, pk, partial=False):
 
         user = request.user
 
-        supplier = self.get_object(request, pk)
+        supplier = get_supplier_object(request, pk)
 
-        # =================================================
-        # SUBSCRIPTION CHECK
-        # =================================================
+        retailer = get_supplier_retailer(user, request)
+
+        # ================= SUBSCRIPTION CHECK =================
 
         if not user.is_superuser:
-
-            check_subscription_write_access(user.retailer)
+            check_subscription_write_access(retailer)
 
         old_name = supplier.name
 
-        serializer = SupplierSerializer(supplier, data=request.data, partial=partial)
+        serializer = SupplierSerializer(
+            supplier,
+            data=request.data,
+            partial=partial,
+            context=get_supplier_serializer_context(request, retailer),
+        )
 
         serializer.is_valid(raise_exception=True)
 
-        updated_supplier = serializer.save()
+        with transaction.atomic():
 
-        # =================================================
-        # RETAILER USER BRANCH
-        # =================================================
+            updated_supplier = serializer.save()
 
-        if not user.is_superuser:
-
-            updated_supplier.branches.set([user.branch])
-
-        # =================================================
-        # AUDIT LOG
-        # =================================================
+        # ================= AUDIT LOG =================
 
         create_audit_log(
             user=user,
             action="update",
             model_name="Supplier",
             object_id=updated_supplier.id,
-            description=(
-                f"Updated Supplier from " f"{old_name} to " f"{updated_supplier.name}"
-            ),
+            description=f"Updated Supplier from {old_name} to {updated_supplier.name}",
             request=request,
         )
 
         return Response(
             {
                 "success": True,
-                "message": "Supplier updated successfully",
-                "data": SupplierSerializer(updated_supplier).data,
+                "message": "Supplier updated successfully.",
+                "data": SupplierSerializer(
+                    updated_supplier,
+                    context=get_supplier_serializer_context(request, retailer),
+                ).data,
             },
             status=status.HTTP_200_OK,
         )
@@ -380,84 +378,51 @@ class SupplierSoftDeleteAPIView(APIView):
 
     permission_classes = [IsAuthenticated, IsAdmin]
 
-    def get_object(self, request, pk):
-
-        queryset = get_supplier_queryset(request.user, request)
-
-        supplier = queryset.filter(id=pk).first()
-
-        if not supplier:
-
-            raise ValidationError({"detail": "Supplier not found"})
-
-        user = request.user
-
-        # =================================================
-        # PLATFORM OWNER
-        # =================================================
-
-        if user.is_superuser:
-
-            return supplier
-
-        # =================================================
-        # BRANCH ACCESS
-        # =================================================
-
-        if user.branch in supplier.branches.all():
-
-            return supplier
-
-        raise PermissionDenied("Permission denied")
-
     def patch(self, request, pk):
 
         user = request.user
 
-        supplier = self.get_object(request, pk)
+        supplier = get_supplier_object(request, pk)
 
-        # =================================================
-        # ALREADY INACTIVE
-        # =================================================
+        retailer = get_supplier_retailer(user, request)
 
         if not supplier.is_active:
-
             return Response(
-                {"success": False, "message": "Supplier already inactive"},
+                {
+                    "success": False,
+                    "message": "Supplier already inactive.",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # =================================================
-        # SUBSCRIPTION CHECK
-        # =================================================
-
         if not user.is_superuser:
-
-            check_subscription_write_access(user.retailer)
-
-        # =================================================
-        # DEACTIVATE
-        # =================================================
+            check_subscription_write_access(retailer)
 
         supplier.is_active = False
+        supplier.deleted_at = timezone.now()
 
-        supplier.save(update_fields=["is_active"])
-
-        # =================================================
-        # AUDIT LOG
-        # =================================================
+        supplier.save(
+            update_fields=[
+                "is_active",
+                "deleted_at",
+                "updated_at",
+            ]
+        )
 
         create_audit_log(
             user=user,
             action="soft_delete",
             model_name="Supplier",
             object_id=supplier.id,
-            description=(f"Deactivated Supplier " f"{supplier.name}"),
+            description=f"Deactivated Supplier {supplier.name}",
             request=request,
         )
 
         return Response(
-            {"success": True, "message": "Supplier deactivated successfully"},
+            {
+                "success": True,
+                "message": "Supplier deactivated successfully.",
+            },
             status=status.HTTP_200_OK,
         )
 
@@ -471,84 +436,51 @@ class SupplierActivateAPIView(APIView):
 
     permission_classes = [IsAuthenticated, IsAdmin]
 
-    def get_object(self, request, pk):
-
-        queryset = get_supplier_queryset(request.user, request)
-
-        supplier = queryset.filter(id=pk).first()
-
-        if not supplier:
-
-            raise ValidationError({"detail": "Supplier not found"})
-
-        user = request.user
-
-        # =================================================
-        # PLATFORM OWNER
-        # =================================================
-
-        if user.is_superuser:
-
-            return supplier
-
-        # =================================================
-        # BRANCH ACCESS
-        # =================================================
-
-        if user.branch in supplier.branches.all():
-
-            return supplier
-
-        raise PermissionDenied("Permission denied")
-
     def patch(self, request, pk):
 
         user = request.user
 
-        supplier = self.get_object(request, pk)
+        supplier = get_supplier_object(request, pk)
 
-        # =================================================
-        # ALREADY ACTIVE
-        # =================================================
+        retailer = get_supplier_retailer(user, request)
 
         if supplier.is_active:
-
             return Response(
-                {"success": False, "message": "Supplier already active"},
+                {
+                    "success": False,
+                    "message": "Supplier already active.",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # =================================================
-        # SUBSCRIPTION CHECK
-        # =================================================
-
         if not user.is_superuser:
-
-            check_subscription_write_access(user.retailer)
-
-        # =================================================
-        # ACTIVATE
-        # =================================================
+            check_subscription_write_access(retailer)
 
         supplier.is_active = True
+        supplier.deleted_at = None
 
-        supplier.save(update_fields=["is_active"])
-
-        # =================================================
-        # AUDIT LOG
-        # =================================================
+        supplier.save(
+            update_fields=[
+                "is_active",
+                "deleted_at",
+                "updated_at",
+            ]
+        )
 
         create_audit_log(
             user=user,
             action="activate",
             model_name="Supplier",
             object_id=supplier.id,
-            description=(f"Activated Supplier " f"{supplier.name}"),
+            description=f"Activated Supplier {supplier.name}",
             request=request,
         )
 
         return Response(
-            {"success": True, "message": "Supplier activated successfully"},
+            {
+                "success": True,
+                "message": "Supplier activated successfully.",
+            },
             status=status.HTTP_200_OK,
         )
 
@@ -562,73 +494,44 @@ class SupplierDeleteAPIView(APIView):
 
     permission_classes = [IsAuthenticated, IsRetailerOwnerOrPlatformOwner]
 
-    def get_object(self, request, pk):
-
-        queryset = get_supplier_queryset(request.user, request)
-
-        supplier = queryset.filter(id=pk).first()
-
-        if not supplier:
-
-            raise ValidationError({"detail": "Supplier not found"})
-
-        user = request.user
-
-        # =================================================
-        # PLATFORM OWNER
-        # =================================================
-
-        if user.is_superuser:
-
-            return supplier
-
-        # =================================================
-        # BRANCH ACCESS
-        # =================================================
-
-        if user.branch in supplier.branches.all():
-
-            return supplier
-
-        raise PermissionDenied("You do not have access to this supplier.")
-
     def delete(self, request, pk):
 
         user = request.user
 
-        supplier = self.get_object(request, pk)
+        supplier = get_supplier_object(request, pk)
 
-        # =================================================
-        # SUBSCRIPTION CHECK
-        # =================================================
+        retailer = get_supplier_retailer(user, request)
 
         if not user.is_superuser:
-
-            check_subscription_write_access(user.retailer)
+            check_subscription_write_access(retailer)
 
         supplier_id = supplier.id
         supplier_name = supplier.name
 
-        # =================================================
-        # DELETE
-        # =================================================
+        try:
+            with transaction.atomic():
+                supplier.delete()
 
-        supplier.delete()
-
-        # =================================================
-        # AUDIT LOG
-        # =================================================
+        except ProtectedError:
+            raise ValidationError(
+                {
+                    "detail": "This supplier cannot be deleted because it is linked to existing records."
+                }
+            )
 
         create_audit_log(
             user=user,
             action="delete",
             model_name="Supplier",
             object_id=supplier_id,
-            description=(f"Permanently Deleted Supplier " f"{supplier_name}"),
+            description=f"Permanently deleted Supplier {supplier_name}",
             request=request,
         )
 
         return Response(
-            {"success": True, "message": "Supplier deleted permanently"},
+            {
+                "success": True,
+                "message": "Supplier deleted permanently.",
+            },
             status=status.HTTP_200_OK,
         )

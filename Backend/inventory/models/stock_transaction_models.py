@@ -1,19 +1,24 @@
+from decimal import Decimal
+
 from django.db import models
-from django.db.models import Max
-from datetime import datetime
-from django.db import transaction
-from .constants import TRANSACTION_TYPE, STOCK_TRANSACTION_STATUS
+from django.db.models import Q
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
+from django.utils import timezone
+import uuid
+
 from accounts.models import Retailer
 from branches.models import Branch
 
+from .constants import TRANSACTION_TYPE, STOCK_TRANSACTION_STATUS
 class StockTransaction(models.Model):
     retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="stock_transactions")
     branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name="stock_transactions")
     transaction_no = models.CharField(max_length=50, unique=True, blank=True)
     transaction_type = models.CharField(max_length=30, choices=TRANSACTION_TYPE)
-    supplier = models.ForeignKey("masters.Supplier", on_delete=models.SET_NULL, null=True, blank=True)
-    customer = models.ForeignKey("masters.Customer",on_delete=models.SET_NULL,null=True,blank=True)
+    supplier = models.ForeignKey("masters.Supplier", on_delete=models.PROTECT, null=True, blank=True)
+    customer = models.ForeignKey("masters.Customer",on_delete=models.PROTECT,null=True,blank=True)
     reference_no = models.CharField(max_length=50, null=True, blank=True)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     status = models.CharField(max_length=20, choices=STOCK_TRANSACTION_STATUS, default="POSTED")
@@ -28,7 +33,6 @@ class StockTransaction(models.Model):
         ordering = ["-id"]
 
         indexes = [
-            models.Index(fields=["transaction_no"]),
             models.Index(fields=["transaction_type"]),
             models.Index(fields=["status"]),
             models.Index(fields=["retailer"]),
@@ -44,55 +48,100 @@ class StockTransaction(models.Model):
             models.Index(fields=["reference_no"]),
         ]
 
-    # =========================
-    # AUTO TRANSACTION NUMBER
-    # =========================
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(total_amount__gte=0),
+                name="stock_transaction_total_nonnegative"
+            ),
+        ]
+
+    def clean(self):
+
+        super().clean()
+
+        errors = {}
+
+        valid_transaction_types = [
+            choice[0] for choice in TRANSACTION_TYPE
+        ]
+
+        valid_statuses = [
+            choice[0] for choice in STOCK_TRANSACTION_STATUS
+        ]
+
+        if (
+            self.transaction_type
+            and self.transaction_type not in valid_transaction_types
+        ):
+            errors["transaction_type"] = (
+                "Invalid transaction type."
+            )
+
+        if self.status and self.status not in valid_statuses:
+            errors["status"] = (
+                "Invalid stock transaction status."
+            )
+
+        if self.branch_id and self.retailer_id:
+
+            if self.branch.retailer_id != self.retailer_id:
+                errors["branch"] = (
+                    "Selected branch does not belong to this retailer."
+                )
+
+        if self.supplier_id and self.retailer_id:
+
+            if self.supplier.retailer_id != self.retailer_id:
+                errors["supplier"] = (
+                    "Selected supplier does not belong to this retailer."
+                )
+
+        if self.customer_id and self.retailer_id:
+
+            if self.customer.retailer_id != self.retailer_id:
+                errors["customer"] = (
+                    "Selected customer does not belong to this retailer."
+                )
+
+        if self.total_amount is not None and self.total_amount < 0:
+            errors["total_amount"] = (
+                "Total amount cannot be negative."
+            )
+
+        if errors:
+            raise ValidationError(errors)
 
     def save(self, *args, **kwargs):
 
-        if self.total_amount < 0:
-            raise ValueError(
-                "Total amount cannot be negative"
-            )
-
         if not self.transaction_type:
-            raise ValueError(
-                "Transaction type is required"
+            raise ValidationError(
+                {"transaction_type": "Transaction type is required."}
             )
 
-        if not self.transaction_no:
+        if self.total_amount is None or self.total_amount < 0:
+            raise ValidationError(
+                {"total_amount": "Total amount cannot be negative."}
+            )
 
-            year = datetime.now().year
+        is_new = self._state.adding
+        generate_transaction_no = not self.transaction_no
 
-            with transaction.atomic():
+        if generate_transaction_no and is_new:
+            self.transaction_no = f"TEMP-{uuid.uuid4().hex}"
 
-                last_transaction = (
-                    StockTransaction.objects
-                    .select_for_update()
-                    .filter(
-                        transaction_no__startswith=f"ST-{year}"
-                    )
-                    .order_by("-id")
-                    .first()
-                )
-
-                next_number = 1
-
-                if last_transaction:
-
-                    try:
-                        next_number = int(
-                            last_transaction.transaction_no.split("-")[-1]
-                        ) + 1
-
-                    except Exception:
-                        next_number = last_transaction.id + 1
-
-                self.transaction_no = (
-                    f"ST-{year}-{next_number:04d}"
-                )
+        self.full_clean()
 
         super().save(*args, **kwargs)
+
+        if is_new and generate_transaction_no:
+
+            year = timezone.localdate().year
+
+            self.transaction_no = (
+                f"ST-{year}-{self.pk:06d}"
+            )
+
+            super().save(update_fields=["transaction_no"])
 
     def __str__(self):
 

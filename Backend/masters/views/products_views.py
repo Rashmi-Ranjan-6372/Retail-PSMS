@@ -1,14 +1,33 @@
+from django.utils import timezone
+from django.db.models import Q
+from django.db.models.deletion import ProtectedError
+
 from rest_framework.views import APIView
 from rest_framework import status
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-
+from accounts.permissions import IsAdmin
 from masters.models import Product
 from masters.serializers import ProductSerializer
 
-from accounts.permissions import IsAdmin, IsSuperAdmin
 from subscriptions.utils import check_subscription_write_access
 from accounts.views import create_audit_log
+from rest_framework.permissions import IsAuthenticated
+
+# =========================================================
+# SUBSCRIPTION CHECK
+# =========================================================
+
+
+def check_product_subscription(user):
+
+    if user.is_superuser:
+        return
+
+    if not getattr(user, "retailer_id", None):
+        raise ValueError("Retailer account is not assigned.")
+
+    check_subscription_write_access(user.retailer)
+
 
 # =========================================================
 # BASE QUERYSET HELPER
@@ -17,11 +36,7 @@ from accounts.views import create_audit_log
 
 def get_product_queryset(user, request):
 
-    queryset = Product.objects.select_related(
-        "category", "manufacturer", "retailer", "branch"
-    )
-
-    # ================= PLATFORM OWNER =================
+    queryset = Product.objects.select_related("category", "manufacturer", "retailer")
 
     if user.is_superuser:
 
@@ -32,7 +47,8 @@ def get_product_queryset(user, request):
 
         return queryset
 
-    # ================= RETAILER USERS =================
+    if not getattr(user, "retailer_id", None):
+        return Product.objects.none()
 
     return queryset.filter(retailer=user.retailer)
 
@@ -50,31 +66,62 @@ class ProductCreateAPIView(APIView):
 
         user = request.user
 
-        check_subscription_write_access(user.retailer)
+        try:
+            check_product_subscription(user)
 
-        serializer = ProductSerializer(data=request.data)
+            if user.is_superuser:
+                retailer_id = request.data.get("retailer")
 
-        serializer.is_valid(raise_exception=True)
+                if not retailer_id:
+                    return Response(
+                        {"success": False, "message": "Retailer ID is required."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
-        product = serializer.save(retailer=user.retailer, branch=user.branch)
+                from accounts.models import Retailer
 
-        create_audit_log(
-            user=user,
-            action="create",
-            model_name="Product",
-            object_id=product.id,
-            description=f"Created Product {product.name}",
-            request=request,
-        )
+                try:
+                    retailer = Retailer.objects.get(id=retailer_id)
+                except Retailer.DoesNotExist:
+                    return Response(
+                        {"success": False, "message": "Retailer not found."},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
 
-        return Response(
-            {
-                "success": True,
-                "message": "Product created successfully",
-                "data": ProductSerializer(product).data,
-            },
-            status=status.HTTP_201_CREATED,
-        )
+            else:
+                retailer = user.retailer
+
+            serializer = ProductSerializer(
+                data=request.data, context={"request": request}
+            )
+
+            serializer.is_valid(raise_exception=True)
+
+            product = serializer.save(retailer=retailer)
+
+            create_audit_log(
+                user=user,
+                action="create",
+                model_name="Product",
+                object_id=product.id,
+                description=f"Created Product {product.name}",
+                request=request,
+            )
+
+            return Response(
+                {
+                    "success": True,
+                    "message": "Product created successfully.",
+                    "data": ProductSerializer(product).data,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+
+        except ValueError as e:
+            return Response(
+                {"success": False, "message": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 # =========================================================
@@ -90,75 +137,53 @@ class ProductListAPIView(APIView):
 
         queryset = get_product_queryset(request.user, request)
 
-        # =================================================
-        # FILTER PARAMETERS
-        # =================================================
-
         is_active = request.query_params.get("is_active")
-
         category = request.query_params.get("category")
-
         manufacturer = request.query_params.get("manufacturer")
-
         search = request.query_params.get("search")
-
         prescription_required = request.query_params.get("prescription_required")
-
-        branch = request.query_params.get("branch")
-
-        # =================================================
-        # ACTIVE FILTER
-        # =================================================
 
         if is_active is not None:
 
-            queryset = queryset.filter(is_active=is_active.lower() == "true")
+            if is_active.lower() not in ["true", "false"]:
+                return Response(
+                    {"success": False, "message": "is_active must be true or false."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-        # =================================================
-        # CATEGORY FILTER
-        # =================================================
+            queryset = queryset.filter(is_active=(is_active.lower() == "true"))
+
+        else:
+            queryset = queryset.filter(is_active=True)
 
         if category:
-
             queryset = queryset.filter(category_id=category)
 
-        # =================================================
-        # MANUFACTURER FILTER
-        # =================================================
-
         if manufacturer:
-
             queryset = queryset.filter(manufacturer_id=manufacturer)
 
-        # =================================================
-        # PRESCRIPTION FILTER
-        # =================================================
-
         if prescription_required is not None:
+
+            if prescription_required.lower() not in ["true", "false"]:
+                return Response(
+                    {
+                        "success": False,
+                        "message": "prescription_required must be true or false.",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             queryset = queryset.filter(
                 prescription_required=(prescription_required.lower() == "true")
             )
 
-        # =================================================
-        # BRANCH FILTER
-        # =================================================
-
-        if branch:
-
-            queryset = queryset.filter(branch_id=branch)
-
-        # =================================================
-        # SEARCH
-        # =================================================
-
         if search:
-
-            queryset = queryset.filter(name__icontains=search)
-
-        # =================================================
-        # ORDER
-        # =================================================
+            queryset = queryset.filter(
+                Q(name__icontains=search)
+                | Q(strength__icontains=search)
+                | Q(category__name__icontains=search)
+                | Q(manufacturer__name__icontains=search)
+            )
 
         queryset = queryset.order_by("name")
 
@@ -190,16 +215,20 @@ class ProductDetailAPIView(APIView):
         product = self.get_object(request, pk)
 
         if not product:
-
             return Response(
-                {"success": False, "message": "Product not found"},
+                {"success": False, "message": "Product not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
         serializer = ProductSerializer(product)
 
         return Response(
-            {"success": True, "data": serializer.data}, status=status.HTTP_200_OK
+            {
+                "success": True,
+                "message": "Product fetched successfully.",
+                "data": serializer.data,
+            },
+            status=status.HTTP_200_OK,
         )
 
 
@@ -219,11 +248,9 @@ class ProductUpdateAPIView(APIView):
         return queryset.filter(id=pk).first()
 
     def put(self, request, pk):
-
         return self.update_product(request, pk, partial=False)
 
     def patch(self, request, pk):
-
         return self.update_product(request, pk, partial=True)
 
     def update_product(self, request, pk, partial=False):
@@ -231,43 +258,63 @@ class ProductUpdateAPIView(APIView):
         product = self.get_object(request, pk)
 
         if not product:
-
             return Response(
-                {"success": False, "message": "Product not found"},
+                {"success": False, "message": "Product not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        check_subscription_write_access(request.user.retailer)
+        try:
+            check_product_subscription(request.user)
 
-        old_name = product.name
+            if not product.is_active:
+                return Response(
+                    {
+                        "success": False,
+                        "message": "Inactive product cannot be updated. Restore it first.",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-        serializer = ProductSerializer(product, data=request.data, partial=partial)
+            old_name = product.name
 
-        serializer.is_valid(raise_exception=True)
+            serializer = ProductSerializer(
+                product,
+                data=request.data,
+                partial=partial,
+                context={"request": request},
+            )
 
-        product = serializer.save()
+            serializer.is_valid(raise_exception=True)
 
-        create_audit_log(
-            user=request.user,
-            action="update",
-            model_name="Product",
-            object_id=product.id,
-            description=(f"Updated Product from " f"{old_name} to {product.name}"),
-            request=request,
-        )
+            product = serializer.save()
 
-        return Response(
-            {
-                "success": True,
-                "message": "Product updated successfully",
-                "data": ProductSerializer(product).data,
-            },
-            status=status.HTTP_200_OK,
-        )
+            create_audit_log(
+                user=request.user,
+                action="update",
+                model_name="Product",
+                object_id=product.id,
+                description=f"Updated Product from {old_name} to {product.name}",
+                request=request,
+            )
+
+            return Response(
+                {
+                    "success": True,
+                    "message": "Product updated successfully.",
+                    "data": ProductSerializer(product).data,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except ValueError as e:
+            return Response(
+                {"success": False, "message": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 # =========================================================
-# PRODUCT SOFT DELETE
+# PRODUCT SOFT DELETE / DEACTIVATE
 # =========================================================
 
 
@@ -275,53 +322,53 @@ class ProductSoftDeleteAPIView(APIView):
 
     permission_classes = [IsAuthenticated, IsAdmin]
 
-    def get_object(self, request, pk):
-
-        queryset = get_product_queryset(request.user, request)
-
-        return queryset.filter(id=pk).first()
-
     def patch(self, request, pk):
 
-        product = self.get_object(request, pk)
+        product = get_product_queryset(request.user, request).filter(id=pk).first()
 
         if not product:
-
             return Response(
-                {"success": False, "message": "Product not found"},
+                {"success": False, "message": "Product not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        check_subscription_write_access(request.user.retailer)
+        try:
+            check_product_subscription(request.user)
 
-        if not product.is_active:
+            if not product.is_active:
+                return Response(
+                    {"success": False, "message": "Product is already inactive."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            product.is_active = False
+            product.deleted_at = timezone.now()
+
+            product.save(update_fields=["is_active", "deleted_at", "updated_at"])
+
+            create_audit_log(
+                user=request.user,
+                action="soft_delete",
+                model_name="Product",
+                object_id=product.id,
+                description=f"Deactivated Product {product.name}",
+                request=request,
+            )
 
             return Response(
-                {"success": False, "message": "Product already inactive"},
+                {"success": True, "message": "Product deactivated successfully."},
+                status=status.HTTP_200_OK,
+            )
+
+        except ValueError as e:
+            return Response(
+                {"success": False, "message": str(e)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        product.is_active = False
-
-        product.save(update_fields=["is_active"])
-
-        create_audit_log(
-            user=request.user,
-            action="soft_delete",
-            model_name="Product",
-            object_id=product.id,
-            description=(f"Deactivated Product " f"{product.name}"),
-            request=request,
-        )
-
-        return Response(
-            {"success": True, "message": "Product deactivated successfully"},
-            status=status.HTTP_200_OK,
-        )
-
 
 # =========================================================
-# PRODUCT ACTIVATE
+# PRODUCT RESTORE / ACTIVATE
 # =========================================================
 
 
@@ -329,49 +376,49 @@ class ProductActivateAPIView(APIView):
 
     permission_classes = [IsAuthenticated, IsAdmin]
 
-    def get_object(self, request, pk):
-
-        queryset = get_product_queryset(request.user, request)
-
-        return queryset.filter(id=pk).first()
-
     def patch(self, request, pk):
 
-        product = self.get_object(request, pk)
+        product = get_product_queryset(request.user, request).filter(id=pk).first()
 
         if not product:
-
             return Response(
-                {"success": False, "message": "Product not found"},
+                {"success": False, "message": "Product not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        check_subscription_write_access(request.user.retailer)
+        try:
+            check_product_subscription(request.user)
 
-        if product.is_active:
+            if product.is_active:
+                return Response(
+                    {"success": False, "message": "Product is already active."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-            return Response(
-                {"success": False, "message": "Product already active"},
-                status=status.HTTP_400_BAD_REQUEST,
+            product.is_active = True
+            product.deleted_at = None
+
+            product.save(update_fields=["is_active", "deleted_at", "updated_at"])
+
+            create_audit_log(
+                user=request.user,
+                action="restore",
+                model_name="Product",
+                object_id=product.id,
+                description=f"Restored Product {product.name}",
+                request=request,
             )
 
-        product.is_active = True
+            return Response(
+                {"success": True, "message": "Product restored successfully."},
+                status=status.HTTP_200_OK,
+            )
 
-        product.save(update_fields=["is_active"])
-
-        create_audit_log(
-            user=request.user,
-            action="restore",
-            model_name="Product",
-            object_id=product.id,
-            description=(f"Activated Product " f"{product.name}"),
-            request=request,
-        )
-
-        return Response(
-            {"success": True, "message": "Product activated successfully"},
-            status=status.HTTP_200_OK,
-        )
+        except ValueError as e:
+            return Response(
+                {"success": False, "message": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 # =========================================================
@@ -381,42 +428,51 @@ class ProductActivateAPIView(APIView):
 
 class ProductDeleteAPIView(APIView):
 
-    permission_classes = [IsAuthenticated, IsSuperAdmin]
-
-    def get_object(self, request, pk):
-
-        queryset = get_product_queryset(request.user, request)
-
-        return queryset.filter(id=pk).first()
-
+    permission_classes = [IsAuthenticated, IsAdmin]
+    
     def delete(self, request, pk):
 
-        product = self.get_object(request, pk)
+        product = get_product_queryset(request.user, request).filter(id=pk).first()
 
         if not product:
-
             return Response(
-                {"success": False, "message": "Product not found"},
+                {"success": False, "message": "Product not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        check_subscription_write_access(request.user.retailer)
+        try:
+            check_product_subscription(request.user)
 
-        product_name = product.name
-        product_id = product.id
+            product_name = product.name
+            product_id = product.id
 
-        product.delete()
+            product.delete()
 
-        create_audit_log(
-            user=request.user,
-            action="delete",
-            model_name="Product",
-            object_id=product_id,
-            description=(f"Permanently Deleted Product " f"{product_name}"),
-            request=request,
-        )
+            create_audit_log(
+                user=request.user,
+                action="delete",
+                model_name="Product",
+                object_id=product_id,
+                description=f"Permanently deleted Product {product_name}",
+                request=request,
+            )
 
-        return Response(
-            {"success": True, "message": "Product deleted permanently"},
-            status=status.HTTP_200_OK,
-        )
+            return Response(
+                {"success": True, "message": "Product deleted permanently."},
+                status=status.HTTP_200_OK,
+            )
+
+        except ProtectedError:
+            return Response(
+                {
+                    "success": False,
+                    "message": "This product is already used in inventory or other records. Deactivate it instead.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        except ValueError as e:
+            return Response(
+                {"success": False, "message": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )

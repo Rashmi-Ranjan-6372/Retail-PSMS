@@ -2,16 +2,12 @@ from rest_framework import serializers
 
 from masters.models.products_models import Product
 
+
 class ProductSerializer(serializers.ModelSerializer):
 
-    category_name = serializers.CharField(
-        source="category.name",
-        read_only=True
-    )
-
+    category_name = serializers.CharField(source="category.name", read_only=True)
     manufacturer_name = serializers.CharField(
-        source="manufacturer.name",
-        read_only=True
+        source="manufacturer.name", read_only=True
     )
 
     class Meta:
@@ -20,19 +16,15 @@ class ProductSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "retailer",
-            "branch",
             "name",
             "category",
             "category_name",
             "manufacturer",
             "manufacturer_name",
             "strength",
-            "units_per_strip",
-            "loose_sale_allowed",
             "prescription_required",
-            "rack_no",
-            "minimum_stock",
             "is_active",
+            "deleted_at",
             "created_at",
             "updated_at",
         ]
@@ -40,85 +32,109 @@ class ProductSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "retailer",
-            "branch",
+            "is_active",
+            "deleted_at",
             "created_at",
             "updated_at",
         ]
 
+    def validate_name(self, value):
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError("Product name is required.")
+
+        return value
+
+    def validate_strength(self, value):
+        return (value or "").strip()
+
     def validate(self, attrs):
 
-        request = self.context["request"]
+        request = self.context.get("request")
+
+        if not request:
+            raise serializers.ValidationError("Request context is required.")
+
         user = request.user
+        retailer = getattr(user, "retailer", None)
 
-        category = attrs.get(
-            "category",
-            getattr(self.instance, "category", None)
-        )
+        if not user.is_superuser and not retailer:
+            raise serializers.ValidationError("Retailer account is not assigned.")
 
+        category = attrs.get("category", getattr(self.instance, "category", None))
         manufacturer = attrs.get(
-            "manufacturer",
-            getattr(self.instance, "manufacturer", None)
+            "manufacturer", getattr(self.instance, "manufacturer", None)
         )
+        name = attrs.get("name", getattr(self.instance, "name", None))
+        strength = attrs.get("strength", getattr(self.instance, "strength", "")) or ""
 
-        name = attrs.get(
-            "name",
-            getattr(self.instance, "name", None)
-        )
+        if category:
 
-        strength = attrs.get(
-            "strength",
-            getattr(self.instance, "strength", None)
-        )
-
-        # ================= CATEGORY RETAILER CHECK ================= #
-
-        if category and category.retailer != user.retailer:
-            raise serializers.ValidationError({
-                "category": "Invalid category for this retailer"
-            })
-
-        # ================= MANUFACTURER RETAILER CHECK ================= #
-
-        if manufacturer and manufacturer.retailer != user.retailer:
-            raise serializers.ValidationError({
-                "manufacturer": "Invalid manufacturer for this retailer"
-            })
-
-        # ================= UNIQUE PRODUCT CHECK ================= #
-
-        queryset = Product.objects.filter(
-            retailer=user.retailer,
-            name__iexact=name,
-            manufacturer=manufacturer,
-            strength=strength
-        )
-
-        if self.instance:
-            queryset = queryset.exclude(id=self.instance.id)
-
-        if queryset.exists():
-            raise serializers.ValidationError({
-                "name": (
-                    "Product with same name, manufacturer "
-                    "and strength already exists"
+            if not user.is_superuser and category.retailer_id != retailer.id:
+                raise serializers.ValidationError(
+                    {"category": "Category does not belong to this retailer."}
                 )
-            })
+
+            if not category.is_active:
+                raise serializers.ValidationError(
+                    {"category": "Cannot use an inactive category."}
+                )
+
+        if manufacturer:
+
+            if not user.is_superuser and manufacturer.retailer_id != retailer.id:
+                raise serializers.ValidationError(
+                    {"manufacturer": "Manufacturer does not belong to this retailer."}
+                )
+
+            if not manufacturer.is_active:
+                raise serializers.ValidationError(
+                    {"manufacturer": "Cannot use an inactive manufacturer."}
+                )
+
+        if name and manufacturer:
+
+            product_retailer = (
+                retailer if retailer else getattr(self.instance, "retailer", None)
+            )
+
+            if not product_retailer:
+                raise serializers.ValidationError({"retailer": "Retailer is required."})
+
+            queryset = Product.objects.filter(
+                retailer=product_retailer,
+                name__iexact=name,
+                manufacturer=manufacturer,
+                strength__iexact=strength,
+            )
+
+            if self.instance:
+                queryset = queryset.exclude(id=self.instance.id)
+
+            if queryset.exists():
+                raise serializers.ValidationError(
+                    {
+                        "name": "Product with the same name, manufacturer and strength already exists."
+                    }
+                )
 
         return attrs
 
     def create(self, validated_data):
-
         request = self.context["request"]
         user = request.user
 
-        validated_data["retailer"] = user.retailer
-        validated_data["branch"] = user.branch
+        if not user.is_superuser and not user.retailer_id:
+            raise serializers.ValidationError("Retailer account is not assigned.")
+
+        if not user.is_superuser:
+            validated_data["retailer"] = user.retailer
 
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
 
         validated_data.pop("retailer", None)
-        validated_data.pop("branch", None)
 
         return super().update(instance, validated_data)

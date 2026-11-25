@@ -2,16 +2,13 @@ from rest_framework import serializers
 
 from masters.models.manufacturers_models import Manufacturer
 
+
 class ManufacturerSerializer(serializers.ModelSerializer):
 
-    retailer_name = serializers.CharField(
-        source="retailer.name",
-        read_only=True
-    )
+    retailer_name = serializers.CharField(source="retailer.name", read_only=True)
 
     branch_name = serializers.CharField(
-        source="branch.name",
-        read_only=True
+        source="branch.name", read_only=True, allow_null=True
     )
 
     class Meta:
@@ -19,28 +16,18 @@ class ManufacturerSerializer(serializers.ModelSerializer):
 
         fields = [
             "id",
-
-            # Retailer Info
             "retailer",
             "retailer_name",
-
-            # Branch Info
             "branch",
             "branch_name",
-
-            # Manufacturer Info
             "name",
             "gst_no",
-
-            # Status
             "is_active",
-
-            # Timestamps
             "created_at",
             "updated_at",
         ]
 
-        read_only_fields = (
+        read_only_fields = [
             "id",
             "retailer",
             "branch",
@@ -48,34 +35,31 @@ class ManufacturerSerializer(serializers.ModelSerializer):
             "branch_name",
             "created_at",
             "updated_at",
-        )
+        ]
 
     def validate_name(self, value):
 
         value = value.strip()
 
-        request = self.context.get("request")
-
-        queryset = Manufacturer.objects.filter(
-            name__iexact=value
+        retailer = (
+            self.instance.retailer
+            if self.instance
+            else self.context["request"].user.retailer
         )
 
-        # ================= RETAILER WISE CHECK =================
-        if request and not request.user.is_superuser:
-            queryset = queryset.filter(
-                retailer=request.user.retailer
+        if retailer is None:
+            raise serializers.ValidationError(
+                "Retailer is required to validate manufacturer name."
             )
 
-        instance = getattr(self, "instance", None)
+        queryset = Manufacturer.objects.filter(retailer=retailer, name__iexact=value)
 
-        if instance:
-            queryset = queryset.exclude(
-                id=instance.id
-            )
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
 
         if queryset.exists():
             raise serializers.ValidationError(
-                "Manufacturer already exists"
+                "Manufacturer already exists for this retailer."
             )
 
         return value

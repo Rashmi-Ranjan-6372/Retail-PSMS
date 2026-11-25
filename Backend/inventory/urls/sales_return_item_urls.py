@@ -6,16 +6,6 @@ from inventory.views.sales_return_item_views import (
 )
 
 urlpatterns = [
-
-    path(
-        "",
-        SalesReturnItemListCreateView.as_view(),
-        name="sales-return-item-list-create",
-    ),
-
-    path(
-        "<int:pk>/",
-        SalesReturnItemDetailView.as_view(),
-        name="sales-return-item-detail",
-    ),
+    path("sales-return-items/",SalesReturnItemListCreateView.as_view(),name="sales-return-item-list-create",),
+    path("sales-return-items/<int:pk>/",SalesReturnItemDetailView.as_view(),name="sales-return-item-detail",),
 ]

@@ -4,3 +4,4 @@ from .products_category_serializers import *
 from .products_serializers import *
 from .sales_offer_serializers import *
 from .suppliers_serializers import *
+from .product_variants_serializers import *

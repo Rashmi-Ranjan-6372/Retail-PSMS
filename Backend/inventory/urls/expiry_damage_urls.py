@@ -6,16 +6,6 @@ from inventory.views.expiry_damage_views import (
 )
 
 urlpatterns = [
-
-    path(
-        "",
-        ExpiryDamageListCreateView.as_view(),
-        name="expiry-damage-list-create"
-    ),
-
-    path(
-        "<int:pk>/",
-        ExpiryDamageDetailView.as_view(),
-        name="expiry-damage-detail"
-    ),
+    path("expiry-damage/",ExpiryDamageListCreateView.as_view(),name="expiry-damage-list-create"),
+    path("expiry-damage/<int:pk>/",ExpiryDamageDetailView.as_view(),name="expiry-damage-detail"),
 ]

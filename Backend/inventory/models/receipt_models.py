@@ -1,11 +1,14 @@
-from django.db import models
-from django.db.models import Max
-from datetime import datetime
-from django.db import transaction
-from .constants import PAYMENT_METHOD, RECEIPT_STATUS
+
+from django.db import models, transaction
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.db.models import Q
+from django.utils import timezone
+
 from accounts.models import Retailer
 from branches.models import Branch
+
+from .constants import PAYMENT_METHOD, RECEIPT_STATUS
 
 class Receipt(models.Model):
     retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="receipts")
@@ -25,7 +28,6 @@ class Receipt(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-
         ordering = ["-created_at"]
 
         indexes = [
@@ -42,42 +44,83 @@ class Receipt(models.Model):
             models.Index(fields=["customer", "status"]),
         ]
 
-    # =========================
-    # AUTO GENERATE RECEIPT NO
-    # =========================
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(amount__gt=0),
+                name="receipt_amount_positive"
+            ),
+            models.CheckConstraint(
+                condition=Q(paid_amount__gte=0),
+                name="receipt_paid_amount_nonnegative"
+            ),
+            models.CheckConstraint(
+                condition=Q(due_amount__gte=0),
+                name="receipt_due_amount_nonnegative"
+            ),
+            models.CheckConstraint(
+                condition=Q(paid_amount__lte=models.F("amount")),
+                name="receipt_paid_not_exceed_amount"
+            ),
+            models.CheckConstraint(
+                condition=Q(
+                    due_amount=models.F("amount") - models.F("paid_amount")
+                ),
+                name="receipt_due_matches_amount"
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+
+        if self.amount is not None and self.amount <= 0:
+            raise ValidationError({
+                "amount": "Receipt amount must be greater than zero."
+            })
+
+        if self.paid_amount is not None and self.paid_amount < 0:
+            raise ValidationError({
+                "paid_amount": "Paid amount cannot be negative."
+            })
+
+        if (
+            self.amount is not None
+            and self.paid_amount is not None
+            and self.paid_amount > self.amount
+        ):
+            raise ValidationError({
+                "paid_amount": "Paid amount cannot exceed receipt amount."
+            })
+
+        if self.branch_id and self.branch.retailer_id != self.retailer_id:
+            raise ValidationError({
+                "branch": "Selected branch does not belong to this retailer."
+            })
+
+        if self.customer_id and self.customer.retailer_id != self.retailer_id:
+            raise ValidationError({
+                "customer": "Selected customer does not belong to this retailer."
+            })
 
     def save(self, *args, **kwargs):
 
-        if not self.receipt_no:
-
-            year = datetime.now().year
-
-            with transaction.atomic():
-
-                last_id = (
-                    Receipt.objects.filter(
-                        receipt_no__startswith=f"RCPT-{year}"
-                    ).aggregate(
-                        max_id=Max("id")
-                    )["max_id"] or 0
-                )
-
-                next_number = last_id + 1
-
-                self.receipt_no = (
-                    f"RCPT-{year}-{next_number:04d}"
-                )
-
-        if self.paid_amount > self.amount:
-            raise ValueError(
-                "Paid amount cannot exceed total amount"
+        if self.amount is None or self.amount <= 0:
+            raise ValidationError(
+                "Receipt amount must be greater than zero."
             )
 
-        self.due_amount = (
-            self.amount - self.paid_amount
-        )
+        if self.paid_amount is None or self.paid_amount < 0:
+            raise ValidationError(
+                "Paid amount cannot be negative."
+            )
 
-        if self.due_amount <= 0:
+        if self.paid_amount > self.amount:
+            raise ValidationError(
+                "Paid amount cannot exceed receipt amount."
+            )
+
+        self.due_amount = self.amount - self.paid_amount
+
+        if self.due_amount == 0:
             self.status = "RECEIVED"
 
         elif self.paid_amount > 0:
@@ -86,4 +129,25 @@ class Receipt(models.Model):
         else:
             self.status = "PENDING"
 
+        if not self.receipt_no:
+            with transaction.atomic():
+                if not self.pk:
+                    super().save(*args, **kwargs)
+
+                self.receipt_no = (
+                    f"RCPT-{timezone.localdate().year}-{self.pk:06d}"
+                )
+
+                self.full_clean()
+
+                super().save(
+                    update_fields=["receipt_no", "due_amount", "status", "updated_at"]
+                )
+
+            return
+
+        self.full_clean()
         super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.receipt_no

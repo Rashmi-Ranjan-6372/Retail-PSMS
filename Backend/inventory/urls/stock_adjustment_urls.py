@@ -6,18 +6,6 @@ from inventory.views.stock_adjustment_views import (
 )
 
 urlpatterns = [
-
-    # ================= STOCK ADJUSTMENT ================= #
-
-    path(
-        "stock-adjustments/",
-        StockAdjustmentListCreateView.as_view(),
-        name="stock-adjustment-list-create"
-    ),
-
-    path(
-        "stock-adjustments/<int:pk>/",
-        StockAdjustmentDetailView.as_view(),
-        name="stock-adjustment-detail"
-    ),
+    path("stock-adjustments/",StockAdjustmentListCreateView.as_view(),name="stock-adjustment-list-create"),
+    path("stock-adjustments/<int:pk>/",StockAdjustmentDetailView.as_view(),name="stock-adjustment-detail"),
 ]

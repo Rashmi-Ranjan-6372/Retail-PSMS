@@ -72,34 +72,100 @@ class SalesOffer(models.Model):
             self.is_active and
             self.start_date <= today <= self.end_date
         )
-
+    
     def clean(self):
 
-        if self.start_date > self.end_date:
-            raise ValidationError(
-                "Start date cannot be greater than end date"
-            )
+        if self.start_date and self.end_date:
+            if self.start_date > self.end_date:
+                raise ValidationError({
+                    "end_date": "End date cannot be earlier than start date."
+                })
 
-        if (
-            self.discount_type == "PERCENTAGE" and
-            self.discount_percentage is None
-        ):
-            raise ValidationError(
-                "Discount percentage is required"
-            )
+        if self.discount_type == "PERCENTAGE":
 
-        if (
-            self.discount_type == "FLAT" and
-            self.flat_discount_amount is None
-        ):
-            raise ValidationError(
-                "Flat discount amount is required"
-            )
+            if self.discount_percentage is None:
+                raise ValidationError({
+                    "discount_percentage": "Discount percentage is required."
+                })
+
+            if not 0 < self.discount_percentage <= 100:
+                raise ValidationError({
+                    "discount_percentage": "Discount percentage must be greater than 0 and cannot exceed 100."
+                })
+
+        elif self.discount_type == "FLAT":
+
+            if self.flat_discount_amount is None:
+                raise ValidationError({
+                    "flat_discount_amount": "Flat discount amount is required."
+                })
+
+            if self.flat_discount_amount <= 0:
+                raise ValidationError({
+                    "flat_discount_amount": "Flat discount amount must be greater than 0."
+                })
+
+        if self.offer_type == "PRODUCT_DISCOUNT" and not self.product:
+            raise ValidationError({
+                "product": "Product is required for product discount."
+            })
+
+        if self.offer_type == "CATEGORY_DISCOUNT" and not self.category:
+            raise ValidationError({
+                "category": "Category is required for category discount."
+            })
+
+        if self.offer_type == "MANUFACTURER_DISCOUNT" and not self.manufacturer:
+            raise ValidationError({
+                "manufacturer": "Manufacturer is required for manufacturer discount."
+            })
+
+        if self.offer_type == "BUY_X_GET_Y":
+
+            if not self.buy_quantity or self.buy_quantity < 1:
+                raise ValidationError({
+                    "buy_quantity": "Buy quantity must be at least 1."
+                })
+
+            if not self.free_quantity or self.free_quantity < 1:
+                raise ValidationError({
+                    "free_quantity": "Free quantity must be at least 1."
+                })
+
+        if self.offer_type == "QUANTITY_DISCOUNT":
+
+            if not self.minimum_quantity or self.minimum_quantity < 1:
+                raise ValidationError({
+                    "minimum_quantity": "Minimum quantity must be at least 1."
+                })
+
+        if self.offer_type == "BILL_AMOUNT_DISCOUNT":
+
+            if self.minimum_bill_amount is None or self.minimum_bill_amount <= 0:
+                raise ValidationError({
+                    "minimum_bill_amount": "Minimum bill amount must be greater than 0."
+                })
+
+        if self.offer_type == "EXPIRY_CLEARANCE":
+
+            if self.expiry_before_days is None or self.expiry_before_days < 1:
+                raise ValidationError({
+                    "expiry_before_days": "Expiry clearance days must be at least 1."
+                })
+
+        if self.offer_type == "MEMBER_DISCOUNT":
+
+            if not self.member_type:
+                raise ValidationError({
+                    "member_type": "Member type is required."
+                })
+
+        if self.branch_id and self.retailer_id:
+            if self.branch.retailer_id != self.retailer_id:
+                raise ValidationError({
+                    "branch": "Selected branch does not belong to this retailer."
+                })
 
     def save(self, *args, **kwargs):
-
         self.full_clean()
-
         super().save(*args, **kwargs)
-        
-        

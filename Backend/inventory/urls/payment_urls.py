@@ -1,3 +1,4 @@
+
 from django.urls import path
 
 from inventory.views.payment_views import (
@@ -5,17 +6,8 @@ from inventory.views.payment_views import (
     PaymentDetailView,
 )
 
+
 urlpatterns = [
-
-    path(
-        "",
-        PaymentListCreateView.as_view(),
-        name="payment-list-create",
-    ),
-
-    path(
-        "<int:pk>/",
-        PaymentDetailView.as_view(),
-        name="payment-detail",
-    ),
+    path("payments/",PaymentListCreateView.as_view(),name="payment-list-create",),
+    path("payments/<int:pk>/",PaymentDetailView.as_view(),name="payment-detail",),
 ]

@@ -1,9 +1,34 @@
 from django.db import transaction
-from django.db.models import F
+from django.utils import timezone
+
 from inventory.models.stock_batch_models import StockBatch
-from subscriptions.utils import (check_subscription_write_access, validate_branch_subscription)
+from subscriptions.utils import (
+    check_subscription_write_access,
+    validate_branch_subscription,
+)
+
 
 class BatchService:
+
+    @staticmethod
+    def _validate_quantity(qty):
+
+        try:
+            qty = int(qty)
+        except (TypeError, ValueError):
+            raise ValueError("Quantity must be a valid integer.")
+
+        if qty <= 0:
+            raise ValueError("Quantity must be greater than 0.")
+
+        return qty
+
+    @staticmethod
+    def _check_subscription(batch):
+
+        check_subscription_write_access(batch.retailer)
+
+        validate_branch_subscription(batch.retailer)
 
     # =====================================================
     # UPDATE AVAILABLE QUANTITY
@@ -11,57 +36,38 @@ class BatchService:
 
     @staticmethod
     @transaction.atomic
-    def update_available_qty(
-        batch_id,
-        qty,
-        operation="minus"
-    ):
+    def update_available_qty(batch_id, qty, operation="minus"):
 
-        batch = (
-            StockBatch.objects
-            .select_for_update()
-            .get(id=batch_id)
-        )
+        try:
+            batch = StockBatch.objects.select_for_update().get(id=batch_id)
+        except StockBatch.DoesNotExist:
+            raise ValueError("Stock batch not found.")
 
-        check_subscription_write_access(
-            batch.retailer
-        )
+        BatchService._check_subscription(batch)
 
-        validate_branch_subscription(
-            batch.retailer
-        )
-
-        qty = int(qty)
+        qty = BatchService._validate_quantity(qty)
 
         if operation == "minus":
 
             if batch.available_qty < qty:
+                raise ValueError(f"Insufficient stock in batch {batch.batch_no}.")
 
-                raise ValueError(
-                    f"Insufficient stock in batch "
-                    f"{batch.batch_no}"
-                )
-
-            batch.available_qty = (
-                batch.available_qty - qty
-            )
+            batch.available_qty -= qty
 
         elif operation == "plus":
 
-            batch.available_qty = (
-                batch.available_qty + qty
-            )
+            if batch.available_qty + batch.reserved_qty + qty > batch.quantity:
+                raise ValueError(
+                    "Available quantity cannot exceed total stock "
+                    "after considering reserved stock."
+                )
+
+            batch.available_qty += qty
 
         else:
+            raise ValueError("Invalid operation. Use 'plus' or 'minus'.")
 
-            raise ValueError(
-                "Invalid operation. "
-                "Use 'plus' or 'minus'."
-            )
-
-        batch.save(
-            update_fields=["available_qty"]
-        )
+        batch.save(update_fields=["available_qty"])
 
         return batch
 
@@ -71,43 +77,24 @@ class BatchService:
 
     @staticmethod
     @transaction.atomic
-    def reserve_stock(
-        batch_id,
-        qty
-    ):
+    def reserve_stock(batch_id, qty):
 
-        batch = (
-            StockBatch.objects
-            .select_for_update()
-            .get(id=batch_id)
-        )
+        try:
+            batch = StockBatch.objects.select_for_update().get(id=batch_id)
+        except StockBatch.DoesNotExist:
+            raise ValueError("Stock batch not found.")
 
-        check_subscription_write_access(
-            batch.retailer
-        )
+        BatchService._check_subscription(batch)
 
-        validate_branch_subscription(
-            batch.retailer
-        )
-
-        qty = int(qty)
+        qty = BatchService._validate_quantity(qty)
 
         if batch.available_qty < qty:
-
-            raise ValueError(
-                "Not enough available stock."
-            )
+            raise ValueError(f"Not enough available stock in batch {batch.batch_no}.")
 
         batch.available_qty -= qty
-
         batch.reserved_qty += qty
 
-        batch.save(
-            update_fields=[
-                "available_qty",
-                "reserved_qty"
-            ]
-        )
+        batch.save(update_fields=["available_qty", "reserved_qty"])
 
         return batch
 
@@ -117,43 +104,24 @@ class BatchService:
 
     @staticmethod
     @transaction.atomic
-    def release_reserved_stock(
-        batch_id,
-        qty
-    ):
+    def release_reserved_stock(batch_id, qty):
 
-        batch = (
-            StockBatch.objects
-            .select_for_update()
-            .get(id=batch_id)
-        )
+        try:
+            batch = StockBatch.objects.select_for_update().get(id=batch_id)
+        except StockBatch.DoesNotExist:
+            raise ValueError("Stock batch not found.")
 
-        check_subscription_write_access(
-            batch.retailer
-        )
+        BatchService._check_subscription(batch)
 
-        validate_branch_subscription(
-            batch.retailer
-        )
-
-        qty = int(qty)
+        qty = BatchService._validate_quantity(qty)
 
         if batch.reserved_qty < qty:
-
-            raise ValueError(
-                "Reserved quantity exceeded."
-            )
+            raise ValueError(f"Reserved quantity exceeded in batch {batch.batch_no}.")
 
         batch.reserved_qty -= qty
-
         batch.available_qty += qty
 
-        batch.save(
-            update_fields=[
-                "available_qty",
-                "reserved_qty"
-            ]
-        )
+        batch.save(update_fields=["available_qty", "reserved_qty"])
 
         return batch
 
@@ -162,15 +130,22 @@ class BatchService:
     # =====================================================
 
     @staticmethod
-    def get_available_batches(
-        product
-    ):
+    def get_available_batches(product, branch):
 
-        return (
-            StockBatch.objects.filter(
-                product=product,
-                available_qty__gt=0,
-                is_expired=False
-            )
-            .order_by("expiry_date")
-        )
+        if not product:
+            raise ValueError("Product is required.")
+
+        if not branch:
+            raise ValueError("Branch is required.")
+
+        if product.retailer_id != branch.retailer_id:
+            raise ValueError("Product and branch must belong to the same retailer.")
+
+        return StockBatch.objects.filter(
+            retailer_id=product.retailer_id,
+            branch=branch,
+            product=product,
+            available_qty__gt=0,
+            is_expired=False,
+            expiry_date__gte=timezone.localdate(),
+        ).order_by("expiry_date", "id")

@@ -1,6 +1,5 @@
 from django.urls import path
-from .manufacturer_views import *
-from Backend.masters.views.manufacturers_views import *
+from masters.views.manufacturers_views import *
 
 urlpatterns = [
     path('manufacturers/', ManufacturerListView.as_view()),

@@ -6,16 +6,6 @@ from inventory.views.stock_transaction_views import (
 )
 
 urlpatterns = [
-
-    path(
-        "stock-transactions/",
-        StockTransactionListCreateView.as_view(),
-        name="stock-transaction-list-create",
-    ),
-
-    path(
-        "stock-transactions/<int:pk>/",
-        StockTransactionDetailView.as_view(),
-        name="stock-transaction-detail",
-    ),
+    path("stock-transactions/",StockTransactionListCreateView.as_view(),name="stock-transaction-list-create",),
+    path("stock-transactions/<int:pk>/",StockTransactionDetailView.as_view(),name="stock-transaction-detail",),
 ]

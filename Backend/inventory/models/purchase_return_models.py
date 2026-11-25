@@ -1,11 +1,13 @@
-from django.db import models
-from django.db.models import Max
-from datetime import datetime
-from django.db import transaction
-from .constants import RETURN_STATUS
+from django.db import models, transaction
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.db.models import Q
+from django.utils import timezone
+
 from accounts.models import Retailer
 from branches.models import Branch
+
+from .constants import RETURN_STATUS
 
 class PurchaseReturn(models.Model):
     retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="purchase_returns")
@@ -24,7 +26,6 @@ class PurchaseReturn(models.Model):
     deleted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-
         ordering = ["-created_at"]
 
         indexes = [
@@ -41,39 +42,95 @@ class PurchaseReturn(models.Model):
             models.Index(fields=["supplier", "status"]),
         ]
 
-    # =========================
-    # AUTO GENERATE RETURN NO
-    # =========================
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(total_amount__gte=0),
+                name="purchase_return_total_nonnegative"
+            ),
+            models.CheckConstraint(
+                condition=Q(adjusted_amount__gte=0),
+                name="purchase_return_adjusted_nonnegative"
+            ),
+            models.CheckConstraint(
+                condition=Q(adjusted_amount__lte=models.F("total_amount")),
+                name="purchase_return_adjusted_lte_total"
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+
+        if self.total_amount is not None and self.total_amount < 0:
+            raise ValidationError({
+                "total_amount": "Total amount cannot be negative."
+            })
+
+        if self.adjusted_amount is not None and self.adjusted_amount < 0:
+            raise ValidationError({
+                "adjusted_amount": "Adjusted amount cannot be negative."
+            })
+
+        if (
+            self.total_amount is not None
+            and self.adjusted_amount is not None
+            and self.adjusted_amount > self.total_amount
+        ):
+            raise ValidationError({
+                "adjusted_amount": "Adjusted amount cannot exceed total amount."
+            })
+
+        if self.branch_id and self.branch.retailer_id != self.retailer_id:
+            raise ValidationError({
+                "branch": "Selected branch does not belong to this retailer."
+            })
+
+        if self.supplier_id and self.supplier.retailer_id != self.retailer_id:
+            raise ValidationError({
+                "supplier": "Selected supplier does not belong to this retailer."
+            })
 
     def save(self, *args, **kwargs):
 
-        if not self.return_no:
+        if self.total_amount is None or self.total_amount < 0:
+            raise ValidationError("Total amount cannot be negative.")
 
-            year = datetime.now().year
-
-            with transaction.atomic():
-
-                last_id = (
-                    PurchaseReturn.objects.filter(
-                        return_no__startswith=f"PR-{year}"
-                    ).aggregate(
-                        max_id=Max("id")
-                    )["max_id"] or 0
-                )
-
-                next_number = last_id + 1
-
-                self.return_no = (
-                    f"PR-{year}-{next_number:04d}"
-                )
+        if self.adjusted_amount is None or self.adjusted_amount < 0:
+            raise ValidationError("Adjusted amount cannot be negative.")
 
         if self.adjusted_amount > self.total_amount:
-            raise ValueError(
-                "Adjusted amount cannot exceed total amount"
+            raise ValidationError(
+                "Adjusted amount cannot exceed total amount."
             )
 
+        if self.branch_id and self.branch.retailer_id != self.retailer_id:
+            raise ValidationError(
+                "Selected branch does not belong to this retailer."
+            )
+
+        if self.supplier_id and self.supplier.retailer_id != self.retailer_id:
+            raise ValidationError(
+                "Selected supplier does not belong to this retailer."
+            )
+
+        if not self.return_no:
+            with transaction.atomic():
+                if not self.pk:
+                    super().save(*args, **kwargs)
+
+                self.return_no = (
+                    f"PR-{timezone.localdate().year}-{self.pk:06d}"
+                )
+
+                self.full_clean()
+
+                super().save(
+                    update_fields=["return_no", "updated_at"]
+                )
+
+            return
+
+        self.full_clean()
         super().save(*args, **kwargs)
 
     def __str__(self):
-
         return self.return_no

@@ -5,9 +5,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 
-from .models.customers_models import Customer, RetailerCustomer
-
-from .serializers import (
+from ..models.customers_models import Customer, RetailerCustomer
+from masters.serializers import (
     CustomerSerializer,
     RetailerCustomerSerializer,
 )

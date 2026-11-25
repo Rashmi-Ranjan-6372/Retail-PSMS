@@ -6,24 +6,6 @@ from inventory.views.sales_return_views import (
 )
 
 urlpatterns = [
-
-    # ==========================================
-    # SALES RETURN LIST + CREATE
-    # ==========================================
-
-    path(
-        "",
-        SalesReturnListCreateView.as_view(),
-        name="sales-return-list-create",
-    ),
-
-    # ==========================================
-    # SALES RETURN DETAIL
-    # ==========================================
-
-    path(
-        "<int:pk>/",
-        SalesReturnDetailView.as_view(),
-        name="sales-return-detail",
-    ),
+    path("sales-return/",SalesReturnListCreateView.as_view(),name="sales-return-list-create",),
+    path("sales-return/<int:pk>/",SalesReturnDetailView.as_view(),name="sales-return-detail",),
 ]

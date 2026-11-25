@@ -8,24 +8,6 @@ from inventory.views.sales_item_views import (
 )
 
 urlpatterns = [
-
-    # ==========================================
-    # SALES ITEM LIST + CREATE
-    # ==========================================
-    path(
-        "",
-        SalesItemListCreateView.as_view(),
-        name="sales-item-list-create",
-    ),
-
-    # ==========================================
-    # SALES ITEM DETAIL
-    # ==========================================
-
-    path(
-        "<int:pk>/",
-        SalesItemDetailView.as_view(),
-        name="sales-item-detail",
-    ),
-
+    path("sales-items/",SalesItemListCreateView.as_view(),name="sales-item-list-create",),
+    path("sales-items/<int:pk>/",SalesItemDetailView.as_view(),name="sales-item-detail",),
 ]

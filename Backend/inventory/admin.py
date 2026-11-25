@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.core.exceptions import PermissionDenied
+from django.db.models import Q
 
 from .models.stock_batch_models import StockBatch
 from .models.stock_transaction_models import StockTransaction
@@ -18,10 +20,10 @@ from .models.payment_models import Payment
 from .models.receipt_models import Receipt
 from .models.expiry_damage_models import ExpiryDamage
 
-
 # =========================================================
 # BASE ADMIN
 # =========================================================
+
 
 class RetailerBranchAdmin(admin.ModelAdmin):
 
@@ -30,37 +32,92 @@ class RetailerBranchAdmin(admin.ModelAdmin):
         "updated_at",
     )
 
+    def is_platform_admin(self, request):
+
+        return (
+            request.user.is_superuser
+            or getattr(request.user, "role", None) == "superadmin"
+        )
+
     def get_queryset(self, request):
 
-        qs = super().get_queryset(request)
+        queryset = super().get_queryset(request)
 
-        if request.user.is_superuser:
-            return qs
+        if self.is_platform_admin(request):
+            return queryset
 
-        return qs.filter(
-            retailer=request.user.retailer
-        )
+        retailer = getattr(request.user, "retailer", None)
+
+        if not retailer:
+            return queryset.none()
+
+        if any(field.name == "retailer" for field in self.model._meta.fields):
+            queryset = queryset.filter(retailer=retailer)
+
+        branch = getattr(request.user, "branch", None)
+
+        if branch:
+            filters = Q()
+
+            has_branch_filter = False
+
+            for field_name in (
+                "branch",
+                "from_branch",
+                "to_branch",
+            ):
+                if any(field.name == field_name for field in self.model._meta.fields):
+                    filters |= Q(**{field_name: branch})
+                    has_branch_filter = True
+
+            if has_branch_filter:
+                queryset = queryset.filter(filters)
+
+        return queryset
 
     def save_model(self, request, obj, form, change):
 
-        if not request.user.is_superuser:
+        if not self.is_platform_admin(request):
 
-            obj.retailer = request.user.retailer
+            retailer = getattr(request.user, "retailer", None)
+
+            if not retailer:
+                raise PermissionDenied(
+                    "Retailer account is not associated with this user."
+                )
+
+            if hasattr(obj, "retailer"):
+                obj.retailer = retailer
 
             if hasattr(obj, "branch"):
-                obj.branch = request.user.branch
+
+                branch = getattr(request.user, "branch", None)
+
+                branch_field = self.model._meta.get_field("branch")
+
+                if not branch and not branch_field.null:
+                    raise PermissionDenied(
+                        "A branch must be associated with this user."
+                    )
+
+                obj.branch = branch
 
         super().save_model(
             request,
             obj,
             form,
-            change
+            change,
         )
+
+    def has_delete_permission(self, request, obj=None):
+
+        return self.is_platform_admin(request)
 
 
 # =========================================================
 # STOCK
 # =========================================================
+
 
 @admin.register(StockBatch)
 class StockBatchAdmin(RetailerBranchAdmin):
@@ -215,6 +272,7 @@ class StockAdjustmentAdmin(RetailerBranchAdmin):
 # SALES
 # =========================================================
 
+
 @admin.register(Sales)
 class SalesAdmin(RetailerBranchAdmin):
 
@@ -231,9 +289,7 @@ class SalesAdmin(RetailerBranchAdmin):
         "created_at",
     )
 
-    search_fields = (
-        "invoice_no",
-    )
+    search_fields = ("invoice_no",)
 
     list_filter = (
         "retailer",
@@ -286,18 +342,17 @@ class SalesReturnAdmin(RetailerBranchAdmin):
         "total_amount",
         "refund_amount",
         "status",
-        "created_at",        
+        "created_at",
     )
 
-    search_fields = (
-        "return_no",
-    )
+    search_fields = ("return_no",)
 
     list_filter = (
         "retailer",
         "branch",
         "status",
     )
+
 
 
 @admin.register(SalesReturnItem)
@@ -311,20 +366,25 @@ class SalesReturnItemAdmin(RetailerBranchAdmin):
         "product",
         "qty",
         "amount",
-        "discount_type",
-        "discount",
         "created_at",
+    )
+
+    search_fields = (
+        "product__name",
+        "sales_return__return_no",
     )
 
     list_filter = (
         "retailer",
         "branch",
+        "created_at",
     )
 
 
 # =========================================================
 # PURCHASE
 # =========================================================
+
 
 @admin.register(PurchaseReturn)
 class PurchaseReturnAdmin(RetailerBranchAdmin):
@@ -341,9 +401,7 @@ class PurchaseReturnAdmin(RetailerBranchAdmin):
         "created_at",
     )
 
-    search_fields = (
-        "return_no",
-    )
+    search_fields = ("return_no",)
 
     list_filter = (
         "retailer",
@@ -365,6 +423,11 @@ class PurchaseReturnItemAdmin(RetailerBranchAdmin):
         "amount",
     )
 
+    search_fields = (
+        "product__name",
+        "purchase_return__return_no",
+    )
+
     list_filter = (
         "retailer",
         "branch",
@@ -374,6 +437,7 @@ class PurchaseReturnItemAdmin(RetailerBranchAdmin):
 # =========================================================
 # PAYMENT / RECEIPT
 # =========================================================
+
 
 @admin.register(Payment)
 class PaymentAdmin(RetailerBranchAdmin):
@@ -438,6 +502,7 @@ class ReceiptAdmin(RetailerBranchAdmin):
 # =========================================================
 # EXPIRY / DAMAGE
 # =========================================================
+
 
 @admin.register(ExpiryDamage)
 class ExpiryDamageAdmin(RetailerBranchAdmin):

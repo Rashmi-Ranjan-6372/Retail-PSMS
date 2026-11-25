@@ -6,8 +6,6 @@ from inventory.views.sales_views import (
 )
 
 urlpatterns = [
-    # SALES LIST + CREATE
-    path("", SalesListCreateView.as_view(), name="sales-list-create",),
-    # SALES DETAIL VIEW
-    path("<int:pk>/", SalesDetailView.as_view(), name="sales-detail",),
+    path("sales/", SalesListCreateView.as_view(), name="sales-list-create",),
+    path("sales/<int:pk>/", SalesDetailView.as_view(), name="sales-detail",),
 ]

@@ -1,18 +1,20 @@
 from django.contrib import admin
+
 from .models.customers_models import RetailerCustomer
 from masters.models import (
     Supplier,
     Manufacturer,
     Category,
     Product,
+    ProductVariant,
     SalesOffer,
-    Customer
+    Customer,
 )
-
 
 # =========================================================
 # BASE ADMIN
 # =========================================================
+
 
 class BaseRetailerBranchAdmin(admin.ModelAdmin):
 
@@ -56,11 +58,7 @@ class BaseRetailerBranchAdmin(admin.ModelAdmin):
                     retailer=request.user.retailer
                 )
 
-        return super().formfield_for_foreignkey(
-            db_field,
-            request,
-            **kwargs
-        )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def formfield_for_manytomany(self, db_field, request, **kwargs):
 
@@ -71,11 +69,7 @@ class BaseRetailerBranchAdmin(admin.ModelAdmin):
                     retailer=request.user.retailer
                 )
 
-        return super().formfield_for_manytomany(
-            db_field,
-            request,
-            **kwargs
-        )
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
 
 
 # =========================================================
@@ -115,83 +109,137 @@ class SupplierAdmin(BaseRetailerBranchAdmin):
 
     ordering = ("-id",)
 
-    fieldsets = (
-        ("Retailer Info", {
-            "fields": (
-                "retailer",
-                "branches",
-            )
-        }),
-
-        ("Basic Info", {
-            "fields": (
-                "name",
-                "contact_person",
-            )
-        }),
-
-        ("Contact Info", {
-            "fields": (
-                "phone",
-                "alternate_phone",
-                "email",
-            )
-        }),
-
-        ("Legal Info", {
-            "fields": (
-                "gst_no",
-                "drug_license_no",
-            )
-        }),
-
-        ("Address", {
-            "fields": (
-                "address",
-                "city",
-                "state",
-                "pincode",
-            )
-        }),
-
-        ("Finance", {
-            "fields": (
-                "opening_balance",
-            )
-        }),
-
-        ("Status", {
-            "fields": (
-                "is_active",
-            )
-        }),
-
-        ("Timestamps", {
-            "fields": (
-                "created_at",
-                "updated_at",
-            )
-        }),
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+        "deleted_at",
     )
 
-    def save_model(self, request, obj, form, change):
+    fieldsets = (
+        (
+            "Retailer Info",
+            {
+                "fields": (
+                    "retailer",
+                    "branches",
+                )
+            },
+        ),
+        (
+            "Basic Info",
+            {
+                "fields": (
+                    "name",
+                    "contact_person",
+                )
+            },
+        ),
+        (
+            "Contact Info",
+            {
+                "fields": (
+                    "phone",
+                    "alternate_phone",
+                    "email",
+                )
+            },
+        ),
+        (
+            "Legal Info",
+            {
+                "fields": (
+                    "gst_no",
+                    "drug_license_no",
+                )
+            },
+        ),
+        (
+            "Address",
+            {
+                "fields": (
+                    "address",
+                    "city",
+                    "state",
+                    "pincode",
+                )
+            },
+        ),
+        (
+            "Finance",
+            {
+                "fields": (
+                    "opening_balance",
+                )
+            },
+        ),
+        (
+            "Status",
+            {
+                "fields": (
+                    "is_active",
+                    "deleted_at",
+                )
+            },
+        ),
+        (
+            "Timestamps",
+            {
+                "fields": (
+                    "created_at",
+                    "updated_at",
+                )
+            },
+        ),
+    )
 
-        super().save_model(request, obj, form, change)
-
-        if not request.user.is_superuser:
-            obj.branches.set([request.user.branch])
+    filter_horizontal = ("branches",)
 
     def get_branches(self, obj):
         return ", ".join(
-            [branch.name for branch in obj.branches.all()]
+            branch.name
+            for branch in obj.branches.all()
         )
 
     get_branches.short_description = "Branches"
+
+    def save_related(self, request, form, formsets, change):
+
+        super().save_related(
+            request,
+            form,
+            formsets,
+            change
+        )
+
+        if not request.user.is_superuser:
+            if request.user.branch:
+                form.instance.branches.set([
+                    request.user.branch
+                ])
+
+    def get_queryset(self, request):
+
+        queryset = super().get_queryset(request)
+
+        queryset = queryset.prefetch_related("branches")
+
+        if request.user.is_superuser:
+            return queryset
+
+        if request.user.branch:
+            return queryset.filter(
+                branches=request.user.branch
+            ).distinct()
+
+        return queryset.filter(
+            retailer=request.user.retailer
+        )
 
 
 # =========================================================
 # MANUFACTURER ADMIN
 # =========================================================
+
 
 @admin.register(Manufacturer)
 class ManufacturerAdmin(BaseRetailerBranchAdmin):
@@ -215,36 +263,25 @@ class ManufacturerAdmin(BaseRetailerBranchAdmin):
     ordering = ("name",)
 
     fieldsets = (
-        ("Retailer Info", {
-            "fields": (
-                "retailer",
-            )
-        }),
-
-        ("Basic Info", {
-            "fields": (
-                "name",
-            )
-        }),
-
-        ("Status", {
-            "fields": (
-                "is_active",
-            )
-        }),
-
-        ("Timestamps", {
-            "fields": (
-                "created_at",
-                "updated_at",
-            )
-        }),
+        ("Retailer Info", {"fields": ("retailer",)}),
+        ("Basic Info", {"fields": ("name",)}),
+        ("Status", {"fields": ("is_active",)}),
+        (
+            "Timestamps",
+            {
+                "fields": (
+                    "created_at",
+                    "updated_at",
+                )
+            },
+        ),
     )
 
 
 # =========================================================
 # CATEGORY ADMIN
 # =========================================================
+
 
 @admin.register(Category)
 class ProductCategoryAdmin(BaseRetailerBranchAdmin):
@@ -294,19 +331,17 @@ class ProductCategoryAdmin(BaseRetailerBranchAdmin):
 # =========================================================
 # PRODUCT ADMIN
 # =========================================================
-
 @admin.register(Product)
-class ProductAdmin(BaseRetailerBranchAdmin):
+class ProductAdmin(admin.ModelAdmin):
 
     list_display = (
         "id",
         "name",
-        "retailer",
+        "strength",
         "category",
         "manufacturer",
-        "strength",
-        "units_per_strip",
-        "minimum_stock",
+        "retailer",
+        "prescription_required",
         "is_active",
         "created_at",
     )
@@ -315,70 +350,65 @@ class ProductAdmin(BaseRetailerBranchAdmin):
         "retailer",
         "category",
         "manufacturer",
-        "loose_sale_allowed",
         "prescription_required",
         "is_active",
+        "created_at",
     )
 
     search_fields = (
         "name",
         "strength",
-        "rack_no",
+        "category__name",
+        "manufacturer__name",
+        "retailer__name",
     )
 
-    ordering = ("name",)
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+        "deleted_at",
+    )
 
-    fieldsets = (
+    ordering = ("-id",)
 
-        ("Retailer Info", {
-            "fields": (
-                "retailer",
-            )
-        }),
+    list_per_page = 25
 
-        ("Basic Information", {
-            "fields": (
-                "name",
-                "category",
-                "manufacturer",
-                "strength",
-            )
-        }),
+    autocomplete_fields = (
+        "retailer",
+        "category",
+        "manufacturer",
+    )
 
-        ("Stock Settings", {
-            "fields": (
-                "units_per_strip",
-                "minimum_stock",
-                "rack_no",
-            )
-        }),
-
-        ("Sales Settings", {
-            "fields": (
-                "loose_sale_allowed",
-                "prescription_required",
-            )
-        }),
-
-        ("Status", {
-            "fields": (
-                "is_active",
-                "deleted_at",
-            )
-        }),
-
-        ("Timestamps", {
-            "fields": (
-                "created_at",
-                "updated_at",
-            )
-        }),
+@admin.register(ProductVariant)
+class ProductVariantAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "product",
+        "variant_name",
+        "units_per_pack",
+        "loose_sale_allowed",
+        "barcode",
+        "sku",
+        "is_active",
+        "created_at",
+    )
+    list_filter = (
+        "is_active",
+        "loose_sale_allowed",
+        "created_at",
+    )
+    search_fields = (
+        "product__name",
+        "variant_name",
+        "barcode",
+        "sku",
     )
 
 
 # =========================================================
 # SALES OFFER ADMIN
 # =========================================================
+
 
 @admin.register(SalesOffer)
 class SalesOfferAdmin(BaseRetailerBranchAdmin):
@@ -411,79 +441,98 @@ class SalesOfferAdmin(BaseRetailerBranchAdmin):
     ordering = ("-created_at",)
 
     fieldsets = (
-
-        ("Retailer Info", {
-            "fields": (
-                "retailer",
-                "branch",
-            )
-        }),
-
-        ("Basic Information", {
-            "fields": (
-                "name",
-                "offer_type",
-                "discount_type",
-            )
-        }),
-
-        ("Offer Target", {
-            "fields": (
-                "product",
-                "category",
-                "manufacturer",
-            )
-        }),
-
-        ("Discount Details", {
-            "fields": (
-                "discount_percentage",
-                "flat_discount_amount",
-            )
-        }),
-
-        ("Buy X Get Y", {
-            "fields": (
-                "buy_quantity",
-                "free_quantity",
-            )
-        }),
-
-        ("Quantity / Bill Conditions", {
-            "fields": (
-                "minimum_quantity",
-                "minimum_bill_amount",
-            )
-        }),
-
-        ("Special Offers", {
-            "fields": (
-                "expiry_before_days",
-                "member_type",
-            )
-        }),
-
-        ("Validity", {
-            "fields": (
-                "start_date",
-                "end_date",
-                "is_active",
-            )
-        }),
-
-        ("Extra", {
-            "fields": (
-                "deleted_at",
-                "created_at",
-                "updated_at",
-            )
-        }),
+        (
+            "Retailer Info",
+            {
+                "fields": (
+                    "retailer",
+                    "branch",
+                )
+            },
+        ),
+        (
+            "Basic Information",
+            {
+                "fields": (
+                    "name",
+                    "offer_type",
+                    "discount_type",
+                )
+            },
+        ),
+        (
+            "Offer Target",
+            {
+                "fields": (
+                    "product",
+                    "category",
+                    "manufacturer",
+                )
+            },
+        ),
+        (
+            "Discount Details",
+            {
+                "fields": (
+                    "discount_percentage",
+                    "flat_discount_amount",
+                )
+            },
+        ),
+        (
+            "Buy X Get Y",
+            {
+                "fields": (
+                    "buy_quantity",
+                    "free_quantity",
+                )
+            },
+        ),
+        (
+            "Quantity / Bill Conditions",
+            {
+                "fields": (
+                    "minimum_quantity",
+                    "minimum_bill_amount",
+                )
+            },
+        ),
+        (
+            "Special Offers",
+            {
+                "fields": (
+                    "expiry_before_days",
+                    "member_type",
+                )
+            },
+        ),
+        (
+            "Validity",
+            {
+                "fields": (
+                    "start_date",
+                    "end_date",
+                    "is_active",
+                )
+            },
+        ),
+        (
+            "Extra",
+            {
+                "fields": (
+                    "deleted_at",
+                    "created_at",
+                    "updated_at",
+                )
+            },
+        ),
     )
 
 
 # =========================================================
 # CUSTOMER ADMIN
 # =========================================================
+
 
 @admin.register(Customer)
 class CustomerAdmin(BaseRetailerBranchAdmin):
@@ -527,6 +576,7 @@ class CustomerAdmin(BaseRetailerBranchAdmin):
         "created_at",
         "updated_at",
     )
+
 
 @admin.register(RetailerCustomer)
 class RetailerCustomerAdmin(admin.ModelAdmin):

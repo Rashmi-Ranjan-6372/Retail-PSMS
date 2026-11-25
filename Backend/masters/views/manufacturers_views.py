@@ -6,8 +6,7 @@ from masters.models import Manufacturer
 from masters.serializers import ManufacturerSerializer
 
 from accounts.permissions import (
-    IsAdmin,
-    IsSuperAdmin
+    IsRetailerOwnerOrPlatformOwner,
 )
 from subscriptions.utils import check_subscription_write_access
 from accounts.views import create_audit_log
@@ -43,7 +42,7 @@ def get_manufacturer_queryset(user):
 class ManufacturerCreateView(generics.CreateAPIView):
 
     serializer_class = ManufacturerSerializer
-    permission_classes = [IsAuthenticated, IsAdmin]
+    permission_classes = [IsAuthenticated, IsRetailerOwnerOrPlatformOwner]
 
     def perform_create(self, serializer):
 
@@ -83,7 +82,7 @@ class ManufacturerCreateView(generics.CreateAPIView):
 class ManufacturerListView(generics.ListAPIView):
 
     serializer_class = ManufacturerSerializer
-    permission_classes = [IsAuthenticated, IsAdmin]
+    permission_classes = [IsAuthenticated, IsRetailerOwnerOrPlatformOwner]
 
     def get_queryset(self):
 
@@ -134,7 +133,7 @@ class ManufacturerListView(generics.ListAPIView):
 class ManufacturerDetailView(generics.RetrieveAPIView):
 
     serializer_class = ManufacturerSerializer
-    permission_classes = [IsAuthenticated, IsAdmin]
+    permission_classes = [IsAuthenticated, IsRetailerOwnerOrPlatformOwner]
 
     def get_queryset(self):
 
@@ -161,7 +160,7 @@ class ManufacturerDetailView(generics.RetrieveAPIView):
 class ManufacturerUpdateView(generics.UpdateAPIView):
 
     serializer_class = ManufacturerSerializer
-    permission_classes = [IsAuthenticated, IsAdmin]
+    permission_classes = [IsAuthenticated, IsRetailerOwnerOrPlatformOwner]
 
     def get_queryset(self):
 
@@ -214,7 +213,7 @@ class ManufacturerUpdateView(generics.UpdateAPIView):
 class ManufacturerSoftDeleteView(generics.UpdateAPIView):
 
     serializer_class = ManufacturerSerializer
-    permission_classes = [IsAuthenticated, IsAdmin]
+    permission_classes = [IsAuthenticated, IsRetailerOwnerOrPlatformOwner]
 
     def get_queryset(self):
 
@@ -262,7 +261,7 @@ class ManufacturerSoftDeleteView(generics.UpdateAPIView):
 class ManufacturerRestoreView(generics.UpdateAPIView):
 
     serializer_class = ManufacturerSerializer
-    permission_classes = [IsAuthenticated, IsAdmin]
+    permission_classes = [IsAuthenticated, IsRetailerOwnerOrPlatformOwner]
 
     def get_queryset(self):
 
@@ -310,7 +309,7 @@ class ManufacturerRestoreView(generics.UpdateAPIView):
 class ManufacturerDeleteView(generics.DestroyAPIView):
 
     serializer_class = ManufacturerSerializer
-    permission_classes = [IsAuthenticated, IsSuperAdmin]
+    permission_classes = [IsAuthenticated, IsRetailerOwnerOrPlatformOwner]
 
     def get_queryset(self):
 

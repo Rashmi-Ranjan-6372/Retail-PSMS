@@ -1,7 +1,7 @@
-from django.urls import path, include
-
-urlpatterns = [
-    # path('products/', include('masters.urls.products_urls')),
-    path('suppliers/', include('masters.urls.suppliers_urls')),
-    # path('sales-offers/', include('masters.urls.sales_offer_urls')),
-]
+from .product_variants_urls import *
+from .customers_urls import * 
+from .manufacturers_urls import *
+from .products_category_urls import *
+from .products_urls import *
+from .sales_offer_urls import *
+from .suppliers_urls import*

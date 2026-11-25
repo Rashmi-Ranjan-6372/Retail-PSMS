@@ -1,78 +1,116 @@
-from rest_framework.generics import (ListCreateAPIView, RetrieveUpdateDestroyAPIView)
-from rest_framework.permissions import (IsAuthenticated)
-from inventory.models.expiry_damage_models import (ExpiryDamage)
-from inventory.serializers.expiry_damage_serializers import (ExpiryDamageSerializer)
-from inventory.services.expiry_service import (create_expiry_damage, update_expiry_damage, delete_expiry_damage,)
-from accounts.permissions import (IsAdminOrStaff)
+from rest_framework.generics import (
+    ListCreateAPIView,
+    RetrieveUpdateDestroyAPIView,
+)
+from rest_framework.permissions import IsAuthenticated
+
+from inventory.models.expiry_damage_models import ExpiryDamage
+from inventory.serializers.expiry_damage_serializers import ExpiryDamageSerializer
+
+from inventory.services.expiry_service import (
+    create_expiry_damage,
+    update_expiry_damage,
+    delete_expiry_damage,
+)
+
+from accounts.permissions import IsAdminOrStaff
 from subscriptions.utils import check_subscription_write_access
+
+# =====================================================
+# EXPIRY DAMAGE BASE MIXIN
+# =====================================================
+
+
+class ExpiryDamageBaseView:
+
+    def is_platform_admin(self):
+
+        user = self.request.user
+
+        return user.is_superuser or getattr(user, "role", None) == "superadmin"
+
+    def check_write_access(self):
+
+        if self.is_platform_admin():
+            return
+
+        retailer = getattr(self.request.user, "retailer", None)
+
+        if not retailer:
+            from rest_framework.exceptions import PermissionDenied
+
+            raise PermissionDenied("Retailer account is not associated with this user.")
+
+        check_subscription_write_access(retailer)
+
+    def get_queryset(self):
+
+        user = self.request.user
+
+        queryset = ExpiryDamage.objects.select_related(
+            "retailer",
+            "branch",
+            "product",
+            "batch",
+            "created_by",
+        )
+
+        if self.is_platform_admin():
+            return queryset
+
+        retailer = getattr(user, "retailer", None)
+
+        if not retailer:
+            return queryset.none()
+
+        queryset = queryset.filter(retailer=retailer)
+
+        branch = getattr(user, "branch", None)
+
+        if branch:
+            queryset = queryset.filter(branch=branch)
+
+        return queryset
 
 
 # =====================================================
 # EXPIRY DAMAGE LIST + CREATE
 # =====================================================
 
-class ExpiryDamageListCreateView(ListCreateAPIView):
+
+class ExpiryDamageListCreateView(
+    ExpiryDamageBaseView,
+    ListCreateAPIView,
+):
 
     serializer_class = ExpiryDamageSerializer
+
     permission_classes = [
         IsAuthenticated,
         IsAdminOrStaff,
     ]
 
-    def get_queryset(self):
-
-        user = self.request.user
-
-        queryset = (
-            ExpiryDamage.objects
-            .select_related(
-                "retailer",
-                "branch",
-                "product",
-                "batch",
-                "created_by",
-            )
-            .all()
-        )
-
-        # ================= SUPER ADMIN ================= #
-
-        if (
-            user.is_superuser or
-            getattr(user, "role", None) == "superadmin"
-        ):
-            return queryset
-
-        queryset = queryset.filter(
-            retailer=user.retailer
-        )
-
-        if getattr(user, "branch", None):
-
-            queryset = queryset.filter(
-                branch=user.branch
-            )
-
-        return queryset
-
     def perform_create(self, serializer):
 
-        if not self.request.user.is_superuser:
-            check_subscription_write_access(
-                self.request.user.retailer
-            )
+        self.check_write_access()
 
-        create_expiry_damage(
+        instance = create_expiry_damage(
             serializer.validated_data,
-            self.request.user
+            self.request.user,
         )
 
+        serializer.instance = instance
+
 
 # =====================================================
-# EXPIRY DAMAGE DETAIL VIEW
+# EXPIRY DAMAGE DETAIL
 # =====================================================
 
-class ExpiryDamageDetailView(RetrieveUpdateDestroyAPIView):
+
+class ExpiryDamageDetailView(
+    ExpiryDamageBaseView,
+    RetrieveUpdateDestroyAPIView,
+):
 
     serializer_class = ExpiryDamageSerializer
 
@@ -83,57 +121,19 @@ class ExpiryDamageDetailView(RetrieveUpdateDestroyAPIView):
 
     lookup_field = "pk"
 
-    def get_queryset(self):
-
-        user = self.request.user
-
-        queryset = (
-            ExpiryDamage.objects
-            .select_related(
-                "retailer",
-                "branch",
-                "product",
-                "batch",
-                "created_by",
-            )
-            .all()
-        )
-
-        # ================= SUPER ADMIN ================= #
-
-        if (
-            user.is_superuser or
-            getattr(user, "role", None) == "superadmin"
-        ):
-            return queryset
-
-        queryset = queryset.filter(
-            retailer=user.retailer
-        )
-
-        if getattr(user, "branch", None):
-
-            queryset = queryset.filter(
-                branch=user.branch
-            )
-
-        return queryset
-
     def perform_update(self, serializer):
 
-        if not self.request.user.is_superuser:
-            check_subscription_write_access(
-                self.request.user.retailer
-            )
+        self.check_write_access()
 
-        update_expiry_damage(
+        instance = update_expiry_damage(
             self.get_object(),
-            serializer.validated_data
+            serializer.validated_data,
         )
+
+        serializer.instance = instance
 
     def perform_destroy(self, instance):
 
-        if not self.request.user.is_superuser:
-            check_subscription_write_access(
-                self.request.user.retailer
-            )
+        self.check_write_access()
+
+        delete_expiry_damage(instance)

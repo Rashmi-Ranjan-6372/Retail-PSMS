@@ -1,265 +1,309 @@
+from django.db.models import Q
+from django.db.models.deletion import ProtectedError
+
 from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
-
-from masters.models import Category
-from masters.serializers import ProductCategorySerializer
+from rest_framework.permissions import IsAuthenticated
 
 from accounts.permissions import IsAdmin
 from subscriptions.utils import check_subscription_write_access
-from accounts.views import create_audit_log
 
-# =========================================================
-# HELPER QUERYSET
-# =========================================================
-
+from masters.models.products_category_models import Category
+from masters.serializers.products_category_serializers import ProductCategorySerializer
 
 def get_category_queryset(user):
+    queryset = Category.objects.select_related("retailer", "branch")
 
-    # PLATFORM OWNER
     if user.is_superuser:
-        return Category.objects.all()
+        return queryset
 
-    # SUPERADMIN -> RETAILER LEVEL
+    if not getattr(user, "retailer_id", None):
+        return Category.objects.none()
+
+    queryset = queryset.filter(retailer=user.retailer)
+
     if user.role == "superadmin":
-        return Category.objects.filter(retailer=user.retailer)
+        return queryset
 
-    # ADMIN / STAFF -> BRANCH LEVEL
-    return Category.objects.filter(retailer=user.retailer, branch=user.branch)
+    if user.branch_id:
+        return queryset.filter(Q(branch=user.branch) | Q(branch__isnull=True))
+
+    return queryset
 
 
-# =========================================================
-# PRODUCT CATEGORY LIST + CREATE
-# =========================================================
+def check_category_subscription(user):
+    if user.is_superuser:
+        return
+
+    if not getattr(user, "retailer", None):
+        raise ValueError("Retailer account is not assigned.")
+
+    check_subscription_write_access(user.retailer)
 
 
 class ProductCategoryListCreateAPIView(APIView):
 
     permission_classes = [IsAuthenticated, IsAdmin]
 
-    # =====================================================
-    # GET - LIST ALL CATEGORIES
-    # =====================================================
-
     def get(self, request):
-
         queryset = get_category_queryset(request.user)
 
-        # Filter by active status
         is_active = request.query_params.get("is_active")
 
         if is_active is not None:
-            queryset = queryset.filter(is_active=is_active.lower() == "true")
+            if is_active.lower() not in ["true", "false"]:
+                return Response(
+                    {"success": False, "message": "is_active must be true or false."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-        # Search by category name
+            queryset = queryset.filter(is_active=(is_active.lower() == "true"))
+        else:
+            queryset = queryset.filter(is_active=True)
+
         search = request.query_params.get("search")
 
         if search:
-            queryset = queryset.filter(name__icontains=search)
-
-        queryset = queryset.order_by("name")
+            queryset = queryset.filter(
+                Q(name__icontains=search) | Q(code__icontains=search)
+            )
 
         serializer = ProductCategorySerializer(queryset, many=True)
 
         return Response(
-            {"success": True, "count": queryset.count(), "data": serializer.data},
+            {
+                "success": True,
+                "message": "Categories fetched successfully.",
+                "data": serializer.data,
+            },
             status=status.HTTP_200_OK,
         )
 
-    # =====================================================
-    # POST - CREATE CATEGORY
-    # =====================================================
-
     def post(self, request):
+        try:
+            check_category_subscription(request.user)
 
-        check_subscription_write_access(request.user.retailer)
+            if request.user.is_superuser:
+                retailer_id = request.data.get("retailer")
 
-        serializer = ProductCategorySerializer(data=request.data)
+                if not retailer_id:
+                    return Response(
+                        {"success": False, "message": "Retailer ID is required."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
-        serializer.is_valid(raise_exception=True)
+                from accounts.models import Retailer
+                from branches.models import Branch
 
-        category = serializer.save(
-            retailer=request.user.retailer, branch=request.user.branch
-        )
+                try:
+                    retailer = Retailer.objects.get(id=retailer_id)
+                except Retailer.DoesNotExist:
+                    return Response(
+                        {"success": False, "message": "Retailer not found."},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
 
-        create_audit_log(
-            user=request.user,
-            action="create",
-            model_name="Category",
-            object_id=category.id,
-            description=f"Created Category {category.name}",
-            request=request,
-        )
+                branch_id = request.data.get("branch")
+                branch = None
 
-        return Response(
-            {
-                "success": True,
-                "message": "Category created successfully",
-                "data": ProductCategorySerializer(category).data,
-            },
-            status=status.HTTP_201_CREATED,
-        )
+                if branch_id:
+                    try:
+                        branch = Branch.objects.get(id=branch_id, retailer=retailer)
+                    except Branch.DoesNotExist:
+                        return Response(
+                            {
+                                "success": False,
+                                "message": "Branch does not belong to this retailer.",
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
 
+            else:
+                retailer = request.user.retailer
+                branch = None
 
-# =========================================================
-# PRODUCT CATEGORY DETAIL / UPDATE / DELETE
-# =========================================================
+            serializer = ProductCategorySerializer(
+                data=request.data, context={"request": request}
+            )
+
+            if serializer.is_valid():
+                category = serializer.save(retailer=retailer, branch=branch)
+
+                return Response(
+                    {
+                        "success": True,
+                        "message": "Category created successfully.",
+                        "data": ProductCategorySerializer(category).data,
+                    },
+                    status=status.HTTP_201_CREATED,
+                )
+
+            return Response(
+                {
+                    "success": False,
+                    "message": "Validation failed.",
+                    "data": serializer.errors,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        except ValueError as e:
+            return Response(
+                {"success": False, "message": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 class ProductCategoryDetailAPIView(APIView):
 
     permission_classes = [IsAuthenticated, IsAdmin]
 
-    # =====================================================
-    # HELPER - GET CATEGORY
-    # =====================================================
-
-    def get_object(self, request, pk):
-
-        queryset = get_category_queryset(request.user)
-
-        return queryset.filter(id=pk).first()
-
-    # =====================================================
-    # GET - RETRIEVE CATEGORY
-    # =====================================================
+    def get_object(self, pk, user):
+        return get_category_queryset(user).filter(pk=pk).first()
 
     def get(self, request, pk):
-
-        category = self.get_object(request, pk)
+        category = self.get_object(pk, request.user)
 
         if not category:
             return Response(
-                {"success": False, "message": "Category not found"},
+                {"success": False, "message": "Category not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
         serializer = ProductCategorySerializer(category)
 
         return Response(
-            {"success": True, "data": serializer.data}, status=status.HTTP_200_OK
+            {
+                "success": True,
+                "message": "Category fetched successfully.",
+                "data": serializer.data,
+            },
+            status=status.HTTP_200_OK,
         )
-
-    # =====================================================
-    # PUT - FULL UPDATE
-    # =====================================================
 
     def put(self, request, pk):
-
-        category = self.get_object(request, pk)
-
-        if not category:
-            return Response(
-                {"success": False, "message": "Category not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        check_subscription_write_access(request.user.retailer)
-
-        old_name = category.name
-
-        serializer = ProductCategorySerializer(
-            category, data=request.data, partial=False
-        )
-
-        serializer.is_valid(raise_exception=True)
-
-        category = serializer.save()
-
-        create_audit_log(
-            user=request.user,
-            action="update",
-            model_name="Category",
-            object_id=category.id,
-            description=(f"Updated Category from " f"{old_name} to {category.name}"),
-            request=request,
-        )
-
-        return Response(
-            {
-                "success": True,
-                "message": "Category updated successfully",
-                "data": ProductCategorySerializer(category).data,
-            },
-            status=status.HTTP_200_OK,
-        )
-
-    # =====================================================
-    # PATCH - PARTIAL UPDATE
-    # =====================================================
+        return self.update_category(request, pk, partial=False)
 
     def patch(self, request, pk):
+        return self.update_category(request, pk, partial=True)
 
-        category = self.get_object(request, pk)
-
-        if not category:
-            return Response(
-                {"success": False, "message": "Category not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        check_subscription_write_access(request.user.retailer)
-
-        old_name = category.name
-
-        serializer = ProductCategorySerializer(
-            category, data=request.data, partial=True
-        )
-
-        serializer.is_valid(raise_exception=True)
-
-        category = serializer.save()
-
-        create_audit_log(
-            user=request.user,
-            action="update",
-            model_name="Category",
-            object_id=category.id,
-            description=(f"Updated Category from " f"{old_name} to {category.name}"),
-            request=request,
-        )
-
-        return Response(
-            {
-                "success": True,
-                "message": "Category updated successfully",
-                "data": ProductCategorySerializer(category).data,
-            },
-            status=status.HTTP_200_OK,
-        )
-
-    # =====================================================
-    # DELETE - DELETE CATEGORY
-    # =====================================================
-
-    def delete(self, request, pk):
-
-        category = self.get_object(request, pk)
+    def update_category(self, request, pk, partial=False):
+        category = self.get_object(pk, request.user)
 
         if not category:
             return Response(
-                {"success": False, "message": "Category not found"},
+                {"success": False, "message": "Category not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        check_subscription_write_access(request.user.retailer)
+        try:
+            check_category_subscription(request.user)
 
-        category_name = category.name
-        category_id = category.id
+            serializer = ProductCategorySerializer(
+                category,
+                data=request.data,
+                partial=partial,
+                context={"request": request},
+            )
 
-        category.delete()
+            if serializer.is_valid():
+                serializer.save()
 
-        create_audit_log(
-            user=request.user,
-            action="delete",
-            model_name="Category",
-            object_id=category_id,
-            description=f"Deleted Category {category_name}",
-            request=request,
-        )
+                return Response(
+                    {
+                        "success": True,
+                        "message": "Category updated successfully.",
+                        "data": serializer.data,
+                    },
+                    status=status.HTTP_200_OK,
+                )
 
-        return Response(
-            {"success": True, "message": "Category deleted successfully"},
-            status=status.HTTP_200_OK,
-        )
+            return Response(
+                {
+                    "success": False,
+                    "message": "Validation failed.",
+                    "data": serializer.errors,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        except ValueError as e:
+            return Response(
+                {"success": False, "message": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
+class ProductCategoryDeactivateAPIView(APIView):
+
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def post(self, request, pk):
+        category = get_category_queryset(request.user).filter(pk=pk).first()
+
+        if not category:
+            return Response(
+                {"success": False, "message": "Category not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            check_category_subscription(request.user)
+
+            if not category.is_active:
+                return Response(
+                    {"success": False, "message": "Category is already inactive."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            category.is_active = False
+            category.save(update_fields=["is_active", "updated_at"])
+
+            return Response(
+                {"success": True, "message": "Category deactivated successfully."},
+                status=status.HTTP_200_OK,
+            )
+
+        except ValueError as e:
+            return Response(
+                {"success": False, "message": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
+class ProductCategoryRestoreAPIView(APIView):
+
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def post(self, request, pk):
+        category = get_category_queryset(request.user).filter(pk=pk).first()
+
+        if not category:
+            return Response(
+                {"success": False, "message": "Category not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            check_category_subscription(request.user)
+
+            if category.is_active:
+                return Response(
+                    {"success": False, "message": "Category is already active."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            category.is_active = True
+            category.save(update_fields=["is_active", "updated_at"])
+
+            return Response(
+                {"success": True, "message": "Category restored successfully."},
+                status=status.HTTP_200_OK,
+            )
+
+        except ValueError as e:
+            return Response(
+                {"success": False, "message": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )

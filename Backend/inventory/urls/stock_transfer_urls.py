@@ -6,20 +6,6 @@ from inventory.views.stock_transfer_views import (
 )
 
 urlpatterns = [
-
-    # =================================================
-    # STOCK TRANSFER
-    # =================================================
-
-    path(
-        "",
-        StockTransferListCreateView.as_view(),
-        name="stock-transfer-list-create"
-    ),
-
-    path(
-        "<int:pk>/",
-        StockTransferDetailView.as_view(),
-        name="stock-transfer-detail"
-    ),
+    path("stock-transfer/",StockTransferListCreateView.as_view(),name="stock-transfer-list-create"),
+    path("stock-transfer/<int:pk>/",StockTransferDetailView.as_view(),name="stock-transfer-detail"),
 ]

@@ -14,11 +14,13 @@ class Manufacturer(models.Model):
 
     class Meta:
         db_table = "manufacturers"
-
         ordering = ["name"]
 
-        unique_together = [
-            ("retailer", "name")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["retailer", "name"],
+                name="unique_manufacturer_name_per_retailer"
+            )
         ]
 
         indexes = [

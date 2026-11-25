@@ -1,12 +1,14 @@
-from django.db import models
-from django.db.models import Max
-from datetime import datetime
-from django.db import transaction
 
+from django.db import models, transaction
 from django.conf import settings
-from .constants import PAYMENT_METHOD, PAYMENT_STATUS
+from django.core.exceptions import ValidationError
+from django.utils import timezone
+from django.db.models import Q
+
 from accounts.models import Retailer
 from branches.models import Branch
+from .constants import PAYMENT_METHOD, PAYMENT_STATUS
+
 
 class Payment(models.Model):
     retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="payments")
@@ -30,7 +32,6 @@ class Payment(models.Model):
     # -------------------------
 
     class Meta:
-
         ordering = ["-created_at"]
 
         indexes = [
@@ -47,52 +48,96 @@ class Payment(models.Model):
             models.Index(fields=["supplier", "status"]),
         ]
 
-    # =========================
-    # AUTO GENERATE PAYMENT NO
-    # =========================
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(amount__gt=0),
+                name="payment_amount_positive"
+            ),
+            models.CheckConstraint(
+                condition=Q(paid_amount__gte=0),
+                name="payment_paid_amount_nonnegative"
+            ),
+            models.CheckConstraint(
+                condition=Q(due_amount__gte=0),
+                name="payment_due_amount_nonnegative"
+            ),
+            models.CheckConstraint(
+                condition=Q(paid_amount__lte=models.F("amount")),
+                name="payment_paid_not_exceed_amount"
+            ),
+            models.CheckConstraint(
+                condition=Q(
+                    due_amount=models.F("amount") - models.F("paid_amount")
+                ),
+                name="payment_due_matches_amount"
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+
+        if self.amount is not None and self.amount <= 0:
+            raise ValidationError({
+                "amount": "Payment amount must be greater than zero."
+            })
+
+        if self.paid_amount is not None and self.paid_amount < 0:
+            raise ValidationError({
+                "paid_amount": "Paid amount cannot be negative."
+            })
+
+        if (
+            self.amount is not None
+            and self.paid_amount is not None
+            and self.paid_amount > self.amount
+        ):
+            raise ValidationError({
+                "paid_amount": "Paid amount cannot exceed payment amount."
+            })
+
+        if self.branch_id and self.branch.retailer_id != self.retailer_id:
+            raise ValidationError({
+                "branch": "Selected branch does not belong to this retailer."
+            })
+
+        if self.supplier_id and self.supplier.retailer_id != self.retailer_id:
+            raise ValidationError({
+                "supplier": "Selected supplier does not belong to this retailer."
+            })
 
     def save(self, *args, **kwargs):
 
-        if not self.payment_no:
+        if self.amount is None or self.amount <= 0:
+            raise ValidationError("Payment amount must be greater than zero.")
 
-            year = datetime.now().year
+        if self.paid_amount is None or self.paid_amount < 0:
+            raise ValidationError("Paid amount cannot be negative.")
 
-            with transaction.atomic():
+        if self.paid_amount > self.amount:
+            raise ValidationError("Paid amount cannot exceed payment amount.")
 
-                last_id = (
-                    Payment.objects.filter(
-                        payment_no__startswith=f"PAY-{year}"
-                    ).aggregate(
-                        max_id=Max("id")
-                    )["max_id"] or 0
-                )
+        self.due_amount = self.amount - self.paid_amount
 
-                next_number = last_id + 1
-
-                self.payment_no = (
-                    f"PAY-{year}-{next_number:04d}"
-                )
-
-        # =========================
-        # DUE CALCULATION
-        # =========================
-
-        self.due_amount = (
-            self.amount - self.paid_amount
-        )
-
-        # =========================
-        # PAYMENT STATUS
-        # =========================
-
-        if self.due_amount <= 0:
+        if self.due_amount == 0:
             self.status = "PAID"
-
         elif self.paid_amount > 0:
             self.status = "PARTIAL"
-
         else:
             self.status = "UNPAID"
+
+        self.full_clean()
+
+        if not self.payment_no:
+            with transaction.atomic():
+                super().save(*args, **kwargs)
+
+                self.payment_no = (
+                    f"PAY-{timezone.localdate().year}-{self.pk:06d}"
+                )
+
+                super().save(update_fields=["payment_no", "updated_at"])
+
+            return
 
         super().save(*args, **kwargs)
 

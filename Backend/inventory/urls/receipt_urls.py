@@ -6,16 +6,6 @@ from inventory.views.receipt_views import (
 )
 
 urlpatterns = [
-
-    path(
-        "",
-        ReceiptListCreateView.as_view(),
-        name="receipt-list-create",
-    ),
-
-    path(
-        "<int:pk>/",
-        ReceiptDetailView.as_view(),
-        name="receipt-detail",
-    ),
+    path("receipts/",ReceiptListCreateView.as_view(),name="receipt-list-create",),
+    path("receipts/<int:pk>/",ReceiptDetailView.as_view(),name="receipt-detail",),
 ]

@@ -1,96 +1,129 @@
-from rest_framework.generics import (ListCreateAPIView, RetrieveUpdateDestroyAPIView)
-from rest_framework.permissions import (IsAuthenticated)
+from django.db import transaction
 
-from inventory.models.sales_return_item_models import (SalesReturnItem)
-from inventory.serializers.sales_return_item_serializers import (SalesReturnItemSerializer)
-from accounts.permissions import (IsAdminOrStaff)
-from inventory.services.sales_return_item_service import (process_sales_return_item)
-from subscriptions.utils import (check_subscription_write_access)
+from rest_framework.generics import (
+    ListCreateAPIView,
+    RetrieveUpdateDestroyAPIView,
+)
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied, ValidationError
+
+from inventory.models.sales_return_item_models import SalesReturnItem
+from inventory.serializers.sales_return_item_serializers import (
+    SalesReturnItemSerializer,
+)
+from inventory.services.sales_return_item_service import (
+    process_sales_return_item,
+)
+
+from accounts.permissions import IsAdminOrStaff
+from subscriptions.utils import check_subscription_write_access
+
+# =====================================================
+# SALES RETURN ITEM BASE VIEW
+# =====================================================
+
+
+class SalesReturnItemBaseView:
+
+    def is_platform_admin(self):
+
+        user = self.request.user
+
+        return user.is_superuser or getattr(user, "role", None) == "superadmin"
+
+    def check_write_access(self):
+
+        if self.is_platform_admin():
+            return
+
+        retailer = getattr(self.request.user, "retailer", None)
+
+        if not retailer:
+            raise PermissionDenied("Retailer account is not associated with this user.")
+
+        check_subscription_write_access(retailer)
+
+    def get_queryset(self):
+
+        user = self.request.user
+
+        queryset = SalesReturnItem.objects.select_related(
+            "retailer",
+            "branch",
+            "sales_return",
+            "product",
+            "batch",
+            "created_by",
+        )
+
+        if self.is_platform_admin():
+            return queryset
+
+        retailer = getattr(user, "retailer", None)
+
+        if not retailer:
+            return queryset.none()
+
+        queryset = queryset.filter(retailer=retailer)
+
+        branch = getattr(user, "branch", None)
+
+        if branch:
+            queryset = queryset.filter(branch=branch)
+
+        return queryset
 
 
 # =====================================================
 # SALES RETURN ITEM LIST + CREATE
 # =====================================================
 
-class SalesReturnItemListCreateView(ListCreateAPIView):
 
-    serializer_class = (
-        SalesReturnItemSerializer
-    )
+class SalesReturnItemListCreateView(
+    SalesReturnItemBaseView,
+    ListCreateAPIView,
+):
+
+    serializer_class = SalesReturnItemSerializer
 
     permission_classes = [
         IsAuthenticated,
         IsAdminOrStaff,
     ]
 
-    def get_queryset(self):
-
-        user = self.request.user
-
-        queryset = (
-            SalesReturnItem.objects
-            .select_related(
-                "retailer",
-                "branch",
-                "sales_return",
-                "product",
-                "batch",
-                "created_by",
-            )
-            .all()
-        )
-
-        # ================= SUPER ADMIN ================= #
-
-        if (
-            user.is_superuser or
-            getattr(user, "role", None) == "superadmin"
-        ):
-            return queryset
-
-        # ================= RETAILER FILTER ================= #
-
-        queryset = queryset.filter(
-            retailer=user.retailer
-        )
-
-        # ================= BRANCH FILTER ================= #
-
-        if getattr(user, "branch", None):
-
-            queryset = queryset.filter(
-                branch=user.branch
-            )
-
-        return queryset
-
+    @transaction.atomic
     def perform_create(self, serializer):
 
-        if not self.request.user.is_superuser:
-            check_subscription_write_access(
-                self.request.user.retailer
+        self.check_write_access()
+
+        user = self.request.user
+        retailer = getattr(user, "retailer", None)
+
+        if not retailer:
+            raise PermissionDenied(
+                "A retailer must be associated with the user to create a sales return item."
             )
 
         sales_return_item = serializer.save(
-            retailer=self.request.user.retailer,
-            branch=self.request.user.branch,
-            created_by=self.request.user,
+            retailer=retailer,
+            branch=getattr(user, "branch", None),
+            created_by=user,
         )
 
-        process_sales_return_item(
-            sales_return_item
-        )
+        process_sales_return_item(sales_return_item)
 
 
 # =====================================================
-# SALES RETURN ITEM DETAIL VIEW
+# SALES RETURN ITEM DETAIL
 # =====================================================
 
-class SalesReturnItemDetailView(RetrieveUpdateDestroyAPIView):
 
-    serializer_class = (
-        SalesReturnItemSerializer
-    )
+class SalesReturnItemDetailView(
+    SalesReturnItemBaseView,
+    RetrieveUpdateDestroyAPIView,
+):
+
+    serializer_class = SalesReturnItemSerializer
 
     permission_classes = [
         IsAuthenticated,
@@ -99,55 +132,27 @@ class SalesReturnItemDetailView(RetrieveUpdateDestroyAPIView):
 
     lookup_field = "pk"
 
-    def get_queryset(self):
-
-        user = self.request.user
-
-        queryset = (
-            SalesReturnItem.objects
-            .select_related(
-                "retailer",
-                "branch",
-                "sales_return",
-                "product",
-                "batch",
-                "created_by",
-            )
-            .all()
-        )
-
-        if (
-            user.is_superuser or
-            getattr(user, "role", None) == "superadmin"
-        ):
-            return queryset
-
-        queryset = queryset.filter(
-            retailer=user.retailer
-        )
-
-        if getattr(user, "branch", None):
-
-            queryset = queryset.filter(
-                branch=user.branch
-            )
-
-        return queryset
-
+    @transaction.atomic
     def perform_update(self, serializer):
 
-        if not self.request.user.is_superuser:
-            check_subscription_write_access(
-                self.request.user.retailer
-            )
+        self.check_write_access()
 
-        serializer.save()
+        instance = self.get_object()
+
+        sales_return_item = serializer.save(
+            retailer=instance.retailer,
+            branch=instance.branch,
+            sales_return=instance.sales_return,
+            created_by=instance.created_by,
+        )
+
+        process_sales_return_item(sales_return_item)
 
     def perform_destroy(self, instance):
 
-        if not self.request.user.is_superuser:
-            check_subscription_write_access(
-                self.request.user.retailer
-            )
+        self.check_write_access()
 
-        instance.delete()
+        raise ValidationError(
+            "Processed sales return items cannot be deleted directly. "
+            "Reverse the stock and financial transactions before deleting the item."
+        )
