@@ -19,8 +19,6 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 
-from subscriptions.utils import check_subscription_write_access
-
 from .models import BackupLog, BackupSchedule
 
 from .serializers import (
@@ -38,11 +36,64 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
-#                    BACKUP HELPER METHODS
+# BACKUP HELPER METHODS
 # ============================================================
 
 
 class BackupHelperMixin:
+
+    # ========================================================
+    # BACKUP DIRECTORY
+    # ========================================================
+
+    def get_backup_root(self):
+
+        backup_root = Path(
+            getattr(
+                settings,
+                "BACKUP_ROOT",
+                Path(settings.BASE_DIR) / "private_backups",
+            )
+        ).resolve()
+
+        backup_root.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        return backup_root
+
+    # ========================================================
+    # SAFE BACKUP FILE PATH
+    # ========================================================
+
+    def get_safe_backup_path(self, backup):
+
+        if not backup.file_path:
+            raise ValueError("Backup file path is missing.")
+
+        original_path = Path(backup.file_path)
+
+        if original_path.is_symlink():
+            raise ValueError("Symbolic links are not allowed.")
+
+        backup_root = self.get_backup_root()
+
+        backup_path = original_path.resolve()
+
+        try:
+            backup_path.relative_to(backup_root)
+        except ValueError:
+            raise ValueError("Backup file is outside the configured backup directory.")
+
+        if not backup_path.is_file():
+            raise FileNotFoundError("Backup file does not exist.")
+
+        return backup_path
+
+    # ========================================================
+    # CHECKSUM
+    # ========================================================
 
     def calculate_checksum(self, file_path):
 
@@ -58,7 +109,47 @@ class BackupHelperMixin:
 
         return sha256.hexdigest()
 
-    def create_database_backup(self, database_path, backup_path):
+    def verify_backup_checksum(self, backup, backup_path):
+
+        if not backup.checksum:
+            raise ValueError("Backup checksum is missing.")
+
+        calculated_checksum = self.calculate_checksum(backup_path)
+
+        if calculated_checksum != backup.checksum:
+            raise ValueError("Backup checksum verification failed.")
+
+        return True
+
+    # ========================================================
+    # DATABASE PATH
+    # ========================================================
+
+    def get_database_path(self):
+
+        database_config = settings.DATABASES["default"]
+
+        if database_config["ENGINE"] != "django.db.backends.sqlite3":
+            raise ValueError(
+                "This backup implementation currently supports SQLite only."
+            )
+
+        database_path = Path(database_config["NAME"]).resolve()
+
+        if not database_path.is_file():
+            raise FileNotFoundError("Database file not found.")
+
+        return database_path
+
+    # ========================================================
+    # CREATE DATABASE BACKUP
+    # ========================================================
+
+    def create_database_backup(
+        self,
+        database_path,
+        backup_path,
+    ):
 
         source_connection = sqlite3.connect(str(database_path))
 
@@ -67,7 +158,13 @@ class BackupHelperMixin:
             backup_connection = sqlite3.connect(str(backup_path))
 
             try:
+
                 source_connection.backup(backup_connection)
+
+                result = backup_connection.execute("PRAGMA integrity_check").fetchone()
+
+                if not result or result[0] != "ok":
+                    raise ValueError("Database backup integrity check failed.")
 
             finally:
                 backup_connection.close()
@@ -75,7 +172,14 @@ class BackupHelperMixin:
         finally:
             source_connection.close()
 
+    # ========================================================
+    # VALIDATE SQLITE DATABASE
+    # ========================================================
+
     def validate_sqlite_database(self, database_path):
+
+        if not Path(database_path).is_file():
+            raise FileNotFoundError("SQLite database file does not exist.")
 
         connection = sqlite3.connect(str(database_path))
 
@@ -89,7 +193,15 @@ class BackupHelperMixin:
         finally:
             connection.close()
 
-    def create_safety_backup(self, database_path, backup_root):
+    # ========================================================
+    # CREATE SAFETY DATABASE BACKUP
+    # ========================================================
+
+    def create_safety_backup(
+        self,
+        database_path,
+        backup_root,
+    ):
 
         timestamp = timezone.now().strftime("%Y%m%d_%H%M%S_%f")
 
@@ -105,11 +217,18 @@ class BackupHelperMixin:
 
         return safety_backup_path
 
-    def restore_sqlite_database(self, source_path, destination_path):
+    # ========================================================
+    # RESTORE SQLITE DATABASE
+    # ========================================================
+
+    def restore_sqlite_database(
+        self,
+        source_path,
+        destination_path,
+    ):
 
         self.validate_sqlite_database(source_path)
 
-        # Close existing Django database connections.
         connections.close_all()
 
         source_connection = None
@@ -138,7 +257,15 @@ class BackupHelperMixin:
 
             connections.close_all()
 
+    # ========================================================
+    # VALIDATE ZIP ARCHIVE
+    # ========================================================
+
     def validate_zip_archive(self, archive):
+
+        total_uncompressed_size = 0
+
+        max_uncompressed_size = 10 * 1024 * 1024 * 1024
 
         for member in archive.infolist():
 
@@ -154,41 +281,45 @@ class BackupHelperMixin:
             if member_path.parts and ":" in member_path.parts[0]:
                 raise ValueError("Backup archive contains an unsafe file path.")
 
+            unix_mode = member.external_attr >> 16
+
+            if (unix_mode & 0o170000) == 0o120000:
+                raise ValueError("Symbolic links are not allowed in backup archives.")
+
+            total_uncompressed_size += member.file_size
+
+            if total_uncompressed_size > max_uncompressed_size:
+                raise ValueError("Backup archive exceeds the maximum allowed size.")
+
+    # ========================================================
+    # GET MEDIA FILES
+    # ========================================================
+
     def get_media_files(self):
 
-        media_root = Path(settings.MEDIA_ROOT)
+        media_root = Path(settings.MEDIA_ROOT).resolve()
 
-        backup_root = Path(
-            getattr(
-                settings,
-                "BACKUP_ROOT",
-                settings.BASE_DIR / "private_backups",
-            )
-        )
+        backup_root = self.get_backup_root()
 
         if not media_root.exists():
             return
 
-        media_root_resolved = media_root.resolve()
-        backup_root_resolved = backup_root.resolve()
-
         backup_inside_media = (
-            backup_root_resolved == media_root_resolved
-            or media_root_resolved in backup_root_resolved.parents
+            backup_root == media_root or media_root in backup_root.parents
         )
 
         for file_path in media_root.rglob("*"):
 
-            if not file_path.is_file():
+            if file_path.is_symlink():
                 continue
 
-            if file_path.is_symlink():
+            if not file_path.is_file():
                 continue
 
             if backup_inside_media:
 
                 try:
-                    file_path.resolve().relative_to(backup_root_resolved)
+                    file_path.resolve().relative_to(backup_root)
                     continue
 
                 except ValueError:
@@ -196,9 +327,13 @@ class BackupHelperMixin:
 
             yield file_path
 
+    # ========================================================
+    # CREATE MEDIA BACKUP
+    # ========================================================
+
     def create_media_backup(self, backup_path):
 
-        media_root = Path(settings.MEDIA_ROOT)
+        media_root = Path(settings.MEDIA_ROOT).resolve()
 
         with zipfile.ZipFile(
             backup_path,
@@ -218,7 +353,15 @@ class BackupHelperMixin:
                     arcname=str(relative_path),
                 )
 
-    def create_full_backup(self, database_path, backup_path):
+    # ========================================================
+    # CREATE FULL BACKUP
+    # ========================================================
+
+    def create_full_backup(
+        self,
+        database_path,
+        backup_path,
+    ):
 
         with tempfile.TemporaryDirectory() as temp_dir:
 
@@ -229,7 +372,7 @@ class BackupHelperMixin:
                 temporary_database,
             )
 
-            media_root = Path(settings.MEDIA_ROOT)
+            media_root = Path(settings.MEDIA_ROOT).resolve()
 
             with zipfile.ZipFile(
                 backup_path,
@@ -253,180 +396,60 @@ class BackupHelperMixin:
                             arcname=f"media/{relative_path}",
                         )
 
-    def extract_media_archive(self, archive, destination):
+    # ========================================================
+    # CREATE PLATFORM BACKUP
+    # ========================================================
 
-        self.validate_zip_archive(archive)
+    def create_platform_backup(
+        self,
+        backup_scope,
+        backup_type=BackupLog.BackupType.AUTOMATIC,
+        created_by=None,
+        notes="",
+    ):
 
-        for member in archive.infolist():
-
-            if member.is_dir():
-                continue
-
-            relative_path = PurePosixPath(member.filename)
-
-            if not relative_path.parts:
-                continue
-
-            destination_path = destination.joinpath(*relative_path.parts)
-
-            destination_path.parent.mkdir(
-                parents=True,
-                exist_ok=True,
-            )
-
-            with archive.open(member) as source:
-
-                with open(destination_path, "wb") as target:
-                    shutil.copyfileobj(source, target)
-
-    def restore_media_files(self, source_root, media_root):
-
-        media_root.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        for source_file in source_root.rglob("*"):
-
-            if not source_file.is_file():
-                continue
-
-            relative_path = source_file.relative_to(source_root)
-
-            destination_file = media_root / relative_path
-
-            destination_file.parent.mkdir(
-                parents=True,
-                exist_ok=True,
-            )
-
-            shutil.copy2(
-                source_file,
-                destination_file,
-            )
-
-
-# ============================================================
-#                       CREATE BACKUP
-# ============================================================
-
-
-class CreateBackupView(BackupHelperMixin, APIView):
-
-    permission_classes = [
-        IsAuthenticated,
-        IsRetailerOwnerOrPlatformOwner,
-    ]
-
-    def post(self, request):
-
-        if not request.user.is_superuser:
-            return Response(
-                {
-                    "success": False,
-                    "message": (
-                        "Only the Platform Owner can create " "application backups."
-                    ),
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        serializer = ManualBackupSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        backup_scope = serializer.validated_data.get(
-            "backup_scope",
-            BackupLog.BackupScope.DATABASE,
-        )
-
-        notes = serializer.validated_data.get("notes", "")
-
-        database_config = settings.DATABASES["default"]
+        if backup_scope not in BackupLog.BackupScope.values:
+            raise ValueError("Unsupported backup scope.")
 
         database_path = None
 
-        # Check database only for DATABASE and FULL backups.
         if backup_scope in [
             BackupLog.BackupScope.DATABASE,
             BackupLog.BackupScope.FULL,
         ]:
+            database_path = self.get_database_path()
 
-            if database_config["ENGINE"] != "django.db.backends.sqlite3":
-                return Response(
-                    {
-                        "success": False,
-                        "message": (
-                            "Database backup currently supports " "SQLite only."
-                        ),
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            database_path = Path(database_config["NAME"])
-
-            if not database_path.is_file():
-                return Response(
-                    {
-                        "success": False,
-                        "message": "Database file not found.",
-                    },
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-
-        backup_dir = Path(
-            getattr(
-                settings,
-                "BACKUP_ROOT",
-                settings.BASE_DIR / "private_backups",
-            )
-        )
-
-        backup_dir.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
+        backup_dir = self.get_backup_root()
 
         timestamp = timezone.now().strftime("%Y%m%d_%H%M%S_%f")
 
         unique_id = uuid4().hex[:8]
 
-        if backup_scope == BackupLog.BackupScope.DATABASE:
+        file_extensions = {
+            BackupLog.BackupScope.DATABASE: ".sqlite3",
+            BackupLog.BackupScope.MEDIA: ".zip",
+            BackupLog.BackupScope.FULL: ".zip",
+        }
 
-            backup_file = f"database_backup_{timestamp}_{unique_id}.sqlite3"
+        file_name = (
+            f"{backup_scope}_backup_"
+            f"{timestamp}_{unique_id}"
+            f"{file_extensions[backup_scope]}"
+        )
 
-        elif backup_scope == BackupLog.BackupScope.MEDIA:
+        backup_path = backup_dir / file_name
 
-            backup_file = f"media_backup_{timestamp}_{unique_id}.zip"
-
-        elif backup_scope == BackupLog.BackupScope.FULL:
-
-            backup_file = f"full_backup_{timestamp}_{unique_id}.zip"
-
-        else:
-
-            return Response(
-                {
-                    "success": False,
-                    "message": "Invalid backup scope.",
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        backup_path = backup_dir / backup_file
-
-        backup = None
+        backup = BackupLog.objects.create(
+            retailer=None,
+            backup_type=backup_type,
+            backup_scope=backup_scope,
+            status=BackupLog.Status.IN_PROGRESS,
+            file_name=file_name,
+            notes=notes,
+            created_by=created_by,
+        )
 
         try:
-
-            backup = BackupLog.objects.create(
-                retailer=None,
-                backup_type=BackupLog.BackupType.MANUAL,
-                backup_scope=backup_scope,
-                status=BackupLog.Status.IN_PROGRESS,
-                file_name=backup_file,
-                notes=notes,
-                created_by=request.user,
-            )
 
             if backup_scope == BackupLog.BackupScope.DATABASE:
 
@@ -467,31 +490,240 @@ class CreateBackupView(BackupHelperMixin, APIView):
                     "file_size",
                     "checksum",
                     "status",
+                    "updated_at",
                 ]
             )
+
+            return backup
 
         except Exception as error:
 
             if backup_path.exists():
                 backup_path.unlink()
 
-            if backup:
+            backup.status = BackupLog.Status.FAILED
 
-                backup.status = BackupLog.Status.FAILED
-                backup.notes = str(error)
+            backup.notes = (f"{notes}\nError: {str(error)}").strip()
 
-                backup.save(
-                    update_fields=[
-                        "status",
-                        "notes",
-                    ]
-                )
+            backup.save(
+                update_fields=[
+                    "status",
+                    "notes",
+                    "updated_at",
+                ]
+            )
 
-            else:
+            logger.exception("Platform backup creation failed.")
 
-                logger.exception("Backup log creation failed.")
+            raise
 
-            logger.exception("Backup creation failed.")
+    # ========================================================
+    # EXTRACT MEDIA ARCHIVE
+    # ========================================================
+
+    def extract_media_archive(
+        self,
+        archive,
+        destination,
+    ):
+
+        self.validate_zip_archive(archive)
+
+        destination = destination.resolve()
+
+        for member in archive.infolist():
+
+            if member.is_dir():
+                continue
+
+            relative_path = PurePosixPath(member.filename)
+
+            if not relative_path.parts:
+                continue
+
+            destination_path = (destination.joinpath(*relative_path.parts)).resolve()
+
+            try:
+                destination_path.relative_to(destination)
+            except ValueError:
+                raise ValueError("Unsafe archive extraction path.")
+
+            destination_path.parent.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+
+            with archive.open(member) as source:
+
+                with open(
+                    destination_path,
+                    "wb",
+                ) as target:
+
+                    shutil.copyfileobj(
+                        source,
+                        target,
+                    )
+
+    # ========================================================
+    # RESTORE MEDIA FILES
+    # ========================================================
+
+    def restore_media_files(
+        self,
+        source_root,
+        media_root,
+    ):
+
+        source_root = Path(source_root).resolve()
+
+        media_root = Path(media_root).resolve()
+
+        media_root.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        for source_file in source_root.rglob("*"):
+
+            if source_file.is_symlink():
+                continue
+
+            if not source_file.is_file():
+                continue
+
+            relative_path = source_file.relative_to(source_root)
+
+            destination_file = (media_root / relative_path).resolve()
+
+            try:
+                destination_file.relative_to(media_root)
+            except ValueError:
+                raise ValueError("Unsafe media restoration path.")
+
+            destination_file.parent.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+
+            shutil.copy2(
+                source_file,
+                destination_file,
+            )
+
+    # ========================================================
+    # AUDIT LOG
+    # ========================================================
+
+    def record_audit_log(
+        self,
+        request,
+        action,
+        model_name,
+        object_id,
+        description,
+    ):
+
+        try:
+
+            create_audit_log(
+                user=request.user,
+                action=action,
+                model_name=model_name,
+                object_id=object_id,
+                description=description,
+                request=request,
+            )
+
+        except Exception:
+
+            logger.exception("Backup audit log creation failed.")
+
+    # ========================================================
+    # GET ACCESSIBLE BACKUP
+    # ========================================================
+
+    def get_accessible_backup(
+        self,
+        request,
+        pk,
+    ):
+
+        if not request.user.is_superuser:
+            return None
+
+        return BackupLog.objects.filter(
+            id=pk,
+            retailer__isnull=True,
+        ).first()
+
+
+# ============================================================
+# CREATE BACKUP
+# ============================================================
+
+
+class CreateBackupView(
+    BackupHelperMixin,
+    APIView,
+):
+
+    permission_classes = [
+        IsAuthenticated,
+        IsRetailerOwnerOrPlatformOwner,
+    ]
+
+    def post(self, request):
+
+        if not request.user.is_superuser:
+            return Response(
+                {
+                    "success": False,
+                    "message": (
+                        "Only the Platform Owner can create " "application backups."
+                    ),
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = ManualBackupSerializer(data=request.data)
+
+        serializer.is_valid(raise_exception=True)
+
+        backup_scope = serializer.validated_data.get(
+            "backup_scope",
+            BackupLog.BackupScope.DATABASE,
+        )
+
+        notes = serializer.validated_data.get(
+            "notes",
+            "",
+        )
+
+        try:
+
+            backup = self.create_platform_backup(
+                backup_scope=backup_scope,
+                backup_type=BackupLog.BackupType.MANUAL,
+                created_by=request.user,
+                notes=notes,
+            )
+
+        except (ValueError, FileNotFoundError) as error:
+
+            logger.exception("Invalid platform backup request.")
+
+            return Response(
+                {
+                    "success": False,
+                    "message": str(error),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        except Exception:
+
+            logger.exception("Manual platform backup failed.")
 
             return Response(
                 {
@@ -501,22 +733,15 @@ class CreateBackupView(BackupHelperMixin, APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        try:
-
-            create_audit_log(
-                user=request.user,
-                action="create",
-                model_name="BackupLog",
-                object_id=backup.id,
-                description=(
-                    f"Created {backup.backup_scope} backup " f"{backup.file_name}"
-                ),
-                request=request,
-            )
-
-        except Exception:
-
-            logger.exception("Backup audit log creation failed.")
+        self.record_audit_log(
+            request=request,
+            action="create",
+            model_name="BackupLog",
+            object_id=backup.id,
+            description=(
+                f"Created {backup.backup_scope} backup " f"{backup.file_name}"
+            ),
+        )
 
         return Response(
             {
@@ -529,7 +754,7 @@ class CreateBackupView(BackupHelperMixin, APIView):
 
 
 # ============================================================
-#                       BACKUP HISTORY
+# BACKUP HISTORY
 # ============================================================
 
 
@@ -542,15 +767,21 @@ class BackupHistoryView(APIView):
 
     def get(self, request):
 
-        if request.user.is_superuser:
+        if not request.user.is_superuser:
+            return Response(
+                {
+                    "success": False,
+                    "message": (
+                        "Only the Platform Owner can view "
+                        "application backup history."
+                    ),
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
-            queryset = BackupLog.objects.all()
-
-        else:
-
-            queryset = BackupLog.objects.filter(retailer=request.user.retailer)
-
-        queryset = queryset.order_by("-created_at")
+        queryset = BackupLog.objects.filter(retailer__isnull=True).order_by(
+            "-created_at"
+        )
 
         serializer = BackupHistorySerializer(
             queryset,
@@ -568,11 +799,14 @@ class BackupHistoryView(APIView):
 
 
 # ============================================================
-#                       BACKUP DETAIL
+# BACKUP DETAIL
 # ============================================================
 
 
-class BackupDetailView(APIView):
+class BackupDetailView(
+    BackupHelperMixin,
+    APIView,
+):
 
     permission_classes = [
         IsAuthenticated,
@@ -581,16 +815,10 @@ class BackupDetailView(APIView):
 
     def get(self, request, pk):
 
-        if request.user.is_superuser:
-
-            backup = BackupLog.objects.filter(id=pk).first()
-
-        else:
-
-            backup = BackupLog.objects.filter(
-                id=pk,
-                retailer=request.user.retailer,
-            ).first()
+        backup = self.get_accessible_backup(
+            request,
+            pk,
+        )
 
         if not backup:
             return Response(
@@ -611,11 +839,14 @@ class BackupDetailView(APIView):
 
 
 # ============================================================
-#                       DOWNLOAD BACKUP
+# DOWNLOAD BACKUP
 # ============================================================
 
 
-class DownloadBackupView(APIView):
+class DownloadBackupView(
+    BackupHelperMixin,
+    APIView,
+):
 
     permission_classes = [
         IsAuthenticated,
@@ -624,16 +855,10 @@ class DownloadBackupView(APIView):
 
     def get(self, request, pk):
 
-        if request.user.is_superuser:
-
-            backup = BackupLog.objects.filter(id=pk).first()
-
-        else:
-
-            backup = BackupLog.objects.filter(
-                id=pk,
-                retailer=request.user.retailer,
-            ).first()
+        backup = self.get_accessible_backup(
+            request,
+            pk,
+        )
 
         if not backup:
             return Response(
@@ -651,27 +876,26 @@ class DownloadBackupView(APIView):
             return Response(
                 {
                     "success": False,
-                    "message": "Only successful backups can be downloaded.",
+                    "message": ("Only successful backups can be downloaded."),
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if not backup.file_path:
-            return Response(
-                {
-                    "success": False,
-                    "message": "Backup file path unavailable.",
-                },
-                status=status.HTTP_404_NOT_FOUND,
+        try:
+
+            backup_path = self.get_safe_backup_path(backup)
+
+            self.verify_backup_checksum(
+                backup,
+                backup_path,
             )
 
-        backup_path = Path(backup.file_path)
+        except (ValueError, FileNotFoundError) as error:
 
-        if not backup_path.is_file():
             return Response(
                 {
                     "success": False,
-                    "message": "Backup file not found.",
+                    "message": str(error),
                 },
                 status=status.HTTP_404_NOT_FOUND,
             )
@@ -680,7 +904,10 @@ class DownloadBackupView(APIView):
             download_count=F("download_count") + 1
         )
 
-        backup_file = open(backup_path, "rb")
+        backup_file = open(
+            backup_path,
+            "rb",
+        )
 
         return FileResponse(
             backup_file,
@@ -690,11 +917,14 @@ class DownloadBackupView(APIView):
 
 
 # ============================================================
-#                       RESTORE BACKUP
+# RESTORE BACKUP
 # ============================================================
 
 
-class RestoreBackupView(BackupHelperMixin, APIView):
+class RestoreBackupView(
+    BackupHelperMixin,
+    APIView,
+):
 
     permission_classes = [
         IsAuthenticated,
@@ -715,6 +945,7 @@ class RestoreBackupView(BackupHelperMixin, APIView):
             )
 
         serializer = RestoreBackupSerializer(data=request.data)
+
         serializer.is_valid(raise_exception=True)
 
         backup_id = serializer.validated_data["backup_id"]
@@ -737,91 +968,39 @@ class RestoreBackupView(BackupHelperMixin, APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        if not backup.file_path:
-            return Response(
-                {
-                    "success": False,
-                    "message": "Backup file path unavailable.",
-                },
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        backup_path = Path(backup.file_path)
-
-        if not backup_path.is_file():
-            return Response(
-                {
-                    "success": False,
-                    "message": "Backup file not found.",
-                },
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
         try:
 
-            if backup.checksum:
+            backup_path = self.get_safe_backup_path(backup)
 
-                calculated_checksum = self.calculate_checksum(backup_path)
-
-                if calculated_checksum != backup.checksum:
-                    return Response(
-                        {
-                            "success": False,
-                            "message": (
-                                "Backup checksum verification failed. "
-                                "The backup file may be corrupted."
-                            ),
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-            database_config = settings.DATABASES["default"]
-
-            database_path = Path(database_config["NAME"])
-
-            backup_root = Path(
-                getattr(
-                    settings,
-                    "BACKUP_ROOT",
-                    settings.BASE_DIR / "private_backups",
-                )
+            self.verify_backup_checksum(
+                backup,
+                backup_path,
             )
 
-            backup_root.mkdir(
-                parents=True,
-                exist_ok=True,
-            )
+            backup_root = self.get_backup_root()
 
-            media_root = Path(settings.MEDIA_ROOT)
+            media_root = Path(settings.MEDIA_ROOT).resolve()
 
             backup_scope = backup.backup_scope
 
+            safety_backup = None
+
+            if backup_scope in [
+                BackupLog.BackupScope.DATABASE,
+                BackupLog.BackupScope.FULL,
+            ]:
+
+                database_path = self.get_database_path()
+
+            # ------------------------------------------------
+            # DATABASE RESTORE
+            # ------------------------------------------------
+
             if backup_scope == BackupLog.BackupScope.DATABASE:
-
-                if database_config["ENGINE"] != "django.db.backends.sqlite3":
-                    return Response(
-                        {
-                            "success": False,
-                            "message": (
-                                "Database restoration currently "
-                                "supports SQLite only."
-                            ),
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-                if not database_path.is_file():
-                    return Response(
-                        {
-                            "success": False,
-                            "message": "Current database file not found.",
-                        },
-                        status=status.HTTP_404_NOT_FOUND,
-                    )
 
                 self.validate_sqlite_database(backup_path)
 
-                self.create_safety_backup(
+                safety_backup = self.create_safety_backup(
                     database_path,
                     backup_root,
                 )
@@ -833,8 +1012,12 @@ class RestoreBackupView(BackupHelperMixin, APIView):
 
                 message = (
                     "Database restored successfully. "
-                    "A safety backup of the previous database was created."
+                    "The previous database was backed up."
                 )
+
+            # ------------------------------------------------
+            # MEDIA RESTORE
+            # ------------------------------------------------
 
             elif backup_scope == BackupLog.BackupScope.MEDIA:
 
@@ -864,28 +1047,11 @@ class RestoreBackupView(BackupHelperMixin, APIView):
 
                 message = "Media files restored successfully."
 
+            # ------------------------------------------------
+            # FULL RESTORE
+            # ------------------------------------------------
+
             elif backup_scope == BackupLog.BackupScope.FULL:
-
-                if database_config["ENGINE"] != "django.db.backends.sqlite3":
-                    return Response(
-                        {
-                            "success": False,
-                            "message": (
-                                "Database restoration currently "
-                                "supports SQLite only."
-                            ),
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-                if not database_path.is_file():
-                    return Response(
-                        {
-                            "success": False,
-                            "message": "Current database file not found.",
-                        },
-                        status=status.HTTP_404_NOT_FOUND,
-                    )
 
                 with tempfile.TemporaryDirectory() as temp_dir:
 
@@ -941,9 +1107,14 @@ class RestoreBackupView(BackupHelperMixin, APIView):
                             if not relative_path.parts:
                                 continue
 
-                            destination_path = extracted_media.joinpath(
-                                *relative_path.parts
-                            )
+                            destination_path = (
+                                extracted_media.joinpath(*relative_path.parts)
+                            ).resolve()
+
+                            try:
+                                destination_path.relative_to(extracted_media.resolve())
+                            except ValueError:
+                                raise ValueError("Unsafe media archive path.")
 
                             destination_path.parent.mkdir(
                                 parents=True,
@@ -964,7 +1135,7 @@ class RestoreBackupView(BackupHelperMixin, APIView):
 
                     self.validate_sqlite_database(extracted_database)
 
-                    self.create_safety_backup(
+                    safety_backup = self.create_safety_backup(
                         database_path,
                         backup_root,
                     )
@@ -981,7 +1152,7 @@ class RestoreBackupView(BackupHelperMixin, APIView):
 
                 message = (
                     "Full application backup restored successfully. "
-                    "A safety backup of the previous database was created."
+                    "The previous database was backed up."
                 )
 
             else:
@@ -994,40 +1165,35 @@ class RestoreBackupView(BackupHelperMixin, APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            backup.status = BackupLog.Status.RESTORED
-            backup.restored_at = timezone.now()
-            backup.restored_by = request.user
-
-            backup.save(
-                update_fields=[
-                    "status",
-                    "restored_at",
-                    "restored_by",
-                ]
-            )
+            # ------------------------------------------------
+            # UPDATE RESTORE INFORMATION
+            # ------------------------------------------------
 
             try:
 
-                create_audit_log(
-                    user=request.user,
-                    action="update",
-                    model_name="BackupLog",
-                    object_id=backup.id,
-                    description=(
-                        f"Restored {backup.backup_scope} backup: " f"{backup.file_name}"
-                    ),
-                    request=request,
+                BackupLog.objects.filter(id=backup_id).update(
+                    status=BackupLog.Status.RESTORED,
+                    restored_at=timezone.now(),
+                    restored_by=request.user,
                 )
 
             except Exception:
 
-                logger.exception("Backup restoration audit log failed.")
+                logger.exception("Could not update restored backup metadata.")
+
+            self.record_audit_log(
+                request=request,
+                action="update",
+                model_name="BackupLog",
+                object_id=backup_id,
+                description=(f"Restored {backup_scope} backup: " f"{backup.file_name}"),
+            )
 
             return Response(
                 {
                     "success": True,
                     "message": message,
-                    "data": BackupLogSerializer(backup).data,
+                    "safety_backup": (str(safety_backup) if safety_backup else None),
                 },
                 status=status.HTTP_200_OK,
             )
@@ -1048,69 +1214,79 @@ class RestoreBackupView(BackupHelperMixin, APIView):
 
 
 # ============================================================
-#                       BACKUP SCHEDULE
+# BACKUP SCHEDULE
 # ============================================================
 
 
-class BackupScheduleView(APIView):
+class BackupScheduleView(
+    BackupHelperMixin,
+    APIView,
+):
 
     permission_classes = [
         IsAuthenticated,
         IsRetailerOwnerOrPlatformOwner,
     ]
 
+    def check_platform_owner(self, request):
+
+        return request.user.is_superuser
+
+    # ========================================================
+    # GET GLOBAL SCHEDULE
+    # ========================================================
+
     def get(self, request):
 
-        if request.user.is_superuser:
+        if not self.check_platform_owner(request):
             return Response(
                 {
                     "success": False,
                     "message": (
-                        "Platform Owner does not have a "
-                        "retailer-specific backup schedule."
+                        "Only the Platform Owner can manage "
+                        "the global backup schedule."
                     ),
                 },
-                status=status.HTTP_400_BAD_REQUEST,
+                status=status.HTTP_403_FORBIDDEN,
             )
 
-        schedule = BackupSchedule.objects.filter(retailer=request.user.retailer).first()
+        schedule = BackupSchedule.objects.first()
 
         if not schedule:
             return Response(
                 {
                     "success": False,
-                    "message": "Backup schedule not found.",
+                    "message": ("Global backup schedule has not been configured."),
                 },
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        serializer = BackupScheduleSerializer(schedule)
-
         return Response(
             {
                 "success": True,
-                "data": serializer.data,
+                "data": BackupScheduleSerializer(schedule).data,
             },
             status=status.HTTP_200_OK,
         )
 
+    # ========================================================
+    # CREATE / UPDATE GLOBAL SCHEDULE
+    # ========================================================
+
     def post(self, request):
 
-        if request.user.is_superuser:
+        if not self.check_platform_owner(request):
             return Response(
                 {
                     "success": False,
                     "message": (
-                        "Platform Owner cannot create a retailer "
-                        "schedule without specifying a retailer."
+                        "Only the Platform Owner can configure " "automatic backups."
                     ),
                 },
-                status=status.HTTP_400_BAD_REQUEST,
+                status=status.HTTP_403_FORBIDDEN,
             )
 
-        check_subscription_write_access(request.user.retailer)
-
-        schedule = BackupSchedule.objects.filter(retailer=request.user.retailer).first()
+        schedule = BackupSchedule.objects.first()
 
         if schedule:
 
@@ -1130,24 +1306,24 @@ class BackupScheduleView(APIView):
 
         serializer.is_valid(raise_exception=True)
 
-        backup_schedule = serializer.save(retailer=request.user.retailer)
+        backup_schedule = serializer.save(updated_by=request.user)
 
-        create_audit_log(
-            user=request.user,
+        self.record_audit_log(
+            request=request,
             action=("update" if action == "updated" else "create"),
             model_name="BackupSchedule",
             object_id=backup_schedule.id,
             description=(
-                f"{action.capitalize()} backup schedule "
-                f"({backup_schedule.frequency})"
+                f"Platform automatic backup schedule {action}. "
+                f"Frequency: {backup_schedule.frequency}, "
+                f"Scope: {backup_schedule.backup_scope}"
             ),
-            request=request,
         )
 
         return Response(
             {
                 "success": True,
-                "message": (f"Backup schedule {action} successfully."),
+                "message": (f"Global backup schedule {action} successfully."),
                 "data": BackupScheduleSerializer(backup_schedule).data,
             },
             status=(

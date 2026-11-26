@@ -1,8 +1,6 @@
 from django.contrib import admin
-from .models import (
-    BackupLog,
-    BackupSchedule
-)
+
+from .models import BackupLog, BackupSchedule
 
 
 @admin.register(BackupLog)
@@ -10,7 +8,6 @@ class BackupLogAdmin(admin.ModelAdmin):
 
     list_display = (
         "id",
-        "retailer",
         "backup_type",
         "backup_scope",
         "status",
@@ -18,6 +15,7 @@ class BackupLogAdmin(admin.ModelAdmin):
         "file_size",
         "download_count",
         "created_by",
+        "restored_by",
         "created_at",
     )
 
@@ -30,18 +28,26 @@ class BackupLogAdmin(admin.ModelAdmin):
 
     search_fields = (
         "file_name",
-        "retailer__name",
         "created_by__username",
-    )
-
-    ordering = (
-        "-created_at",
+        "restored_by__username",
     )
 
     readonly_fields = (
+        "file_name",
+        "file_path",
+        "file_size",
+        "checksum",
+        "download_count",
         "created_at",
+        "updated_at",
         "restored_at",
+        "created_by",
+        "restored_by",
     )
+
+    ordering = ("-created_at",)
+    list_per_page = 25
+    date_hierarchy = "created_at"
 
 
 @admin.register(BackupSchedule)
@@ -49,28 +55,26 @@ class BackupScheduleAdmin(admin.ModelAdmin):
 
     list_display = (
         "id",
-        "retailer",
         "frequency",
+        "backup_scope",
         "backup_time",
         "is_active",
-        "created_at",
+        "last_run_at",
+        "updated_by",
+        "updated_at",
     )
 
     list_filter = (
         "frequency",
+        "backup_scope",
         "is_active",
-        "created_at",
-    )
-
-    search_fields = (
-        "retailer__name",
-    )
-
-    ordering = (
-        "-created_at",
     )
 
     readonly_fields = (
+        "last_run_at",
+        "updated_by",
         "created_at",
         "updated_at",
     )
+
+    list_per_page = 25

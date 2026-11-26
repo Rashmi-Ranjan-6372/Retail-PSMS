@@ -6,7 +6,7 @@ from django.db import models, transaction
 class Branch(models.Model):
     retailer = models.ForeignKey("accounts.Retailer", on_delete=models.CASCADE, related_name="branches")
     name = models.CharField(max_length=255)
-    code = models.CharField(max_length=20, unique=True)
+    code = models.CharField(max_length=20)
     address = models.TextField()
     phone = models.CharField(max_length=15)
     email = models.EmailField(blank=True, null=True)
@@ -46,9 +46,14 @@ class Branch(models.Model):
 
             with transaction.atomic():
 
+                from accounts.models import Retailer
+
+                Retailer.objects.select_for_update().get(
+                    id=self.retailer_id
+                )
+
                 last_branch = (
                     Branch.objects
-                    .select_for_update()
                     .filter(retailer_id=self.retailer_id)
                     .order_by("-id")
                     .first()
@@ -141,7 +146,6 @@ class Branch(models.Model):
         ]
 
         constraints = [
-
             models.UniqueConstraint(
                 fields=["retailer", "name"],
                 condition=models.Q(
@@ -150,7 +154,6 @@ class Branch(models.Model):
                 ),
                 name="unique_active_branch_name_per_retailer"
             ),
-
             models.UniqueConstraint(
                 fields=["retailer", "code"],
                 name="unique_active_branch_code_per_retailer"

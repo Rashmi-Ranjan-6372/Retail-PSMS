@@ -1,5 +1,11 @@
+
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
+
+
+# =========================
+# REPORT PAGINATION
+# =========================
 
 class ReportPagination(PageNumberPagination):
 
@@ -11,18 +17,15 @@ class ReportPagination(PageNumberPagination):
     def get_paginated_response(self, data):
 
         return Response({
-
-            "status": True,
-
-            "total_records": self.page.paginator.count,
-
-            "total_pages": self.page.paginator.num_pages,
-
-            "current_page": self.page.number,
-
-            "next": self.get_next_link(),
-
-            "previous": self.get_previous_link(),
-
-            "results": data,
+            "success": True,
+            "message": "Report data retrieved successfully.",
+            "data": {
+                "total_records": self.page.paginator.count,
+                "total_pages": self.page.paginator.num_pages,
+                "current_page": self.page.number,
+                "page_size": self.get_page_size(self.request),
+                "next": self.get_next_link(),
+                "previous": self.get_previous_link(),
+                "results": data,
+            },
         })
