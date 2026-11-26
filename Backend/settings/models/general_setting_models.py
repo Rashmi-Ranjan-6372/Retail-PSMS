@@ -13,13 +13,7 @@ class GeneralSetting(models.Model):
     enable_expiry_alert = models.BooleanField(default=True)
     enable_loose_sale = models.BooleanField(default=True)
     enable_negative_stock = models.BooleanField(default=False)
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True
-    )
-
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

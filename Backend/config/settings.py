@@ -48,6 +48,7 @@ CSRF_TRUSTED_ORIGINS = config(
 #                     APPLICATIONS
 # ============================================================
 
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -63,13 +64,14 @@ INSTALLED_APPS = [
     "branches",
     "masters",
     "inventory",
-    "reports",
-    "settings",
+    "reports.apps.ReportsConfig",
+    "settings.apps.SettingsConfig",
     "backups",
     "subscriptions",
     "support",
     "email_config",
 ]
+
 
 
 # ============================================================
