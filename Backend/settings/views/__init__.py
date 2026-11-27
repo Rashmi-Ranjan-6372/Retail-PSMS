@@ -1,2 +1,1 @@
-from .general_setting_view import *
-from .financial_year_view import *
+from .setting_views import *

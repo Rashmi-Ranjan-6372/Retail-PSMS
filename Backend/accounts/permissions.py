@@ -8,95 +8,81 @@ from rest_framework.permissions import (
 # =====================================================
 
 def is_platform_owner(user):
-    """
-    Platform Owner (Django Superuser)
-    """
     return (
-        user.is_authenticated and
-        user.is_active and
-        user.is_superuser
+        user.is_authenticated
+        and user.is_active
+        and user.is_superuser
     )
 
 
 def is_retailer_owner(user):
-    """
-    Retailer Owner / SuperAdmin
-    """
     return (
-        user.is_authenticated and
-        user.is_active and
-        getattr(user, "role", None) == "superadmin"
+        user.is_authenticated
+        and user.is_active
+        and getattr(user, "role", None) == "superadmin"
+        and user.retailer_id is not None
     )
 
 
 def is_admin(user):
-    """
-    Admin + higher roles
-    """
     return (
-        user.is_authenticated and
-        user.is_active and
-        (
-            getattr(user, "role", None) == "admin" or
-            is_retailer_owner(user) or
-            is_platform_owner(user)
+        user.is_authenticated
+        and user.is_active
+        and (
+            getattr(user, "role", None) == "admin"
+            or is_retailer_owner(user)
+            or is_platform_owner(user)
         )
     )
 
 
 def is_store_manager(user):
     return (
-        user.is_authenticated and
-        user.is_active and
-        getattr(user, "role", None) == "store_manager"
+        user.is_authenticated
+        and user.is_active
+        and getattr(user, "role", None) == "store_manager"
     )
 
 
 def is_pharmacist(user):
     return (
-        user.is_authenticated and
-        user.is_active and
-        getattr(user, "role", None) == "pharmacist"
+        user.is_authenticated
+        and user.is_active
+        and getattr(user, "role", None) == "pharmacist"
     )
 
 
 def is_cashier(user):
     return (
-        user.is_authenticated and
-        user.is_active and
-        getattr(user, "role", None) == "cashier"
+        user.is_authenticated
+        and user.is_active
+        and getattr(user, "role", None) == "cashier"
     )
 
 
 def is_staff_member(user):
     return (
-        user.is_authenticated and
-        user.is_active and
-        getattr(user, "role", None) == "staff"
+        user.is_authenticated
+        and user.is_active
+        and getattr(user, "role", None) == "staff"
     )
 
 
 def has_role(user, roles, allow_higher_roles=True):
-    """
-    Generic role checker
-    """
 
     if not (
-        user.is_authenticated and
-        user.is_active
+        user.is_authenticated
+        and user.is_active
     ):
         return False
 
-    user_role = getattr(user, "role", None)
-
-    if user_role in roles:
+    if getattr(user, "role", None) in roles:
         return True
 
-    # Allow higher roles automatically
     if allow_higher_roles:
         return (
-            is_retailer_owner(user) or
-            is_platform_owner(user)
+            is_retailer_owner(user)
+            or is_platform_owner(user)
         )
 
     return False
@@ -265,36 +251,27 @@ class IsAdminOrReadOnly(BasePermission):
 
 class IsSameRetailer(BasePermission):
 
-    message = (
-        "You can only access your retailer data."
-    )
+    message = "You can only access your retailer data."
 
     def has_permission(self, request, view):
-
         return (
-            request.user.is_authenticated and
-            request.user.is_active
+            request.user.is_authenticated
+            and request.user.is_active
         )
 
-    def has_object_permission(
-        self,
-        request,
-        view,
-        obj
-    ):
+    def has_object_permission(self, request, view, obj):
 
         user = request.user
 
-        if (
-            is_platform_owner(user) or
-            is_retailer_owner(user)
-        ):
+        if is_platform_owner(user):
             return True
 
-        if hasattr(obj, "retailer"):
-            return obj.retailer == user.retailer
+        if not user.retailer_id:
+            return False
 
-        return False
+        retailer_id = getattr(obj, "retailer_id", None)
+
+        return retailer_id == user.retailer_id
 
 
 # =====================================================
@@ -303,36 +280,49 @@ class IsSameRetailer(BasePermission):
 
 class IsSameBranch(BasePermission):
 
-    message = (
-        "You can only access your branch data."
-    )
+    message = "You can only access your branch data."
 
     def has_permission(self, request, view):
-
         return (
-            request.user.is_authenticated and
-            request.user.is_active
+            request.user.is_authenticated
+            and request.user.is_active
         )
 
-    def has_object_permission(
-        self,
-        request,
-        view,
-        obj
-    ):
+    def has_object_permission(self, request, view, obj):
 
         user = request.user
 
-        if (
-            is_platform_owner(user) or
-            is_retailer_owner(user)
-        ):
+        if is_platform_owner(user):
             return True
 
-        if hasattr(obj, "branch"):
-            return obj.branch == user.branch
+        if not user.retailer_id:
+            return False
 
-        return False
+        # Super Admin: all branches within their retailer
+        if is_retailer_owner(user):
+
+            obj_retailer_id = getattr(
+                obj,
+                "retailer_id",
+                None
+            )
+
+            return obj_retailer_id == user.retailer_id
+
+        # Other users: only their assigned branch
+        if not user.branch_id:
+            return False
+
+        obj_branch_id = getattr(
+            obj,
+            "branch_id",
+            None
+        )
+
+        return (
+            obj_branch_id == user.branch_id
+            and user.branch.retailer_id == user.retailer_id
+        )
 
 
 # =====================================================
@@ -347,41 +337,52 @@ class IsSameRetailerAndBranch(BasePermission):
     )
 
     def has_permission(self, request, view):
-
         return (
-            request.user.is_authenticated and
-            request.user.is_active
+            request.user.is_authenticated
+            and request.user.is_active
         )
 
-    def has_object_permission(
-        self,
-        request,
-        view,
-        obj
-    ):
+    def has_object_permission(self, request, view, obj):
 
         user = request.user
 
-        if (
-            is_platform_owner(user) or
-            is_retailer_owner(user)
-        ):
+        # Platform Owner: global access
+        if is_platform_owner(user):
             return True
 
-        retailer_match = True
-        branch_match = True
+        # Retailer must be assigned
+        if not user.retailer_id:
+            return False
 
-        if hasattr(obj, "retailer"):
-            retailer_match = (
-                obj.retailer == user.retailer
-            )
+        # Object must have retailer field
+        obj_retailer_id = getattr(
+            obj,
+            "retailer_id",
+            None
+        )
 
-        if hasattr(obj, "branch"):
-            branch_match = (
-                obj.branch == user.branch
-            )
+        if obj_retailer_id != user.retailer_id:
+            return False
 
-        return retailer_match and branch_match
+        # Super Admin: all branches of their retailer
+        if is_retailer_owner(user):
+            return True
+
+        # Other users must have an assigned branch
+        if not user.branch_id:
+            return False
+
+        # User's branch must belong to their retailer
+        if user.branch.retailer_id != user.retailer_id:
+            return False
+
+        obj_branch_id = getattr(
+            obj,
+            "branch_id",
+            None
+        )
+
+        return obj_branch_id == user.branch_id
 
 
 # =====================================================

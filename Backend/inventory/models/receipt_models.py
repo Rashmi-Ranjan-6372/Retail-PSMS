@@ -11,10 +11,10 @@ from branches.models import Branch
 from .constants import PAYMENT_METHOD, RECEIPT_STATUS
 
 class Receipt(models.Model):
-    retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="receipts")
+    retailer = models.ForeignKey(Retailer, on_delete=models.PROTECT, related_name="receipts")
     branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name="receipts")
     receipt_no = models.CharField(max_length=50, unique=True, blank=True)
-    customer = models.ForeignKey("masters.Customer", on_delete=models.CASCADE)
+    customer = models.ForeignKey("masters.Customer", on_delete=models.PROTECT)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     paid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     due_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)

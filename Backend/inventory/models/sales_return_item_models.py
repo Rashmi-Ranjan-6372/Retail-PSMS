@@ -14,7 +14,7 @@ from .constants import DISCOUNT_TYPE
 
 class SalesReturnItem(models.Model):
 
-    retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="sales_return_items")
+    retailer = models.ForeignKey(Retailer, on_delete=models.PROTECT, related_name="sales_return_items")
     branch = models.ForeignKey(Branch,on_delete=models.SET_NULL,null=True,blank=True,related_name="sales_return_items",)
     sales_return = models.ForeignKey("SalesReturn", on_delete=models.CASCADE, related_name="items")
     product = models.ForeignKey("masters.Product", on_delete=models.PROTECT, related_name="sales_return_items")

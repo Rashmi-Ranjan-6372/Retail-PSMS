@@ -1,17 +1,30 @@
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 
+from rest_framework import status
 from rest_framework.generics import (
     ListCreateAPIView,
     RetrieveUpdateDestroyAPIView,
 )
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import PermissionDenied, ValidationError
-
-from inventory.models.sales_return_models import SalesReturn
-from inventory.serializers.sales_return_serializers import SalesReturnSerializer
-from inventory.services.sales_return_service import process_sales_return
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework.exceptions import (
+    PermissionDenied,
+    ValidationError,
+)
 
 from accounts.permissions import IsAdminOrStaff
+from branches.mixins import BranchFilterMixin
+
+from inventory.models.sales_return_models import SalesReturn
+from inventory.serializers.sales_return_serializers import (
+    SalesReturnSerializer,
+)
+from inventory.services.sales_return_service import (
+    process_sales_return,
+)
+
 from subscriptions.utils import check_subscription_write_access
 
 # =====================================================
@@ -19,53 +32,28 @@ from subscriptions.utils import check_subscription_write_access
 # =====================================================
 
 
-class SalesReturnBaseView:
+class SalesReturnBaseView(BranchFilterMixin):
 
-    def is_platform_admin(self):
+    queryset = SalesReturn.objects.select_related(
+        "retailer",
+        "branch",
+        "sales",
+        "created_by",
+    )
 
-        user = self.request.user
-
-        return user.is_superuser or getattr(user, "role", None) == "superadmin"
+    serializer_class = SalesReturnSerializer
 
     def check_write_access(self):
 
-        if self.is_platform_admin():
+        if self.is_platform_owner():
             return
-
-        retailer = getattr(self.request.user, "retailer", None)
-
-        if not retailer:
-            raise PermissionDenied("Retailer account is not associated with this user.")
-
-        check_subscription_write_access(retailer)
-
-    def get_queryset(self):
 
         user = self.request.user
 
-        queryset = SalesReturn.objects.select_related(
-            "retailer",
-            "branch",
-            "sales",
-            "created_by",
-        )
+        if not user.retailer_id:
+            raise PermissionDenied("Retailer account is not associated with this user.")
 
-        if self.is_platform_admin():
-            return queryset
-
-        retailer = getattr(user, "retailer", None)
-
-        if not retailer:
-            return queryset.none()
-
-        queryset = queryset.filter(retailer=retailer)
-
-        branch = getattr(user, "branch", None)
-
-        if branch:
-            queryset = queryset.filter(branch=branch)
-
-        return queryset
+        check_subscription_write_access(user.retailer)
 
 
 # =====================================================
@@ -78,33 +66,16 @@ class SalesReturnListCreateView(
     ListCreateAPIView,
 ):
 
-    serializer_class = SalesReturnSerializer
-
     permission_classes = [
         IsAuthenticated,
         IsAdminOrStaff,
     ]
 
-    @transaction.atomic
     def perform_create(self, serializer):
 
         self.check_write_access()
 
-        user = self.request.user
-        retailer = getattr(user, "retailer", None)
-
-        if not retailer:
-            raise PermissionDenied(
-                "A retailer must be associated with the user to create a sales return."
-            )
-
-        sales_return = serializer.save(
-            retailer=retailer,
-            branch=getattr(user, "branch", None),
-            created_by=user,
-        )
-
-        process_sales_return(sales_return.id)
+        serializer.save()
 
 
 # =====================================================
@@ -116,8 +87,6 @@ class SalesReturnDetailView(
     SalesReturnBaseView,
     RetrieveUpdateDestroyAPIView,
 ):
-
-    serializer_class = SalesReturnSerializer
 
     permission_classes = [
         IsAuthenticated,
@@ -147,14 +116,53 @@ class SalesReturnDetailView(
 
         self.check_write_access()
 
-        if instance.status == "COMPLETED":
-            raise ValidationError(
-                "A completed sales return cannot be deleted. "
-                "Use a cancellation or reversal workflow."
-            )
-
         raise ValidationError(
             "Sales returns cannot be deleted directly. "
-            "Use a cancellation workflow to maintain accurate "
-            "inventory and financial records."
+            "Use a cancellation or reversal workflow."
+        )
+
+
+# =====================================================
+# PROCESS SALES RETURN
+# =====================================================
+
+
+class ProcessSalesReturnView(
+    SalesReturnBaseView,
+    APIView,
+):
+
+    permission_classes = [
+        IsAuthenticated,
+        IsAdminOrStaff,
+    ]
+
+    @transaction.atomic
+    def post(self, request, pk):
+
+        self.check_write_access()
+
+        sales_return = get_object_or_404(
+            self.get_queryset(),
+            pk=pk,
+        )
+
+        if sales_return.status == "COMPLETED":
+            raise ValidationError("Sales return has already been processed.")
+
+        try:
+            sales_return = process_sales_return(sales_return.id)
+
+        except ValueError as exc:
+            raise ValidationError(str(exc))
+
+        serializer = self.get_serializer(sales_return)
+
+        return Response(
+            {
+                "success": True,
+                "message": "Sales return processed successfully.",
+                "data": serializer.data,
+            },
+            status=status.HTTP_200_OK,
         )

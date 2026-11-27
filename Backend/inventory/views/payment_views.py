@@ -1,9 +1,17 @@
+from django.db import transaction
+from django.shortcuts import get_object_or_404
+
 from rest_framework.generics import (
     ListCreateAPIView,
     RetrieveUpdateDestroyAPIView,
 )
+
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import PermissionDenied
+
+from rest_framework.exceptions import (
+    PermissionDenied,
+    ValidationError,
+)
 
 from inventory.models.payment_models import Payment
 from inventory.serializers.payment_serializers import PaymentSerializer
@@ -11,59 +19,102 @@ from inventory.services.payment_service import update_payment_status
 
 from accounts.permissions import IsAdminOrStaff
 from subscriptions.utils import check_subscription_write_access
+from branches.mixins import BranchFilterMixin
 
 # =====================================================
 # PAYMENT BASE VIEW
 # =====================================================
 
 
-class PaymentBaseView:
+class PaymentBaseView(BranchFilterMixin):
 
-    def is_platform_admin(self):
+    # =================================================
+    # BASE QUERYSET
+    # =================================================
 
-        user = self.request.user
+    def get_base_queryset(self):
 
-        return user.is_superuser or getattr(user, "role", None) == "superadmin"
-
-    def check_write_access(self):
-
-        if self.is_platform_admin():
-            return
-
-        retailer = getattr(self.request.user, "retailer", None)
-
-        if not retailer:
-            raise PermissionDenied("Retailer account is not associated with this user.")
-
-        check_subscription_write_access(retailer)
-
-    def get_queryset(self):
-
-        user = self.request.user
-
-        queryset = Payment.objects.select_related(
+        return Payment.objects.select_related(
             "retailer",
             "branch",
             "supplier",
             "created_by",
         )
 
-        if self.is_platform_admin():
-            return queryset
+    # =================================================
+    # QUERYSET FILTERING
+    # =================================================
 
-        retailer = getattr(user, "retailer", None)
+    def get_queryset(self):
+
+        queryset = self.get_base_queryset()
+
+        return self.filter_queryset_by_user(queryset)
+
+    # =================================================
+    # WRITE ACCESS
+    # =================================================
+
+    def check_write_access(self):
+
+        if self.is_platform_owner():
+            return
+
+        retailer = getattr(
+            self.request.user,
+            "retailer",
+            None,
+        )
 
         if not retailer:
-            return queryset.none()
 
-        queryset = queryset.filter(retailer=retailer)
+            raise PermissionDenied("Retailer account is not associated with this user.")
 
-        branch = getattr(user, "branch", None)
+        check_subscription_write_access(retailer)
 
-        if branch:
-            queryset = queryset.filter(branch=branch)
+    # =================================================
+    # CREATE BRANCH
+    # =================================================
 
-        return queryset
+    def get_create_branch(self, request):
+
+        user = request.user
+
+        # Super Admin can select a branch
+        if self.is_super_admin():
+
+            branch_id = request.data.get("branch")
+
+            if not branch_id:
+
+                raise ValidationError(
+                    {"branch": "Branch is required to create a payment."}
+                )
+
+            from branches.models import Branch
+
+            branch = get_object_or_404(
+                Branch,
+                pk=branch_id,
+                retailer_id=user.retailer_id,
+                is_active=True,
+                deleted_at__isnull=True,
+            )
+
+            return branch
+
+        # Other users use their assigned branch
+        branch = getattr(
+            user,
+            "branch",
+            None,
+        )
+
+        if not self.is_valid_user_branch(user, branch):
+
+            raise PermissionDenied("You are not assigned to an active branch.")
+
+        return branch
 
 
 # =====================================================
@@ -83,20 +134,42 @@ class PaymentListCreateView(
         IsAdminOrStaff,
     ]
 
+    # =================================================
+    # CREATE PAYMENT
+    # =================================================
+
+    @transaction.atomic
     def perform_create(self, serializer):
 
         self.check_write_access()
 
         user = self.request.user
 
-        retailer = getattr(user, "retailer", None)
+        # Platform Owner selects retailer
+        if self.is_platform_owner():
 
-        if not retailer:
-            raise PermissionDenied("Retailer account is not associated with this user.")
+            retailer = serializer.validated_data.get("retailer")
+
+            if not retailer:
+                raise ValidationError({
+                    "retailer": "Please select a retailer."
+                })
+
+            branch = serializer.validated_data.get("branch")
+
+            if branch and branch.retailer_id != retailer.id:
+                raise ValidationError({
+                    "branch": "Branch does not belong to this retailer."
+                })
+
+        else:
+
+            retailer = user.retailer
+            branch = self.get_create_branch(self.request)
 
         payment = serializer.save(
             retailer=retailer,
-            branch=getattr(user, "branch", None),
+            branch=branch,
             created_by=user,
         )
 
@@ -122,6 +195,11 @@ class PaymentDetailView(
 
     lookup_field = "pk"
 
+    # =================================================
+    # UPDATE PAYMENT
+    # =================================================
+
+    @transaction.atomic
     def perform_update(self, serializer):
 
         self.check_write_access()
@@ -136,6 +214,11 @@ class PaymentDetailView(
 
         update_payment_status(payment)
 
+    # =================================================
+    # DELETE PAYMENT
+    # =================================================
+
+    @transaction.atomic
     def perform_destroy(self, instance):
 
         self.check_write_access()

@@ -13,4 +13,5 @@ urlpatterns = [
     path('subscriptions/', include('subscriptions.urls')),
     path('supports/', include('support.urls')),
     path('email-config/', include('email_config.urls')),
+    path('notifications/', include('notifications.urls')),
 ]

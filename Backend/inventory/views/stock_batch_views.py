@@ -1,3 +1,4 @@
+
 from django.db import transaction
 
 from rest_framework.generics import (
@@ -12,66 +13,51 @@ from inventory.serializers.stock_batch_serializers import StockBatchSerializer
 
 from accounts.permissions import IsSameRetailerAndBranch
 from subscriptions.utils import check_subscription_write_access
+from branches.mixins import BranchFilterMixin
+
 
 # =====================================================
 # STOCK BATCH BASE VIEW
 # =====================================================
 
+class StockBatchBaseView(BranchFilterMixin):
 
-class StockBatchBaseView:
+    queryset = StockBatch.objects.select_related(
+        "retailer",
+        "branch",
+        "product",
+        "supplier",
+        "created_by",
+    )
 
-    def is_platform_admin(self):
+    def is_platform_owner(self):
 
         user = self.request.user
 
-        return user.is_superuser or getattr(user, "role", None) == "superadmin"
+        return (
+            user.is_superuser
+            or getattr(user, "role", None) == "platform_owner"
+        )
 
     def check_write_access(self):
 
-        if self.is_platform_admin():
+        # Only Platform Owner bypasses subscription validation
+        if self.is_platform_owner():
             return
 
         retailer = getattr(self.request.user, "retailer", None)
 
         if not retailer:
-            raise PermissionDenied("Retailer account is not associated with this user.")
+            raise PermissionDenied(
+                "Retailer account is not associated with this user."
+            )
 
         check_subscription_write_access(retailer)
-
-    def get_queryset(self):
-
-        user = self.request.user
-
-        queryset = StockBatch.objects.select_related(
-            "retailer",
-            "branch",
-            "product",
-            "supplier",
-            "created_by",
-        )
-
-        if self.is_platform_admin():
-            return queryset
-
-        retailer = getattr(user, "retailer", None)
-
-        if not retailer:
-            return queryset.none()
-
-        queryset = queryset.filter(retailer=retailer)
-
-        branch = getattr(user, "branch", None)
-
-        if branch:
-            queryset = queryset.filter(branch=branch)
-
-        return queryset
 
 
 # =====================================================
 # STOCK BATCH LIST + CREATE
 # =====================================================
-
 
 class StockBatchListCreateView(
     StockBatchBaseView,
@@ -105,6 +91,15 @@ class StockBatchListCreateView(
                 "A branch must be associated with the user to create a stock batch."
             )
 
+        if (
+            branch.retailer_id != retailer.id
+            or not branch.is_active
+            or branch.deleted_at is not None
+        ):
+            raise PermissionDenied(
+                "You cannot create stock batches for this branch."
+            )
+
         serializer.save(
             retailer=retailer,
             branch=branch,
@@ -115,7 +110,6 @@ class StockBatchListCreateView(
 # =====================================================
 # STOCK BATCH DETAIL
 # =====================================================
-
 
 class StockBatchDetailView(
     StockBatchBaseView,
@@ -146,15 +140,15 @@ class StockBatchDetailView(
         ]
 
         for field in protected_fields:
+
             if field in serializer.validated_data:
-                raise ValidationError(
-                    {
-                        field: (
-                            f"{field} cannot be changed directly. "
-                            "Use the appropriate inventory operation."
-                        )
-                    }
-                )
+
+                raise ValidationError({
+                    field: (
+                        f"{field} cannot be changed directly. "
+                        "Use the appropriate inventory operation."
+                    )
+                })
 
         serializer.save()
 

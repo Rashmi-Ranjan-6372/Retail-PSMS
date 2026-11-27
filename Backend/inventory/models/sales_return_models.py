@@ -15,7 +15,7 @@ from .constants import RETURN_STATUS
 
 class SalesReturn(models.Model):
 
-    retailer = models.ForeignKey(Retailer,on_delete=models.CASCADE,related_name="sales_returns")
+    retailer = models.ForeignKey(Retailer,on_delete=models.PROTECT,related_name="sales_returns")
     branch = models.ForeignKey(Branch,on_delete=models.SET_NULL,null=True,blank=True,related_name="sales_returns")
     return_no = models.CharField(max_length=50,unique=True,blank=True)
     sales = models.ForeignKey("Sales",on_delete=models.PROTECT,related_name="sales_returns")

@@ -70,6 +70,7 @@ INSTALLED_APPS = [
     "subscriptions",
     "support",
     "email_config",
+    "notifications",
 ]
 
 

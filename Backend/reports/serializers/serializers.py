@@ -1,8 +1,8 @@
 from rest_framework import serializers
 
-# =========================
+# =====================================================
 # COMMON FIELD CONFIGURATION
-# =========================
+# =====================================================
 
 MONEY_MAX_DIGITS = 15
 MONEY_DECIMAL_PLACES = 2
@@ -11,12 +11,36 @@ QUANTITY_MAX_DIGITS = 15
 QUANTITY_DECIMAL_PLACES = 3
 
 
-# =========================
+# =====================================================
+# COMMON SERIALIZER
+# =====================================================
+
+
+class ReportSerializer(serializers.Serializer):
+    pass
+
+
+class ReportSummarySerializer(ReportSerializer):
+
+    summary = serializers.DictField(
+        child=serializers.JSONField(),
+        required=False,
+    )
+
+    data = serializers.ListField(
+        child=serializers.DictField(
+            child=serializers.JSONField(),
+        ),
+        required=False,
+    )
+
+
+# =====================================================
 # ANALYTICS SERIALIZER
-# =========================
+# =====================================================
 
 
-class AnalyticsSerializer(serializers.Serializer):
+class AnalyticsSerializer(ReportSerializer):
 
     total_sales = serializers.DecimalField(
         max_digits=MONEY_MAX_DIGITS,
@@ -31,6 +55,7 @@ class AnalyticsSerializer(serializers.Serializer):
     total_profit = serializers.DecimalField(
         max_digits=MONEY_MAX_DIGITS,
         decimal_places=MONEY_DECIMAL_PLACES,
+        allow_null=True,
     )
 
     total_customers = serializers.IntegerField()
@@ -38,12 +63,12 @@ class AnalyticsSerializer(serializers.Serializer):
     total_suppliers = serializers.IntegerField()
 
 
-# =========================
+# =====================================================
 # CUSTOMER LEDGER SERIALIZER
-# =========================
+# =====================================================
 
 
-class CustomerLedgerSerializer(serializers.Serializer):
+class CustomerLedgerSerializer(ReportSerializer):
 
     customer = serializers.CharField()
 
@@ -67,27 +92,20 @@ class CustomerLedgerSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField()
 
 
-# =========================
+# =====================================================
 # DASHBOARD SERIALIZER
-# =========================
+# Matches DashboardService.get_dashboard()
+# =====================================================
 
 
-class DashboardSerializer(serializers.Serializer):
+class DashboardSerializer(ReportSerializer):
 
     total_sales = serializers.DecimalField(
         max_digits=MONEY_MAX_DIGITS,
         decimal_places=MONEY_DECIMAL_PLACES,
     )
 
-    total_purchase = serializers.DecimalField(
-        max_digits=MONEY_MAX_DIGITS,
-        decimal_places=MONEY_DECIMAL_PLACES,
-    )
-
-    total_profit = serializers.DecimalField(
-        max_digits=MONEY_MAX_DIGITS,
-        decimal_places=MONEY_DECIMAL_PLACES,
-    )
+    invoice_count = serializers.IntegerField()
 
     total_stock = serializers.DecimalField(
         max_digits=QUANTITY_MAX_DIGITS,
@@ -95,20 +113,24 @@ class DashboardSerializer(serializers.Serializer):
     )
 
 
-# =========================
+# =====================================================
 # EXPIRY REPORT SERIALIZER
-# =========================
+# =====================================================
 
 
-class ExpiryReportSerializer(serializers.Serializer):
+class ExpiryReportSerializer(ReportSerializer):
 
     product = serializers.CharField()
 
     batch_no = serializers.CharField()
 
-    branch = serializers.CharField()
+    branch = serializers.CharField(
+        allow_null=True,
+    )
 
-    expiry_date = serializers.DateField()
+    expiry_date = serializers.DateField(
+        allow_null=True,
+    )
 
     available_qty = serializers.DecimalField(
         max_digits=QUANTITY_MAX_DIGITS,
@@ -118,18 +140,20 @@ class ExpiryReportSerializer(serializers.Serializer):
     is_expired = serializers.BooleanField()
 
 
-# =========================
+# =====================================================
 # LOW STOCK REPORT SERIALIZER
-# =========================
+# =====================================================
 
 
-class LowStockReportSerializer(serializers.Serializer):
+class LowStockReportSerializer(ReportSerializer):
 
     product = serializers.CharField()
 
     batch_no = serializers.CharField()
 
-    branch = serializers.CharField()
+    branch = serializers.CharField(
+        allow_null=True,
+    )
 
     available_qty = serializers.DecimalField(
         max_digits=QUANTITY_MAX_DIGITS,
@@ -137,11 +161,12 @@ class LowStockReportSerializer(serializers.Serializer):
     )
 
 
-# =========================
+# =====================================================
 # PRODUCT LEDGER SERIALIZER
-# =========================
+# =====================================================
 
-class ProductLedgerSerializer(serializers.Serializer):
+
+class ProductLedgerSerializer(ReportSerializer):
 
     transaction_no = serializers.CharField()
 
@@ -162,14 +187,13 @@ class ProductLedgerSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField()
 
 
-# =========================
-# PROFIT & LOSS SERIALIZER
-# =========================
+# =====================================================
+# PROFIT AND LOSS SERIALIZER
+# Matches ProfitLossService.get_report()
+# =====================================================
 
 
-class ProfitLossSerializer(serializers.Serializer):
-
-    branch = serializers.CharField()
+class ProfitLossOverallSerializer(ReportSerializer):
 
     sales = serializers.DecimalField(
         max_digits=MONEY_MAX_DIGITS,
@@ -184,21 +208,40 @@ class ProfitLossSerializer(serializers.Serializer):
     profit = serializers.DecimalField(
         max_digits=MONEY_MAX_DIGITS,
         decimal_places=MONEY_DECIMAL_PLACES,
+        allow_null=True,
     )
 
 
-# =========================
+class ProfitLossSerializer(ReportSerializer):
+
+    overall = ProfitLossOverallSerializer()
+
+    branch_wise = serializers.ListField(
+        child=serializers.DictField(
+            child=serializers.JSONField(),
+        ),
+    )
+
+    message = serializers.CharField(
+        allow_blank=True,
+        required=False,
+    )
+
+
+# =====================================================
 # PURCHASE REPORT SERIALIZER
-# =========================
+# =====================================================
 
 
-class PurchaseReportSerializer(serializers.Serializer):
+class PurchaseReportSerializer(ReportSerializer):
 
     transaction_no = serializers.CharField()
 
     supplier = serializers.CharField()
 
-    branch = serializers.CharField()
+    branch = serializers.CharField(
+        allow_null=True,
+    )
 
     total_amount = serializers.DecimalField(
         max_digits=MONEY_MAX_DIGITS,
@@ -210,18 +253,39 @@ class PurchaseReportSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField()
 
 
-# =========================
+class PurchaseReportSummarySerializer(ReportSerializer):
+
+    total_purchase = serializers.DecimalField(
+        max_digits=MONEY_MAX_DIGITS,
+        decimal_places=MONEY_DECIMAL_PLACES,
+    )
+
+    purchase_count = serializers.IntegerField()
+
+
+class PurchaseReportResponseSerializer(ReportSerializer):
+
+    summary = PurchaseReportSummarySerializer()
+
+    data = PurchaseReportSerializer(
+        many=True,
+    )
+
+
+# =====================================================
 # PURCHASE RETURN REPORT SERIALIZER
-# =========================
+# =====================================================
 
 
-class PurchaseReturnReportSerializer(serializers.Serializer):
+class PurchaseReturnReportSerializer(ReportSerializer):
 
     return_no = serializers.CharField()
 
     supplier = serializers.CharField()
 
-    branch = serializers.CharField()
+    branch = serializers.CharField(
+        allow_null=True,
+    )
 
     total_amount = serializers.DecimalField(
         max_digits=MONEY_MAX_DIGITS,
@@ -238,18 +302,39 @@ class PurchaseReturnReportSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField()
 
 
-# =========================
+class PurchaseReturnSummarySerializer(ReportSerializer):
+
+    total_returns = serializers.DecimalField(
+        max_digits=MONEY_MAX_DIGITS,
+        decimal_places=MONEY_DECIMAL_PLACES,
+    )
+
+    return_count = serializers.IntegerField()
+
+
+class PurchaseReturnReportResponseSerializer(ReportSerializer):
+
+    summary = PurchaseReturnSummarySerializer()
+
+    data = PurchaseReturnReportSerializer(
+        many=True,
+    )
+
+
+# =====================================================
 # SALES REPORT SERIALIZER
-# =========================
+# =====================================================
 
 
-class SalesReportSerializer(serializers.Serializer):
+class SalesReportSerializer(ReportSerializer):
 
     invoice_no = serializers.CharField()
 
     customer = serializers.CharField()
 
-    branch = serializers.CharField()
+    branch = serializers.CharField(
+        allow_null=True,
+    )
 
     total_amount = serializers.DecimalField(
         max_digits=MONEY_MAX_DIGITS,
@@ -281,18 +366,51 @@ class SalesReportSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField()
 
 
-# =========================
+class SalesReportSummarySerializer(ReportSerializer):
+
+    total_sales = serializers.DecimalField(
+        max_digits=MONEY_MAX_DIGITS,
+        decimal_places=MONEY_DECIMAL_PLACES,
+    )
+
+    total_paid = serializers.DecimalField(
+        max_digits=MONEY_MAX_DIGITS,
+        decimal_places=MONEY_DECIMAL_PLACES,
+    )
+
+    total_due = serializers.DecimalField(
+        max_digits=MONEY_MAX_DIGITS,
+        decimal_places=MONEY_DECIMAL_PLACES,
+    )
+
+    invoice_count = serializers.IntegerField()
+
+
+class SalesReportResponseSerializer(ReportSerializer):
+
+    summary = SalesReportSummarySerializer()
+
+    data = SalesReportSerializer(
+        many=True,
+    )
+
+
+# =====================================================
 # SALES RETURN REPORT SERIALIZER
-# =========================
+# =====================================================
 
 
-class SalesReturnReportSerializer(serializers.Serializer):
+class SalesReturnReportSerializer(ReportSerializer):
 
     return_no = serializers.CharField()
 
-    sales_invoice = serializers.CharField()
+    sales_invoice = serializers.CharField(
+        source="sales.invoice_no",
+    )
 
-    branch = serializers.CharField()
+    branch = serializers.CharField(
+        allow_null=True,
+    )
 
     total_amount = serializers.DecimalField(
         max_digits=MONEY_MAX_DIGITS,
@@ -309,18 +427,44 @@ class SalesReturnReportSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField()
 
 
-# =========================
+class SalesReturnSummarySerializer(ReportSerializer):
+
+    total_returns = serializers.DecimalField(
+        max_digits=MONEY_MAX_DIGITS,
+        decimal_places=MONEY_DECIMAL_PLACES,
+    )
+
+    refund_amount = serializers.DecimalField(
+        max_digits=MONEY_MAX_DIGITS,
+        decimal_places=MONEY_DECIMAL_PLACES,
+    )
+
+    return_count = serializers.IntegerField()
+
+
+class SalesReturnReportResponseSerializer(ReportSerializer):
+
+    summary = SalesReturnSummarySerializer()
+
+    data = SalesReturnReportSerializer(
+        many=True,
+    )
+
+
+# =====================================================
 # STOCK REPORT SERIALIZER
-# =========================
+# =====================================================
 
 
-class StockReportSerializer(serializers.Serializer):
+class StockReportSerializer(ReportSerializer):
 
     product = serializers.CharField()
 
     batch_no = serializers.CharField()
 
-    branch = serializers.CharField()
+    branch = serializers.CharField(
+        allow_null=True,
+    )
 
     quantity = serializers.DecimalField(
         max_digits=QUANTITY_MAX_DIGITS,
@@ -347,14 +491,36 @@ class StockReportSerializer(serializers.Serializer):
         decimal_places=MONEY_DECIMAL_PLACES,
     )
 
-    expiry_date = serializers.DateField()
+    expiry_date = serializers.DateField(
+        allow_null=True,
+    )
 
 
-# =========================
+class StockReportSummarySerializer(ReportSerializer):
+
+    total_stock = serializers.DecimalField(
+        max_digits=QUANTITY_MAX_DIGITS,
+        decimal_places=QUANTITY_DECIMAL_PLACES,
+    )
+
+    batch_count = serializers.IntegerField()
+
+
+class StockReportResponseSerializer(ReportSerializer):
+
+    summary = StockReportSummarySerializer()
+
+    data = StockReportSerializer(
+        many=True,
+    )
+
+
+# =====================================================
 # SUPPLIER LEDGER SERIALIZER
-# =========================
+# =====================================================
 
-class SupplierLedgerSerializer(serializers.Serializer):
+
+class SupplierLedgerSerializer(ReportSerializer):
 
     supplier = serializers.CharField()
 

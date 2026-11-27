@@ -1,77 +1,87 @@
+
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
+from django.core.exceptions import ValidationError as DjangoValidationError
 
 from inventory.models.payment_models import Payment
 
-from subscriptions.utils import (
-    check_subscription_write_access,
-    validate_branch_subscription,
-)
 
 # =====================================================
 # UPDATE PAYMENT STATUS
 # =====================================================
 
-
 @transaction.atomic
 def update_payment_status(payment):
 
     try:
-        payment = Payment.objects.select_for_update().get(id=payment.id)
+
+        payment = Payment.objects.select_for_update().get(
+            pk=payment.pk
+        )
+
     except Payment.DoesNotExist:
+
         raise ValueError("Payment record not found.")
 
-    check_subscription_write_access(payment.retailer)
-    validate_branch_subscription(payment.retailer)
-
-    # =========================
+    # =================================================
     # CONVERT AMOUNTS
-    # =========================
+    # =================================================
 
     try:
-        amount = Decimal(str(payment.amount or 0))
-        paid_amount = Decimal(str(payment.paid_amount or 0))
+
+        amount = Decimal(str(payment.amount))
+        paid_amount = Decimal(str(payment.paid_amount))
 
     except (InvalidOperation, TypeError, ValueError):
+
         raise ValueError("Invalid payment amount.")
 
-    # =========================
+    # =================================================
     # VALIDATE AMOUNTS
-    # =========================
+    # =================================================
 
     if amount <= 0:
-        raise ValueError("Payment amount must be greater than 0.")
+
+        raise ValueError(
+            "Payment amount must be greater than zero."
+        )
 
     if paid_amount < 0:
-        raise ValueError("Paid amount cannot be negative.")
+
+        raise ValueError(
+            "Paid amount cannot be negative."
+        )
 
     if paid_amount > amount:
-        raise ValueError("Paid amount cannot exceed the total payment amount.")
 
-    # =========================
-    # DUE CALCULATION
-    # =========================
+        raise ValueError(
+            "Paid amount cannot exceed the total payment amount."
+        )
 
-    payment.due_amount = amount - paid_amount
+    # =================================================
+    # UPDATE PAYMENT
+    # =================================================
 
-    # =========================
-    # STATUS CALCULATION
-    # =========================
+    payment.amount = amount
+    payment.paid_amount = paid_amount
 
-    if payment.due_amount == 0:
-        payment.status = "PAID"
+    payment.calculate_payment()
 
-    elif paid_amount > 0:
-        payment.status = "PARTIAL"
+    try:
 
-    else:
-        payment.status = "PENDING"
+        payment.save(
+            update_fields=[
+                "amount",
+                "paid_amount",
+                "due_amount",
+                "status",
+                "updated_at",
+            ]
+        )
 
-    # =========================
-    # SAVE PAYMENT
-    # =========================
+    except DjangoValidationError as exc:
 
-    payment.save(update_fields=["due_amount", "status", "updated_at"])
+        raise ValueError(str(exc))
 
     return payment

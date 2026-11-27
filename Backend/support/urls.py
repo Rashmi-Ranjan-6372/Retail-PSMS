@@ -7,6 +7,7 @@ from .views import (
     ReplyTicketView,
     UpdateTicketStatusView,
     SupportDashboardView,
+    UploadSupportAttachmentView,
 )
 
 urlpatterns = [
@@ -14,6 +15,7 @@ urlpatterns = [
     path("tickets/",SupportTicketListView.as_view()),
     path("tickets/<int:pk>/",SupportTicketDetailView.as_view()),
     path("tickets/<int:pk>/reply/",ReplyTicketView.as_view()),
+    path("tickets/<int:pk>/attachments/",UploadSupportAttachmentView.as_view()),
     path("tickets/<int:pk>/status/",UpdateTicketStatusView.as_view()),
     path("dashboard/",SupportDashboardView.as_view()),
 ]

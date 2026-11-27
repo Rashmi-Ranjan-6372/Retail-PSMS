@@ -1,14 +1,21 @@
+from django.db import IntegrityError, transaction
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 
-from .models import SubscriptionPlan, RetailerSubscription, PaymentHistory
+from .models import (
+    SubscriptionPlan,
+    RetailerSubscription,
+    PaymentHistory,
+)
 
 from .serializers import (
     SubscriptionPlanSerializer,
     RetailerSubscriptionSerializer,
     RetailerSubscriptionCreateSerializer,
+    RetailerSubscriptionUpdateSerializer,
     PaymentHistorySerializer,
     PaymentHistoryCreateSerializer,
 )
@@ -16,9 +23,9 @@ from .serializers import (
 from accounts.permissions import IsPlatformOwner
 from accounts.views import create_audit_log
 
-# =====================================================
+# ==========================================================
 # SUBSCRIPTION PLAN LIST / CREATE
-# =====================================================
+# ==========================================================
 
 
 class SubscriptionPlanListCreateAPIView(APIView):
@@ -76,9 +83,9 @@ class SubscriptionPlanListCreateAPIView(APIView):
         )
 
 
-# =====================================================
+# ==========================================================
 # SUBSCRIPTION PLAN DETAIL
-# =====================================================
+# ==========================================================
 
 
 class SubscriptionPlanDetailAPIView(APIView):
@@ -94,6 +101,7 @@ class SubscriptionPlanDetailAPIView(APIView):
         plan = self.get_object(pk)
 
         if not plan:
+
             return Response(
                 {
                     "success": False,
@@ -109,7 +117,7 @@ class SubscriptionPlanDetailAPIView(APIView):
             user=request.user,
             action="view",
             model_name="SubscriptionPlan",
-            object_id=pk,
+            object_id=plan.id,
             description="Viewed Subscription Plan detail",
             request=request,
         )
@@ -128,6 +136,7 @@ class SubscriptionPlanDetailAPIView(APIView):
         plan = self.get_object(pk)
 
         if not plan:
+
             return Response(
                 {
                     "success": False,
@@ -147,7 +156,7 @@ class SubscriptionPlanDetailAPIView(APIView):
             user=request.user,
             action="update",
             model_name="SubscriptionPlan",
-            object_id=pk,
+            object_id=plan.id,
             description="Updated Subscription Plan",
             request=request,
         )
@@ -166,6 +175,7 @@ class SubscriptionPlanDetailAPIView(APIView):
         plan = self.get_object(pk)
 
         if not plan:
+
             return Response(
                 {
                     "success": False,
@@ -185,7 +195,7 @@ class SubscriptionPlanDetailAPIView(APIView):
             user=request.user,
             action="update",
             model_name="SubscriptionPlan",
-            object_id=pk,
+            object_id=plan.id,
             description="Updated Subscription Plan",
             request=request,
         )
@@ -204,6 +214,7 @@ class SubscriptionPlanDetailAPIView(APIView):
         plan = self.get_object(pk)
 
         if not plan:
+
             return Response(
                 {
                     "success": False,
@@ -213,30 +224,43 @@ class SubscriptionPlanDetailAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        plan.delete()
+        if not plan.is_active:
+
+            return Response(
+                {
+                    "success": True,
+                    "message": "Subscription Plan is already inactive.",
+                    "data": SubscriptionPlanSerializer(plan).data,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        plan.is_active = False
+
+        plan.save(update_fields=["is_active", "updated_at"])
 
         create_audit_log(
             user=request.user,
-            action="delete",
+            action="update",
             model_name="SubscriptionPlan",
-            object_id=pk,
-            description="Deleted Subscription Plan",
+            object_id=plan.id,
+            description="Deactivated Subscription Plan",
             request=request,
         )
 
         return Response(
             {
                 "success": True,
-                "message": "Subscription Plan deleted successfully.",
-                "data": None,
+                "message": "Subscription Plan deactivated successfully.",
+                "data": SubscriptionPlanSerializer(plan).data,
             },
             status=status.HTTP_200_OK,
         )
 
 
-# =====================================================
+# ==========================================================
 # RETAILER SUBSCRIPTION LIST
-# =====================================================
+# ==========================================================
 
 
 class RetailerSubscriptionListAPIView(APIView):
@@ -245,7 +269,9 @@ class RetailerSubscriptionListAPIView(APIView):
 
     def get(self, request):
 
-        subscriptions = RetailerSubscription.objects.select_related("retailer", "plan")
+        subscriptions = RetailerSubscription.objects.select_related(
+            "retailer", "plan"
+        ).all()
 
         serializer = RetailerSubscriptionSerializer(subscriptions, many=True)
 
@@ -268,9 +294,9 @@ class RetailerSubscriptionListAPIView(APIView):
         )
 
 
-# =====================================================
+# ==========================================================
 # RETAILER SUBSCRIPTION CREATE
-# =====================================================
+# ==========================================================
 
 
 class RetailerSubscriptionCreateAPIView(APIView):
@@ -283,7 +309,26 @@ class RetailerSubscriptionCreateAPIView(APIView):
 
         serializer.is_valid(raise_exception=True)
 
-        subscription = serializer.save()
+        try:
+
+            with transaction.atomic():
+
+                subscription = serializer.save()
+
+        except IntegrityError:
+
+            return Response(
+                {
+                    "success": False,
+                    "message": (
+                        "This retailer already has a subscription "
+                        "or the submitted data conflicts with an "
+                        "existing record."
+                    ),
+                    "data": None,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
 
         create_audit_log(
             user=request.user,
@@ -304,9 +349,9 @@ class RetailerSubscriptionCreateAPIView(APIView):
         )
 
 
-# =====================================================
+# ==========================================================
 # RETAILER SUBSCRIPTION DETAIL
-# =====================================================
+# ==========================================================
 
 
 class RetailerSubscriptionDetailAPIView(APIView):
@@ -326,6 +371,7 @@ class RetailerSubscriptionDetailAPIView(APIView):
         subscription = self.get_object(pk)
 
         if not subscription:
+
             return Response(
                 {
                     "success": False,
@@ -341,7 +387,7 @@ class RetailerSubscriptionDetailAPIView(APIView):
             user=request.user,
             action="view",
             model_name="RetailerSubscription",
-            object_id=pk,
+            object_id=subscription.id,
             description="Viewed Retailer Subscription detail",
             request=request,
         )
@@ -360,6 +406,7 @@ class RetailerSubscriptionDetailAPIView(APIView):
         subscription = self.get_object(pk)
 
         if not subscription:
+
             return Response(
                 {
                     "success": False,
@@ -369,7 +416,9 @@ class RetailerSubscriptionDetailAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        serializer = RetailerSubscriptionSerializer(subscription, data=request.data)
+        serializer = RetailerSubscriptionUpdateSerializer(
+            subscription, data=request.data
+        )
 
         serializer.is_valid(raise_exception=True)
 
@@ -379,7 +428,7 @@ class RetailerSubscriptionDetailAPIView(APIView):
             user=request.user,
             action="update",
             model_name="RetailerSubscription",
-            object_id=pk,
+            object_id=subscription.id,
             description="Updated Retailer Subscription",
             request=request,
         )
@@ -398,6 +447,7 @@ class RetailerSubscriptionDetailAPIView(APIView):
         subscription = self.get_object(pk)
 
         if not subscription:
+
             return Response(
                 {
                     "success": False,
@@ -407,7 +457,7 @@ class RetailerSubscriptionDetailAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        serializer = RetailerSubscriptionSerializer(
+        serializer = RetailerSubscriptionUpdateSerializer(
             subscription, data=request.data, partial=True
         )
 
@@ -419,7 +469,7 @@ class RetailerSubscriptionDetailAPIView(APIView):
             user=request.user,
             action="update",
             model_name="RetailerSubscription",
-            object_id=pk,
+            object_id=subscription.id,
             description="Updated Retailer Subscription",
             request=request,
         )
@@ -438,6 +488,7 @@ class RetailerSubscriptionDetailAPIView(APIView):
         subscription = self.get_object(pk)
 
         if not subscription:
+
             return Response(
                 {
                     "success": False,
@@ -447,30 +498,39 @@ class RetailerSubscriptionDetailAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        subscription.delete()
+        subscription.status = "suspended"
+        subscription.auto_renew = False
+
+        subscription.save(
+            update_fields=[
+                "status",
+                "auto_renew",
+                "updated_at",
+            ]
+        )
 
         create_audit_log(
             user=request.user,
-            action="delete",
+            action="update",
             model_name="RetailerSubscription",
-            object_id=pk,
-            description="Deleted Retailer Subscription",
+            object_id=subscription.id,
+            description="Suspended Retailer Subscription",
             request=request,
         )
 
         return Response(
             {
                 "success": True,
-                "message": "Retailer Subscription deleted successfully.",
-                "data": None,
+                "message": "Retailer Subscription suspended successfully.",
+                "data": RetailerSubscriptionSerializer(subscription).data,
             },
             status=status.HTTP_200_OK,
         )
 
 
-# =====================================================
+# ==========================================================
 # PAYMENT HISTORY LIST
-# =====================================================
+# ==========================================================
 
 
 class PaymentHistoryListAPIView(APIView):
@@ -479,7 +539,11 @@ class PaymentHistoryListAPIView(APIView):
 
     def get(self, request):
 
-        payments = PaymentHistory.objects.select_related("retailer", "subscription")
+        payments = PaymentHistory.objects.select_related(
+            "retailer",
+            "subscription",
+            "subscription__plan",
+        ).all()
 
         serializer = PaymentHistorySerializer(payments, many=True)
 
@@ -502,9 +566,9 @@ class PaymentHistoryListAPIView(APIView):
         )
 
 
-# =====================================================
+# ==========================================================
 # PAYMENT HISTORY CREATE
-# =====================================================
+# ==========================================================
 
 
 class PaymentHistoryCreateAPIView(APIView):
@@ -517,14 +581,32 @@ class PaymentHistoryCreateAPIView(APIView):
 
         serializer.is_valid(raise_exception=True)
 
-        payment = serializer.save()
+        try:
+
+            with transaction.atomic():
+
+                payment = serializer.save()
+
+        except IntegrityError:
+
+            return Response(
+                {
+                    "success": False,
+                    "message": (
+                        "This transaction ID already exists "
+                        "or the payment conflicts with an existing record."
+                    ),
+                    "data": None,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
 
         create_audit_log(
             user=request.user,
             action="create",
             model_name="PaymentHistory",
             object_id=payment.id,
-            description="Created Payment History entry",
+            description="Created Pending Payment History entry",
             request=request,
         )
 
@@ -538,10 +620,9 @@ class PaymentHistoryCreateAPIView(APIView):
         )
 
 
-# =====================================================
+# ==========================================================
 # PAYMENT HISTORY DETAIL
-# =====================================================
-
+# ==========================================================
 
 class PaymentHistoryDetailAPIView(APIView):
 
@@ -550,7 +631,11 @@ class PaymentHistoryDetailAPIView(APIView):
     def get_object(self, pk):
 
         return (
-            PaymentHistory.objects.select_related("retailer", "subscription")
+            PaymentHistory.objects.select_related(
+                "retailer",
+                "subscription",
+                "subscription__plan",
+            )
             .filter(id=pk)
             .first()
         )
@@ -560,6 +645,7 @@ class PaymentHistoryDetailAPIView(APIView):
         payment = self.get_object(pk)
 
         if not payment:
+
             return Response(
                 {
                     "success": False,
@@ -575,7 +661,7 @@ class PaymentHistoryDetailAPIView(APIView):
             user=request.user,
             action="view",
             model_name="PaymentHistory",
-            object_id=pk,
+            object_id=payment.id,
             description="Viewed Payment History detail",
             request=request,
         )

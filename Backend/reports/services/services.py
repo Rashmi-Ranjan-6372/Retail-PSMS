@@ -1,8 +1,7 @@
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
-from django.db.models import Sum, Count, DecimalField
-from django.db.models.functions import Coalesce
+from django.db.models import Sum, Count
 from django.utils.timezone import now
 
 from inventory.models.sales_models import Sales
@@ -19,61 +18,74 @@ from inventory.models.payment_models import Payment
 from inventory.models.receipt_models import Receipt
 from inventory.models.purchase_return_models import PurchaseReturn
 
-# =========================
+# =====================================================
 # COMMON CONFIGURATION
-# =========================
-
-MONEY_FIELD = DecimalField(
-    max_digits=15,
-    decimal_places=2,
-)
+# =====================================================
 
 LOW_STOCK_THRESHOLD = 10
 
 
-# =========================
+# =====================================================
 # COMMON HELPER FUNCTIONS
-# =========================
+# =====================================================
 
 
 def apply_report_scope(queryset, retailer=None, branch=None):
     """
-    Apply retailer and branch filters to report querysets.
+    Apply retailer and branch filters.
 
-    At least one scope must be provided.
-    Platform Owner global reports should use a separate
-    explicitly authorized path.
+    Retailer is mandatory for all retailer-level reports.
+    Branch filtering is optional for retailer-wide reports.
+
+    Platform Owner global reports must use a separate
+    explicitly authorized reporting path.
     """
 
-    if retailer is None and branch is None:
-        raise ValidationError("Retailer or branch scope is required.")
+    if retailer is None:
+        raise ValidationError("Retailer scope is required for this report.")
 
-    if retailer is not None:
-        queryset = queryset.filter(retailer=retailer)
+    if branch is not None and branch.retailer_id != retailer.id:
+        raise ValidationError("The selected branch does not belong to this retailer.")
+
+    queryset = queryset.filter(
+        retailer_id=retailer.id,
+    )
 
     if branch is not None:
-        queryset = queryset.filter(branch=branch)
+        queryset = queryset.filter(
+            branch_id=branch.id,
+        )
 
     return queryset
 
 
 def get_decimal_sum(queryset, field_name):
     """
-    Return a decimal sum with a zero default.
+    Calculate a decimal sum without forcing money precision
+    onto quantity fields.
+
+    The database field's original decimal precision is retained.
     """
 
-    return queryset.aggregate(
-        total=Coalesce(
-            Sum(field_name),
-            Decimal("0.00"),
-            output_field=MONEY_FIELD,
-        )
+    result = queryset.aggregate(
+        total=Sum(field_name),
     )["total"]
 
+    return result if result is not None else Decimal("0.00")
 
-# =========================
+
+def validate_report_dates(from_date=None, to_date=None):
+    """
+    Validate report date range.
+    """
+
+    if from_date and to_date and from_date > to_date:
+        raise ValidationError("From date cannot be greater than to date.")
+
+
+# =====================================================
 # ANALYTICS SERVICE
-# =========================
+# =====================================================
 
 
 class AnalyticsService:
@@ -88,7 +100,9 @@ class AnalyticsService:
         )
 
         purchase_queryset = apply_report_scope(
-            StockTransaction.objects.filter(transaction_type="PURCHASE"),
+            StockTransaction.objects.filter(
+                transaction_type="PURCHASE",
+            ),
             retailer=retailer,
             branch=branch,
         )
@@ -126,9 +140,9 @@ class AnalyticsService:
         }
 
 
-# =========================
+# =====================================================
 # CUSTOMER LEDGER SERVICE
-# =========================
+# =====================================================
 
 
 class CustomerLedgerService:
@@ -140,18 +154,26 @@ class CustomerLedgerService:
         branch=None,
     ):
 
+        if not customer_id:
+            raise ValidationError("Customer ID is required.")
+
         queryset = apply_report_scope(
-            Sales.objects.all(),
+            Sales.objects.select_related(
+                "customer",
+                "branch",
+            ),
             retailer=retailer,
             branch=branch,
         )
 
-        return queryset.filter(customer_id=customer_id).order_by("-created_at")
+        return queryset.filter(
+            customer_id=customer_id,
+        ).order_by("-created_at")
 
 
-# =========================
+# =====================================================
 # DASHBOARD SERVICE
-# =========================
+# =====================================================
 
 
 class DashboardService:
@@ -176,7 +198,9 @@ class DashboardService:
                 sales_queryset,
                 "net_amount",
             ),
-            "invoice_count": sales_queryset.aggregate(count=Count("id"))["count"],
+            "invoice_count": sales_queryset.aggregate(
+                count=Count("id"),
+            )["count"],
             "total_stock": get_decimal_sum(
                 stock_queryset,
                 "available_qty",
@@ -184,9 +208,9 @@ class DashboardService:
         }
 
 
-# =========================
+# =====================================================
 # EXPIRY REPORT SERVICE
-# =========================
+# =====================================================
 
 
 class ExpiryReportService:
@@ -195,17 +219,24 @@ class ExpiryReportService:
     def get_report(retailer=None, branch=None):
 
         queryset = apply_report_scope(
-            StockBatch.objects.all(),
+            StockBatch.objects.select_related(
+                "product",
+                "branch",
+            ),
             retailer=retailer,
             branch=branch,
         )
 
-        return queryset.filter(expiry_date__lt=now().date()).order_by("expiry_date")
+        return queryset.filter(
+            expiry_date__lt=now().date(),
+        ).order_by(
+            "expiry_date",
+        )
 
 
-# =========================
+# =====================================================
 # GST REPORT SERVICE
-# =========================
+# =====================================================
 
 
 class GSTReportService:
@@ -223,13 +254,13 @@ class GSTReportService:
             "total_tax": get_decimal_sum(
                 queryset,
                 "tax_amount",
-            )
+            ),
         }
 
 
-# =========================
+# =====================================================
 # TAX REPORT SERVICE
-# =========================
+# =====================================================
 
 
 class TaxReportService(GSTReportService):
@@ -238,9 +269,9 @@ class TaxReportService(GSTReportService):
     """
 
 
-# =========================
+# =====================================================
 # LOW STOCK REPORT SERVICE
-# =========================
+# =====================================================
 
 
 class LowStockReportService:
@@ -256,7 +287,10 @@ class LowStockReportService:
             raise ValidationError("Stock threshold cannot be negative.")
 
         queryset = apply_report_scope(
-            StockBatch.objects.all(),
+            StockBatch.objects.select_related(
+                "product",
+                "branch",
+            ),
             retailer=retailer,
             branch=branch,
         )
@@ -264,12 +298,14 @@ class LowStockReportService:
         return queryset.filter(
             available_qty__gt=0,
             available_qty__lte=threshold,
-        ).order_by("available_qty")
+        ).order_by(
+            "available_qty",
+        )
 
 
-# =========================
+# =====================================================
 # PAYMENT REPORT SERVICE
-# =========================
+# =====================================================
 
 
 class PaymentReportService:
@@ -297,9 +333,9 @@ class PaymentReportService:
         }
 
 
-# =========================
+# =====================================================
 # PRODUCT LEDGER SERVICE
-# =========================
+# =====================================================
 
 
 class ProductLedgerService:
@@ -311,18 +347,28 @@ class ProductLedgerService:
         branch=None,
     ):
 
+        if not product_id:
+            raise ValidationError("Product ID is required.")
+
         queryset = apply_report_scope(
-            StockTransactionItem.objects.all(),
+            StockTransactionItem.objects.select_related(
+                "product",
+                "branch",
+            ),
             retailer=retailer,
             branch=branch,
         )
 
-        return queryset.filter(product_id=product_id).order_by("created_at")
+        return queryset.filter(
+            product_id=product_id,
+        ).order_by(
+            "created_at",
+        )
 
 
-# =========================
+# =====================================================
 # PROFIT & LOSS SERVICE
-# =========================
+# =====================================================
 
 
 class ProfitLossService:
@@ -337,7 +383,9 @@ class ProfitLossService:
         )
 
         purchase_queryset = apply_report_scope(
-            StockTransaction.objects.filter(transaction_type="PURCHASE"),
+            StockTransaction.objects.filter(
+                transaction_type="PURCHASE",
+            ),
             retailer=retailer,
             branch=branch,
         )
@@ -367,9 +415,9 @@ class ProfitLossService:
         }
 
 
-# =========================
+# =====================================================
 # PURCHASE REPORT SERVICE
-# =========================
+# =====================================================
 
 
 class PurchaseReportService:
@@ -378,7 +426,12 @@ class PurchaseReportService:
     def get_report(retailer=None, branch=None):
 
         queryset = apply_report_scope(
-            StockTransaction.objects.filter(transaction_type="PURCHASE"),
+            StockTransaction.objects.filter(
+                transaction_type="PURCHASE",
+            ).select_related(
+                "supplier",
+                "branch",
+            ),
             retailer=retailer,
             branch=branch,
         )
@@ -397,9 +450,9 @@ class PurchaseReportService:
         }
 
 
-# =========================
+# =====================================================
 # PURCHASE RETURN REPORT SERVICE
-# =========================
+# =====================================================
 
 
 class PurchaseReturnReportService:
@@ -408,7 +461,10 @@ class PurchaseReturnReportService:
     def get_report(retailer=None, branch=None):
 
         queryset = apply_report_scope(
-            PurchaseReturn.objects.all(),
+            PurchaseReturn.objects.select_related(
+                "supplier",
+                "branch",
+            ),
             retailer=retailer,
             branch=branch,
         )
@@ -427,9 +483,9 @@ class PurchaseReturnReportService:
         }
 
 
-# =========================
+# =====================================================
 # RECEIPT REPORT SERVICE
-# =========================
+# =====================================================
 
 
 class ReceiptReportService:
@@ -457,9 +513,9 @@ class ReceiptReportService:
         }
 
 
-# =========================
+# =====================================================
 # SALES REPORT SERVICE
-# =========================
+# =====================================================
 
 
 class SalesReportService:
@@ -472,24 +528,43 @@ class SalesReportService:
     ):
 
         queryset = apply_report_scope(
-            Sales.objects.all(),
+            Sales.objects.select_related(
+                "customer",
+                "branch",
+            ),
             retailer=retailer,
             branch=branch,
         )
 
         filters = filters or {}
 
-        if filters.get("from_date"):
-            queryset = queryset.filter(created_at__date__gte=filters["from_date"])
+        from_date = filters.get("from_date")
+        to_date = filters.get("to_date")
 
-        if filters.get("to_date"):
-            queryset = queryset.filter(created_at__date__lte=filters["to_date"])
+        validate_report_dates(
+            from_date=from_date,
+            to_date=to_date,
+        )
+
+        if from_date:
+            queryset = queryset.filter(
+                created_at__date__gte=from_date,
+            )
+
+        if to_date:
+            queryset = queryset.filter(
+                created_at__date__lte=to_date,
+            )
 
         if filters.get("customer"):
-            queryset = queryset.filter(customer_id=filters["customer"])
+            queryset = queryset.filter(
+                customer_id=filters["customer"],
+            )
 
         if filters.get("payment_status"):
-            queryset = queryset.filter(payment_status=filters["payment_status"])
+            queryset = queryset.filter(
+                payment_status=filters["payment_status"],
+            )
 
         summary = {
             "total_sales": get_decimal_sum(
@@ -513,9 +588,9 @@ class SalesReportService:
         }
 
 
-# =========================
+# =====================================================
 # SALES RETURN REPORT SERVICE
-# =========================
+# =====================================================
 
 
 class SalesReturnReportService:
@@ -524,7 +599,10 @@ class SalesReturnReportService:
     def get_report(retailer=None, branch=None):
 
         queryset = apply_report_scope(
-            SalesReturn.objects.all(),
+            SalesReturn.objects.select_related(
+                "sales",
+                "branch",
+            ),
             retailer=retailer,
             branch=branch,
         )
@@ -547,9 +625,9 @@ class SalesReturnReportService:
         }
 
 
-# =========================
+# =====================================================
 # STOCK ADJUSTMENT REPORT SERVICE
-# =========================
+# =====================================================
 
 
 class StockAdjustmentReportService:
@@ -563,12 +641,14 @@ class StockAdjustmentReportService:
             branch=branch,
         )
 
-        return queryset.order_by("-created_at")
+        return queryset.order_by(
+            "-created_at",
+        )
 
 
-# =========================
+# =====================================================
 # STOCK REPORT SERVICE
-# =========================
+# =====================================================
 
 
 class StockReportService:
@@ -577,7 +657,10 @@ class StockReportService:
     def get_report(retailer=None, branch=None):
 
         queryset = apply_report_scope(
-            StockBatch.objects.all(),
+            StockBatch.objects.select_related(
+                "product",
+                "branch",
+            ),
             retailer=retailer,
             branch=branch,
         )
@@ -596,9 +679,9 @@ class StockReportService:
         }
 
 
-# =========================
+# =====================================================
 # STOCK TRANSFER REPORT SERVICE
-# =========================
+# =====================================================
 
 
 class StockTransferReportService:
@@ -612,12 +695,14 @@ class StockTransferReportService:
             branch=branch,
         )
 
-        return queryset.order_by("-created_at")
+        return queryset.order_by(
+            "-created_at",
+        )
 
 
-# =========================
+# =====================================================
 # SUPPLIER LEDGER SERVICE
-# =========================
+# =====================================================
 
 
 class SupplierLedgerService:
@@ -629,10 +714,20 @@ class SupplierLedgerService:
         branch=None,
     ):
 
+        if not supplier_id:
+            raise ValidationError("Supplier ID is required.")
+
         queryset = apply_report_scope(
-            StockTransaction.objects.all(),
+            StockTransaction.objects.select_related(
+                "supplier",
+                "branch",
+            ),
             retailer=retailer,
             branch=branch,
         )
 
-        return queryset.filter(supplier_id=supplier_id).order_by("-created_at")
+        return queryset.filter(
+            supplier_id=supplier_id,
+        ).order_by(
+            "-created_at",
+        )
