@@ -71,6 +71,7 @@ INSTALLED_APPS = [
     "support",
     "email_config",
     "notifications",
+    "expenses",
 ]
 
 
